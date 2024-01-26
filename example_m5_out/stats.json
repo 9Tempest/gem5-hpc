@@ -1,0 +1,304 @@
+{
+  "board": {
+    "cache_hierarchy": {
+      "l1dcaches0": {
+        "overallHits::total": {
+          "val": "1022783",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.022246",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.022246",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "9968.946848",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "10187.807329",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1dcaches1": {
+        "overallHits::total": {
+          "val": "1077724",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.018894",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.018894",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "7676.151171",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "7681.220656",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1dcaches2": {
+        "overallHits::total": {
+          "val": "1053730",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.020483",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.020483",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "8324.749483",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "8364.551635",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1dcaches3": {
+        "overallHits::total": {
+          "val": "1080055",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.018172",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.018172",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "7666.382812",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "7637.649691",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1icaches0": {
+        "overallHits::total": {
+          "val": "312115",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.007119",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.007119",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "34833.535070",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "34833.535070",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1icaches1": {
+        "overallHits::total": {
+          "val": "298544",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.000813",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.000813",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "60354.708333",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "60354.708333",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1icaches2": {
+        "overallHits::total": {
+          "val": "300800",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.001484",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.001484",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "55461.870229",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "55461.870229",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l1icaches3": {
+        "overallHits::total": {
+          "val": "298583",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.000847",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.000847",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "57708.900000",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "57708.900000",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l2caches0": {
+        "overallHits::total": {
+          "val": "13897",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.263852",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.263852",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "35957.933154",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "29055.432355",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l2caches1": {
+        "overallHits::total": {
+          "val": "12298",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.237239",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.237239",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "19927.032676",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "16917.543742",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l2caches2": {
+        "overallHits::total": {
+          "val": "12156",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.296487",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.296487",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "20416.214067",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "18031.117150",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "l2caches3": {
+        "overallHits::total": {
+          "val": "12524",
+          "description": "number of overall hits (Count)"
+        },
+        "demandMissRate::total": {
+          "val": "0.142779",
+          "description": "miss rate for demand accesses (Ratio)"
+        },
+        "overallMissRate::total": {
+          "val": "0.142779",
+          "description": "miss rate for overall accesses (Ratio)"
+        },
+        "demandAvgMshrMissLatency::total": {
+          "val": "29824.289150",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "23054.773669",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      }
+    },
+    "memory": {
+      "mem_ctrl0": {
+        "avgRdBWSys": {
+          "val": "392690244.47642845",
+          "description": "Average system read bandwidth in Byte/s ((Byte/Second))"
+        },
+        "avgWrBWSys": {
+          "val": "194485662.99569166",
+          "description": "Average system write bandwidth in Byte/s ((Byte/Second))"
+        },
+        "dram": {
+          "readRowHitRate": {
+            "val": "76.40",
+            "description": "Row buffer hit rate for reads (Ratio)"
+          }
+        }
+      },
+      "mem_ctrl1": {
+        "avgRdBWSys": {
+          "val": "391312867.25974506",
+          "description": "Average system read bandwidth in Byte/s ((Byte/Second))"
+        },
+        "avgWrBWSys": {
+          "val": "194898876.16069669",
+          "description": "Average system write bandwidth in Byte/s ((Byte/Second))"
+        },
+        "dram": {
+          "readRowHitRate": {
+            "val": "75.64",
+            "description": "Row buffer hit rate for reads (Ratio)"
+          }
+        }
+      }
+    }
+  }
+}

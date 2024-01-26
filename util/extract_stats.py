@@ -43,13 +43,30 @@ def convert_to_json(file_path, output_file_path):
             current_level = current_level[part]
 
         current_level[key_parts[-1]] = {'val': value_num, 'description': description.strip()}
+    return data
 
-    # Write the JSON data to the specified output file
-    with open(output_file_path, 'w') as output_file:
-        json.dump(data, output_file, indent=2)
+def filter_stats(stats, interest_list):
+    filtered_stats = {}
+    for key in stats:
+        if key in interest_list:
+            filtered_stats[key] = stats[key]
+        elif isinstance(stats[key], dict):
+            tmp =  filter_stats(stats[key], interest_list)
+            if tmp:
+                filtered_stats[key] = tmp
+    return filtered_stats
 
 # Example usage
 file_path = '/data3/gem5/m5out/stats.txt'
 output_file_path = '/data3/gem5/m5out/stats.json'
+interest_list = ["demandMissRate::total", "overallMissRate::total" ,
+                 "demandAvgMshrMissLatency::total", "overallAvgMshrMissLatency::total",
+                 "avgRdBWSys", "avgWrBWSys", "readRowHitRate", "writeRowHitRate"
+                 "overallMisses::total", "overallHits::total"]
 
 json_data = convert_to_json(file_path, output_file_path)
+json_data = filter_stats(json_data, interest_list)
+
+ # Write the JSON data to the specified output file
+with open(output_file_path, 'w') as output_file:
+    json.dump(json_data, output_file, indent=2)
