@@ -72,6 +72,7 @@ from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.boards.simple_board import SimpleBoard
 from gem5.components.processors.simple_processor import SimpleProcessor
+from gem5.components.cachehierarchies.classic.no_cache import NoCache
 
 # We will use the new simulator module to simulate this task.
 
@@ -93,6 +94,19 @@ parser.add_argument(
     type = str,
     required = True,
     help = "Input the path to the matrix multiply binary."
+)
+
+# New argument for binary arguments
+parser.add_argument(
+    "--args",
+    default=[],
+    help="Arguments for the binary, enclosed in quotes."
+)
+
+parser.add_argument(
+    "--ckpt-dir",
+    default="",
+    help="Directory to save the checkpoint"
 )
 
 args = parser.parse_args()
@@ -124,9 +138,9 @@ memory = DualChannelDDR4_2400(size="2GB")
 # We have a TIMING CPU. 
 
 processor = SimpleProcessor(
-    cpu_type = CPUTypes.O3,
+    cpu_type = CPUTypes.ATOMIC,
     isa = ISA.X86,
-    num_cores = 4
+    num_cores = 1
 )
 
 # The gem5 library's SimpleBoard can be used to run simple SE-mode simulations.
@@ -136,7 +150,7 @@ board = SimpleBoard(
     clk_freq = "3GHz",
     processor = processor,
     memory = memory,
-    cache_hierarchy = cache_hierarchy,
+    cache_hierarchy = NoCache(),
 )
 
 # Here we set the workload.
@@ -147,16 +161,21 @@ board.set_se_binary_workload(
             os.getcwd(),
             args.binary
         )
-    )
+    ),
+    arguments=args.args.split()
 )
 
 board.exit_on_work_items = True
 
 # Lastly we instantiate the simulator module and simulate the program.
 
-simulator = Simulator(board=board)
+if args.ckpt_dir:
+    simulator = Simulator(board=board, checkpoint_dir=args.ckpt_dir)
+else:
+    simulator = Simulator(board=board)
 simulator.run()
 
 # We acknowledge the user that the simulation has ended.
 
 print("The simulation completed successfully!")
+simulator.save_checkpoint("/data3/gem5/chkpts-hpcbenchmark/")
