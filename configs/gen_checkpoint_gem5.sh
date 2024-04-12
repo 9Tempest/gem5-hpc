@@ -1,0 +1,1 @@
+./build/X86/gem5.opt  ./configs/deprecated/example/se.py --cpu-type AtomicSimpleCPU -n 4 --mem-size '4GB'  --cmd $1
