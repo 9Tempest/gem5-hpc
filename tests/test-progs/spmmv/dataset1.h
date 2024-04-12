@@ -1,4 +1,4 @@
-#define R 500
+#define R 50
 #define C 500
 #define NNZ 2399
 const double val[2399] = {

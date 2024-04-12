@@ -91,9 +91,9 @@ cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
 memory = DualChannelDDR4_2400(size="2GB")
 
 processor = SimpleProcessor(
-    cpu_type=CPUTypes.TIMING,
+    cpu_type=CPUTypes.O3,
     isa=ISA.X86,
-    num_cores=1,
+    num_cores=2,
 )
 
 board = SimpleBoard(

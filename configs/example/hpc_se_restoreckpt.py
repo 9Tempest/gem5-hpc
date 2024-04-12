@@ -99,7 +99,7 @@ parser.add_argument(
 # New argument for binary arguments
 parser.add_argument(
     "--args",
-    default=[],
+    default="",
     help="Arguments for the binary, enclosed in quotes."
 )
 
@@ -126,9 +126,9 @@ requires(
 # We have PrivateL1PrivateL2CacheHierarchy
 
 cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
-    l1d_size="16kB",
-    l1i_size="16kB",
-    l2_size="256kB",
+    l1d_size="64kB",
+    l1i_size="32kB",
+    l2_size="1024kB",
 )
 
 # The memory has been correctly setup
@@ -138,9 +138,9 @@ memory = DualChannelDDR4_2400(size="2GB")
 # We have a TIMING CPU. 
 
 processor = SimpleProcessor(
-    cpu_type = CPUTypes.ATOMIC,
+    cpu_type = CPUTypes.O3,
     isa = ISA.X86,
-    num_cores = 1
+    num_cores = 8,
 )
 
 # The gem5 library's SimpleBoard can be used to run simple SE-mode simulations.
@@ -150,7 +150,7 @@ board = SimpleBoard(
     clk_freq = "3GHz",
     processor = processor,
     memory = memory,
-    cache_hierarchy = NoCache(),
+    cache_hierarchy = cache_hierarchy,
 )
 
 # Here we set the workload.
@@ -168,14 +168,11 @@ board.set_se_binary_workload(
 board.exit_on_work_items = True
 
 # Lastly we instantiate the simulator module and simulate the program.
-
 if args.ckpt_dir:
-    simulator = Simulator(board=board, checkpoint_dir=args.ckpt_dir)
+    simulator = Simulator(board=board, checkpoint_path=args.ckpt_dir)
 else:
     simulator = Simulator(board=board)
 simulator.run()
 
 # We acknowledge the user that the simulation has ended.
-
 print("The simulation completed successfully!")
-simulator.save_checkpoint("/data3/gem5/chkpts-hpcbenchmark/")

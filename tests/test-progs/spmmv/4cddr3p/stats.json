@@ -1,0 +1,350 @@
+{
+  "system": {
+    "cpu0": {
+      "dcache": {
+        "overallHits::total": {
+          "val": "259367",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "7739",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "267106",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "267106",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "1464",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "6273",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "8086",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "16102.519664",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "icache": {
+        "overallHits::total": {
+          "val": "91897",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "1491",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "93388",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "93388",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "201",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "1288",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "1288",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "63430.512422",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      }
+    },
+    "cpu1": {
+      "dcache": {
+        "overallHits::total": {
+          "val": "308594",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "6352",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "314946",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "314946",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "755",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "5597",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "7521",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "7978.959580",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "icache": {
+        "overallHits::total": {
+          "val": "83885",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "69",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "83954",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "83954",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "10",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "59",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "59",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "54847.457627",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      }
+    },
+    "cpu2": {
+      "dcache": {
+        "overallHits::total": {
+          "val": "308502",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "6025",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "314527",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "314527",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "772",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "5253",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "6911",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "8614.775720",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "icache": {
+        "overallHits::total": {
+          "val": "83871",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "67",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "83938",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "83938",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "7",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "60",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "60",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "38241.666667",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      }
+    },
+    "cpu3": {
+      "dcache": {
+        "overallHits::total": {
+          "val": "306430",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "5319",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "311749",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "311749",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "758",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "4561",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "5774",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "9107.980430",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      },
+      "icache": {
+        "overallHits::total": {
+          "val": "83841",
+          "description": "number of overall hits (Count)"
+        },
+        "overallMisses::total": {
+          "val": "72",
+          "description": "number of overall misses (Count)"
+        },
+        "demandAccesses::total": {
+          "val": "83913",
+          "description": "number of demand (read+write) accesses (Count)"
+        },
+        "overallAccesses::total": {
+          "val": "83913",
+          "description": "number of overall (read+write) accesses (Count)"
+        },
+        "overallMshrHits::total": {
+          "val": "6",
+          "description": "number of overall MSHR hits (Count)"
+        },
+        "demandMshrMisses::total": {
+          "val": "66",
+          "description": "number of demand (read+write) MSHR misses (Count)"
+        },
+        "overallMshrMisses::total": {
+          "val": "66",
+          "description": "number of overall MSHR misses (Count)"
+        },
+        "overallAvgMshrMissLatency::total": {
+          "val": "25340.909091",
+          "description": "average overall mshr miss latency ((Tick/Count))"
+        }
+      }
+    },
+    "l2": {
+      "overallHits::total": {
+        "val": "494",
+        "description": "number of overall hits (Count)"
+      },
+      "overallMisses::total": {
+        "val": "3463",
+        "description": "number of overall misses (Count)"
+      },
+      "demandAccesses::total": {
+        "val": "3957",
+        "description": "number of demand (read+write) accesses (Count)"
+      },
+      "overallAccesses::total": {
+        "val": "3957",
+        "description": "number of overall (read+write) accesses (Count)"
+      },
+      "overallMshrHits::total": {
+        "val": "359",
+        "description": "number of overall MSHR hits (Count)"
+      },
+      "demandMshrMisses::total": {
+        "val": "3100",
+        "description": "number of demand (read+write) MSHR misses (Count)"
+      },
+      "overallMshrMisses::total": {
+        "val": "3152",
+        "description": "number of overall MSHR misses (Count)"
+      },
+      "overallAvgMshrMissLatency::total": {
+        "val": "64810.950825",
+        "description": "average overall mshr miss latency ((Tick/Count))"
+      }
+    },
+    "mem_ctrls0": {
+      "avgRdBWSys": {
+        "val": "370307979.63892043",
+        "description": "Average system read bandwidth in Byte/s ((Byte/Second))"
+      },
+      "avgWrBWSys": {
+        "val": "0.00000000",
+        "description": "Average system write bandwidth in Byte/s ((Byte/Second))"
+      },
+      "dram": {
+        "readRowHitRate": {
+          "val": "66.39",
+          "description": "Row buffer hit rate for reads (Ratio)"
+        }
+      }
+    },
+    "mem_ctrls1": {
+      "avgRdBWSys": {
+        "val": "368433002.52682465",
+        "description": "Average system read bandwidth in Byte/s ((Byte/Second))"
+      },
+      "avgWrBWSys": {
+        "val": "0.00000000",
+        "description": "Average system write bandwidth in Byte/s ((Byte/Second))"
+      },
+      "dram": {
+        "readRowHitRate": {
+          "val": "66.28",
+          "description": "Row buffer hit rate for reads (Ratio)"
+        }
+      }
+    }
+  }
+}

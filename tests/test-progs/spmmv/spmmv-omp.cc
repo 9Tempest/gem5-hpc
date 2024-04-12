@@ -15,9 +15,10 @@
 #endif
 
 
-void spmv(int r, const double* val, const int* idx, const double* x,
+int spmv(int r, const double* val, const int* idx, const double* x,
           const int* ptr, double* y)
 {
+ int sum;
   for (int i = 0; i < r; i++)
   {
     int k;
@@ -34,8 +35,14 @@ void spmv(int r, const double* val, const int* idx, const double* x,
       yi0 += val[k]*x[idx[k]];
     }
     y[i] = (yi0+yi1)+(yi2+yi3);
+    sum += y[i];
   }
+  return sum;
 }
+
+struct VeryLargeStruct{
+    double a[12];
+};
 
 
 
@@ -56,7 +63,7 @@ int main(int argc, char *argv[]) {
 
     // Setting the size of the matrix (N x N). M = 10
     //
-    const unsigned int N = 100;
+    const unsigned int N = 1000;
 
     if(!(N > 1 && N < UINT_MAX)) {
         out_of_range();
@@ -95,14 +102,21 @@ int main(int argc, char *argv[]) {
 
     // annotating the ROI
     //
+// #ifdef GEM5
+//     m5_work_end(0, 0);
+// #endif
+VeryLargeStruct vls[N];
+std::cout << "Printed before checkpoint!!!" << std::endl;
 #ifdef GEM5
     m5_work_begin(0, 0);
+    m5_checkpoint(0, 0);
 #endif
 
     #pragma omp parallel for
     for(int i = 0 ; i < N ; i++)
     {
-         spmv(R, val, idx, x, ptr, y);
+         float lhs = vls[i].a[0];
+         vls[i].a[0] =  lhs + spmv(R, val, idx, x, ptr, y);
     }
        
 

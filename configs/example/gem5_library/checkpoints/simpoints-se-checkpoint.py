@@ -46,7 +46,7 @@ scons build/X86/gem5.opt
     configs/example/gem5_library/checkpoints/simpoints-se-restore.py
 ```
 """
-
+import os
 import argparse
 from pathlib import Path
 
@@ -59,6 +59,7 @@ from gem5.isas import ISA
 from gem5.resources.resource import (
     SimpointResource,
     obtain_resource,
+    CustomResource,
 )
 from gem5.resources.workload import Workload
 from gem5.simulate.exit_event import ExitEvent
@@ -73,6 +74,13 @@ parser = argparse.ArgumentParser(
 )
 
 # The lone arguments is a file path to a directory to store the checkpoints.
+parser.add_argument(
+    "--binary",
+    "-b",
+    type = str,
+    required = True,
+    help = "Input the path to the matrix multiply binary."
+)
 
 parser.add_argument(
     "--checkpoint-path",
@@ -97,10 +105,10 @@ cache_hierarchy = NoCache()
 memory = SingleChannelDDR3_1600(size="2GB")
 
 processor = SimpleProcessor(
-    cpu_type=CPUTypes.ATOMIC,
+    cpu_type=CPUTypes.O3,
     isa=ISA.X86,
     # SimPoints only works with one core
-    num_cores=1,
+    num_cores=2,
 )
 
 board = SimpleBoard(
@@ -118,7 +126,12 @@ board = SimpleBoard(
 # Below we set the simpount manually.
 
 board.set_se_simpoint_workload(
-    binary=obtain_resource("x86-print-this"),
+    binary=CustomResource(
+        os.path.join(
+            os.getcwd(),
+            args.binary
+        )
+    ),
     arguments=["print this", 15000],
     simpoint=SimpointResource(
         simpoint_interval=1000000,

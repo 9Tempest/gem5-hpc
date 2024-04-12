@@ -7,7 +7,7 @@ GEM5_INCLUDE = /data3/gem5/include/
 GEM5_LIB = /data3/gem5/util/m5/build/x86/out
 M5OP_SRC = /data3/gem5/util/m5/build/x86/abi/x86/m5op.S
 
-CFLAGS = -I$(GEM5_INCLUDE) -L$(GEM5_LIB) -Wl,-Bstatic -L$(GEM5_LIB) -Wl,-Bdynamic -ldl
+CFLAGS = -I$(GEM5_INCLUDE) -I/data3/gem5/util/m5/src/ -L$(GEM5_LIB) -Wl,-Bstatic -L$(GEM5_LIB) -Wl,-Bdynamic -ldl  -O1
 OMP_FLAGS = -fopenmp
 MPI_FLAGS = -static
 

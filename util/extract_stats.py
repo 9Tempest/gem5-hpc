@@ -1,5 +1,6 @@
 import json
 import re
+import argparse
 
 def convert_to_json(file_path, output_file_path):
     with open(file_path, 'r') as file:
@@ -57,16 +58,26 @@ def filter_stats(stats, interest_list):
     return filtered_stats
 
 # Example usage
-file_path = '/data3/gem5/m5out/stats.txt'
-output_file_path = '/data3/gem5/m5out/stats.json'
-interest_list = ["demandMissRate::total", "overallMissRate::total" ,
-                 "demandAvgMshrMissLatency::total", "overallAvgMshrMissLatency::total",
-                 "avgRdBWSys", "avgWrBWSys", "readRowHitRate", "writeRowHitRate"
-                 "overallMisses::total", "overallHits::total"]
+# file_path = '/data3/gem5/tests/test-progs/spmmv/m5out/stats.txt'
+# output_file_path = '/data3/gem5/tests/test-progs/spmmv/m5out/stats.json'
+if __name__ == '__main__':
+    #Take arguments for the file path and output
+    parser = argparse.ArgumentParser(description='Convert stats.txt to JSON and filter based on interests.')
+    parser.add_argument('file_path', type=str, help='Path to the input stats.txt file.')
+    parser.add_argument('output_file_path', type=str, help='Path to the output JSON file.')
 
-json_data = convert_to_json(file_path, output_file_path)
-json_data = filter_stats(json_data, interest_list)
+    args = parser.parse_args()
 
- # Write the JSON data to the specified output file
-with open(output_file_path, 'w') as output_file:
-    json.dump(json_data, output_file, indent=2)
+    interest_list = ["cpi",
+                     "overallAccesses::total", "overallMshrHits::total", "overallMshrMisses::total",
+                    "overallMissRate::total", "overallMshrMissRate",
+                     "overallAvgMshrMissLatency::total", 
+                     "peakBW",
+                     "busUtil","busUtilRead", "busUtilWrite", "avgWrQLen", "avgRdQLen", "requestorReadAvgLat::switch_cpus0.data"]
+
+    json_data = convert_to_json(args.file_path, args.output_file_path)
+    json_data = filter_stats(json_data, interest_list)
+
+    # Write the JSON data to the specified output file
+    with open(args.output_file_path, 'w') as output_file:
+        json.dump(json_data, output_file, indent=2)

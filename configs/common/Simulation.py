@@ -198,6 +198,7 @@ def findCptDir(options, cptdir, testsys):
 
     else:
         dirs = listdir(cptdir)
+        
         expr = re.compile(r"cpt\.([0-9]+)")
         cpts = []
         for dir in dirs:
@@ -206,7 +207,7 @@ def findCptDir(options, cptdir, testsys):
                 cpts.append(match.group(1))
 
         cpts.sort(key=lambda a: int(a))
-
+        print("directories in cpts:", cpts)
         cpt_num = options.checkpoint_restore
         if cpt_num > len(cpts):
             fatal("Checkpoint %d not found", cpt_num)
