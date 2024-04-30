@@ -1,0 +1,365 @@
+warn: The se.py script is deprecated. It will be removed in future releases of  gem5.
+Global frequency set at 1000000000000 ticks per second
+src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+system.remote_gdb: Listening for connections on port 7002
+Ramulator2 enlarged buffer size by 1 from 32 to 32
+src/sim/process.cc:396: warn: Checkpoints for pipes, device drivers and sockets do not work.
+gem5 Simulator System.  https://www.gem5.org
+gem5 is copyrighted software; use the --copyright option for details.
+
+gem5 version 23.1.0.0
+gem5 compiled Apr 26 2024 13:31:25
+gem5 started Apr 26 2024 13:43:27
+gem5 executing on mbit6, pid 3249108
+command line: /home/arkhadem/gem5-hpc/build/X86/gem5.opt --debug-flags=WorkItems --outdir=./m5out/ /home/arkhadem/gem5-hpc/configs/deprecated/example/se.py --cpu-type X86O3CPU -n 4 --cpu-buffer-enlarge-factor=1 --cpu-width-enlarge-factor=1 --mem-size 16GB --sys-clock 3.0GHz --caches --l1d_size=48kB --l1d_assoc=12 --l1d-hwp-type=StridePrefetcher --l1d_mshrs=16 --l1i_size=32kB --l1i_assoc=8 --l1i-hwp-type=StridePrefetcher --l1i_mshrs=16 --l2cache --l2_size=1280kB --l2_assoc=20 --l2-hwp-type=StridePrefetcher --l2_mshrs=32 --l3cache --l3_size=6MB --l3_assoc=48 --l3_mshrs=256 --cacheline_size=64 --mem-type Ramulator2 --mem-channels 1 --cmd ./spmmv-omp --options 0 -r 1 --prog-interval=1000 --work-end-exit-count=1
+
+Creating memory controllers for [<m5.params.AddrRange object at 0x7fa6ad962950>] memory ranges and 1 memory channels
+directories in cpts: ['20409635500']
+Switch at curTick count:10000
+Resetting ramulator's stats
+Resetting generic DRAM system stats
+Resetting generic DRAM controller stats
+Resetting generic DRAM controller stats
+src/sim/simulate.cc:199: info: Entering event queue @ 20409635500.  Starting simulation...
+src/sim/power_state.cc:105: warn: PowerState: Already in the requested power state, request ignored
+Switched CPUS @ tick 20409645500
+switching cpus
+**** REAL SIMULATION ****
+src/sim/simulate.cc:199: info: Entering event queue @ 20409645500.  Starting simulation...
+Printed after checkpoint!!!
+ROI Begin!!!
+20415688000: global: Work Begin workid: 0, threadid 0
+Resetting ramulator's stats
+Resetting generic DRAM system stats
+Resetting generic DRAM controller stats
+Resetting generic DRAM controller stats
+src/sim/syscall_emul.cc:85: warn: ignoring syscall rt_sigaction(...)
+      (further warnings will be suppressed)
+src/sim/syscall_emul.cc:85: warn: ignoring syscall rt_sigprocmask(...)
+      (further warnings will be suppressed)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall rseq(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall set_robust_list(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall rseq(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall set_robust_list(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall rseq(...)
+src/sim/syscall_emul.cc:74: warn: ignoring syscall set_robust_list(...)
+Running the Running the Running the Running the 1280th iteration!!!192th iteration!!!64th iteration!!!
+
+th iteration!!!
+
+Running the 1th iteration!!!
+Running the 129th iteration!!!
+Running the Running the 2193Running the th iteration!!!th iteration!!!Running the 65
+
+130th iteration!!!th iteration!!!
+
+Running the Running the 3194th iteration!!!th iteration!!!Running the 
+Running the 
+66131th iteration!!!th iteration!!!
+Running the 
+4Running the th iteration!!!195
+th iteration!!!
+Running the Running the 67Running the 132th iteration!!!5Running the th iteration!!!
+th iteration!!!196
+
+th iteration!!!
+Running the Running the 68Running the 133Running the th iteration!!!6th iteration!!!197
+th iteration!!!
+th iteration!!!
+
+Running the Running the 69Running the 134Running the th iteration!!!198th iteration!!!7
+th iteration!!!
+th iteration!!!
+
+Running the Running the 70Running the 135Running the th iteration!!!199th iteration!!!8
+th iteration!!!
+th iteration!!!
+
+Running the Running the 71Running the 136Running the 200th iteration!!!th iteration!!!9th iteration!!!
+
+th iteration!!!
+
+Running the Running the 72Running the 137Running the th iteration!!!201th iteration!!!10
+th iteration!!!
+th iteration!!!
+
+Running the Running the 73138Running the th iteration!!!Running the th iteration!!!202
+11
+th iteration!!!th iteration!!!
+
+Running the Running the 74139Running the th iteration!!!th iteration!!!Running the 203
+
+12th iteration!!!th iteration!!!
+
+Running the Running the 14075th iteration!!!Running the th iteration!!!
+Running the 204
+13th iteration!!!th iteration!!!
+Running the 
+Running the 14176th iteration!!!th iteration!!!Running the Running the 
+
+14205th iteration!!!th iteration!!!
+Running the Running the 
+14277Running the th iteration!!!th iteration!!!15
+
+th iteration!!!Running the 
+206th iteration!!!Running the Running the 
+143Running the 78th iteration!!!16th iteration!!!
+th iteration!!!Running the 
+
+207th iteration!!!Running the 
+Running the 144Running the 79th iteration!!!17th iteration!!!
+Running the th iteration!!!
+208
+th iteration!!!Running the 
+Running the 145Running the 80th iteration!!!18th iteration!!!
+Running the th iteration!!!
+209
+th iteration!!!Running the 
+Running the Running the 1468119th iteration!!!th iteration!!!th iteration!!!Running the 
+
+
+210th iteration!!!
+Running the Running the Running the 14782Running the 20th iteration!!!th iteration!!!211th iteration!!!
+
+th iteration!!!
+
+Running the Running the 148Running the 83Running the th iteration!!!21th iteration!!!212
+th iteration!!!
+th iteration!!!
+
+Running the Running the 149Running the 84th iteration!!!Running the 22th iteration!!!
+213th iteration!!!
+th iteration!!!
+
+Running the Running the 15085Running the th iteration!!!Running the th iteration!!!23
+214
+th iteration!!!th iteration!!!
+
+Running the 151Running the th iteration!!!Running the Running the 86
+21524th iteration!!!th iteration!!!th iteration!!!
+
+
+Running the 152Running the th iteration!!!Running the 87
+Running the 216th iteration!!!25th iteration!!!
+th iteration!!!
+Running the 
+153Running the th iteration!!!Running the 88Running the 217
+th iteration!!!26th iteration!!!
+th iteration!!!
+
+Running the Running the 154Running the 89th iteration!!!Running the 218th iteration!!!
+27th iteration!!!
+th iteration!!!
+
+Running the Running the 155Running the 90th iteration!!!Running the 219th iteration!!!
+28th iteration!!!
+th iteration!!!
+
+Running the Running the 156Running the Running the th iteration!!!9122029
+th iteration!!!th iteration!!!th iteration!!!
+
+
+Running the 157Running the Running the th iteration!!!92Running the 221
+th iteration!!!30th iteration!!!
+th iteration!!!
+
+Running the Running the 15893Running the th iteration!!!Running the th iteration!!!222
+31
+th iteration!!!th iteration!!!
+
+Running the Running the 15994Running the th iteration!!!Running the th iteration!!!223
+32
+th iteration!!!th iteration!!!
+
+Running the Running the 16095Running the th iteration!!!th iteration!!!Running the 224
+
+33th iteration!!!th iteration!!!
+
+Running the Running the 16196Running the th iteration!!!th iteration!!!Running the 225
+
+34th iteration!!!th iteration!!!
+
+Running the Running the 162Running the 97th iteration!!!Running the 226th iteration!!!
+35th iteration!!!
+th iteration!!!
+
+Running the 163Running the th iteration!!!Running the 98
+Running the 227th iteration!!!36th iteration!!!
+Running the 
+th iteration!!!164
+th iteration!!!Running the 
+Running the 99228th iteration!!!Running the th iteration!!!
+Running the 37
+165th iteration!!!th iteration!!!
+Running the Running the 
+100229th iteration!!!th iteration!!!Running the 
+38Running the 
+th iteration!!!166
+th iteration!!!Running the 
+Running the 101230th iteration!!!Running the th iteration!!!
+Running the 39
+167th iteration!!!th iteration!!!
+Running the 
+Running the 102231th iteration!!!Running the th iteration!!!
+Running the 40
+168th iteration!!!th iteration!!!
+Running the 
+Running the 103232th iteration!!!Running the Running the 
+th iteration!!!41169
+th iteration!!!th iteration!!!
+
+Running the Running the 104233th iteration!!!Running the th iteration!!!Running the 
+42
+170th iteration!!!th iteration!!!
+
+Running the Running the 105234th iteration!!!Running the th iteration!!!Running the 
+171
+43th iteration!!!th iteration!!!
+
+Running the Running the 106235Running the th iteration!!!th iteration!!!Running the 172
+
+44th iteration!!!th iteration!!!
+
+Running the Running the 107236Running the th iteration!!!th iteration!!!Running the 173
+
+45th iteration!!!th iteration!!!
+
+Running the Running the 108237Running the th iteration!!!th iteration!!!Running the 174
+
+46th iteration!!!th iteration!!!
+
+Running the Running the 109238Running the th iteration!!!Running the th iteration!!!47
+175
+th iteration!!!th iteration!!!
+
+Running the Running the 110Running the 239th iteration!!!Running the 48th iteration!!!
+176th iteration!!!
+th iteration!!!
+
+Running the Running the 111Running the 240th iteration!!!49Running the th iteration!!!
+th iteration!!!177
+
+th iteration!!!
+Running the Running the 112Running the 241th iteration!!!50Running the th iteration!!!
+th iteration!!!178
+
+th iteration!!!
+Running the Running the 113Running the 242th iteration!!!Running the 51th iteration!!!
+179th iteration!!!
+th iteration!!!
+
+Running the Running the 114Running the 243th iteration!!!52Running the th iteration!!!
+th iteration!!!180
+
+th iteration!!!
+Running the 115Running the Running the Running the 244th iteration!!!53181th iteration!!!
+th iteration!!!th iteration!!!
+
+
+Running the 116Running the Running the th iteration!!!Running the 24554
+182th iteration!!!th iteration!!!th iteration!!!
+
+Running the 
+117th iteration!!!Running the 
+Running the 246Running the 55th iteration!!!183th iteration!!!
+Running the th iteration!!!
+118
+th iteration!!!Running the 
+Running the 247Running the 56th iteration!!!184th iteration!!!
+Running the th iteration!!!
+119
+th iteration!!!Running the 
+Running the 248Running the 57th iteration!!!185th iteration!!!
+Running the th iteration!!!
+120
+th iteration!!!Running the 
+Running the 249Running the 58th iteration!!!186th iteration!!!
+Running the th iteration!!!
+121
+th iteration!!!Running the 
+Running the 250Running the 59th iteration!!!187th iteration!!!
+Running the th iteration!!!
+122
+th iteration!!!Running the 
+Running the 251Running the 60th iteration!!!188th iteration!!!
+Running the th iteration!!!
+123
+th iteration!!!Running the 
+Running the 252Running the 61th iteration!!!189th iteration!!!Running the 
+th iteration!!!
+124
+th iteration!!!
+Running the Running the 253Running the 62th iteration!!!Running the 190th iteration!!!
+125th iteration!!!
+th iteration!!!
+
+Running the 254Running the th iteration!!!Running the 63Running the 
+191th iteration!!!126th iteration!!!
+th iteration!!!
+
+Running the 255th iteration!!!
+Running the 127th iteration!!!
+20708157000: global: Work End workid: 0, threadid 0, work_item_id: -1
+20708157000: system: Work item end: 0	0	292469000
+20708157000: global: work_end_exit_count: 1, systemWorkEndCount: 1
+Frontend:
+  impl: GEM5
+
+MemorySystem:
+  impl: GenericDRAM
+  total_num_other_requests: 0
+  total_num_write_requests: 0
+  total_num_read_requests: 1340
+  memory_system_cycles: 477619
+  DRAM:
+    impl: DDR4
+  AddrMapper:
+    impl: RoBaRaCoCh
+
+
+  Controller:
+    impl: Generic
+    id: Channel 0
+    CH0_queue_full: 0  # number of times the instruction receive rejected because queue was full
+    CH0_max_queue_occupancy: 4  # maximum occupancy of instruction queue
+    CH0_num_REFab_commands: 38  # total number of REFab commands
+    CH0_num_WRA_commands: 0  # total number of WRA commands
+    CH0_num_RDA_commands: 0  # total number of RDA commands
+    CH0_num_WR_commands: 0  # total number of WR commands
+    CH0_avg_queue_occupancy: 0.0223965123  # average occupancy of instruction queue
+    CH0_num_RD_commands: 669  # total number of RD commands
+    CH0_num_PREA_commands: 37  # total number of PREA commands
+    CH0_num_PRE_commands: 110  # total number of PRE commands
+    CH0_num_ACT_commands: 246  # total number of ACT commands
+    Scheduler:
+      impl: FRFCFS
+    RefreshManager:
+      impl: AllBank
+
+
+
+  Controller:
+    impl: Generic
+    id: Channel 1
+    CH1_queue_full: 0  # number of times the instruction receive rejected because queue was full
+    CH1_avg_queue_occupancy: 0.0238118675  # average occupancy of instruction queue
+    CH1_max_queue_occupancy: 4  # maximum occupancy of instruction queue
+    CH1_num_REFab_commands: 38  # total number of REFab commands
+    CH1_num_WRA_commands: 0  # total number of WRA commands
+    CH1_num_RDA_commands: 0  # total number of RDA commands
+    CH1_num_WR_commands: 0  # total number of WR commands
+    CH1_num_RD_commands: 670  # total number of RD commands
+    CH1_num_PRE_commands: 119  # total number of PRE commands
+    CH1_num_PREA_commands: 33  # total number of PREA commands
+    CH1_num_ACT_commands: 262  # total number of ACT commands
+    Scheduler:
+      impl: FRFCFS
+    RefreshManager:
+      impl: AllBank
+
+
+
+Exiting @ tick 20708157000 because work items exit count reached

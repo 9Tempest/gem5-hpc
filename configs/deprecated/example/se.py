@@ -285,7 +285,10 @@ else:
     MemClass = Simulation.setMemClass(args)
     system.membus = SystemXBar()
     system.system_port = system.membus.cpu_side_ports
-    CacheConfig.config_cache(args, system)
+    if args.caches and args.l2cache and args.l3cache:
+        CacheConfig.config_3L_cache(args, system)
+    else:
+        CacheConfig.config_cache(args, system)
     MemConfig.config_mem(args, system)
     config_filesystem(system, args)
 
@@ -293,6 +296,7 @@ system.workload = SEWorkload.init_compatible(mp0_path)
 
 if args.wait_gdb:
     system.workload.wait_for_remote_gdb = True
+Simulation.setWorkCountOptions(system, args)
 
 root = Root(full_system=False, system=system)
 Simulation.run(args, root, system, FutureClass)

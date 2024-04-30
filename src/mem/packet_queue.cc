@@ -44,48 +44,39 @@
 #include "debug/Drain.hh"
 #include "debug/PacketQueue.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-PacketQueue::PacketQueue(EventManager& _em, const std::string& _label,
-                         const std::string& _sendEventName,
+PacketQueue::PacketQueue(EventManager &_em, const std::string &_label,
+                         const std::string &_sendEventName,
                          bool force_order,
                          bool disable_sanity_check)
-    : em(_em), sendEvent([this]{ processSendEvent(); }, _sendEventName),
+    : em(_em), sendEvent([this] { processSendEvent(); }, _sendEventName),
       _disableSanityCheck(disable_sanity_check),
       forceOrder(force_order),
-      label(_label), waitingOnRetry(false)
-{
+      label(_label), waitingOnRetry(false) {
 }
 
-PacketQueue::~PacketQueue()
-{
+PacketQueue::~PacketQueue() {
 }
 
-void
-PacketQueue::retry()
-{
+void PacketQueue::retry() {
     DPRINTF(PacketQueue, "Queue %s received retry\n", name());
     assert(waitingOnRetry);
     waitingOnRetry = false;
     sendDeferredPacket();
 }
 
-bool
-PacketQueue::checkConflict(const PacketPtr pkt, const int blk_size) const
-{
+bool PacketQueue::checkConflict(const PacketPtr pkt, const int blk_size) const {
     // caller is responsible for ensuring that all packets have the
     // same alignment
-    for (const auto& p : transmitList) {
+    for (const auto &p : transmitList) {
         if (p.pkt->matchBlockAddr(pkt, blk_size))
             return true;
     }
     return false;
 }
 
-bool
-PacketQueue::trySatisfyFunctional(PacketPtr pkt)
-{
+bool PacketQueue::trySatisfyFunctional(PacketPtr pkt) {
     pkt->pushLabel(label);
 
     auto i = transmitList.begin();
@@ -103,9 +94,7 @@ PacketQueue::trySatisfyFunctional(PacketPtr pkt)
     return found;
 }
 
-void
-PacketQueue::schedSendTiming(PacketPtr pkt, Tick when)
-{
+void PacketQueue::schedSendTiming(PacketPtr pkt, Tick when) {
     DPRINTF(PacketQueue, "%s for %s address %x size %d when %lu ord: %i\n",
             __func__, pkt->cmdString(), pkt->getAddr(), pkt->getSize(), when,
             forceOrder);
@@ -118,8 +107,8 @@ PacketQueue::schedSendTiming(PacketPtr pkt, Tick when)
 
     // add a very basic sanity check on the port to ensure the
     // invisible buffer is not growing beyond reasonable limits
-    if (!_disableSanityCheck && transmitList.size() > 128) {
-        panic("Packet queue %s has grown beyond 128 packets\n",
+    if (!_disableSanityCheck && transmitList.size() > 1024) {
+        panic("Packet queue %s has grown beyond 1024 packets\n",
               name());
     }
 
@@ -151,9 +140,7 @@ PacketQueue::schedSendTiming(PacketPtr pkt, Tick when)
     schedSendEvent(when);
 }
 
-void
-PacketQueue::schedSendEvent(Tick when)
-{
+void PacketQueue::schedSendEvent(Tick when) {
     // if we are waiting on a retry just hold off
     if (waitingOnRetry) {
         DPRINTF(PacketQueue, "Not scheduling send as waiting for retry\n");
@@ -181,15 +168,13 @@ PacketQueue::schedSendEvent(Tick when)
             transmitList.empty() && !sendEvent.scheduled()) {
 
             DPRINTF(Drain, "PacketQueue done draining,"
-                    "processing drain event\n");
+                           "processing drain event\n");
             signalDrainDone();
         }
     }
 }
 
-void
-PacketQueue::sendDeferredPacket()
-{
+void PacketQueue::sendDeferredPacket() {
     // sanity checks
     assert(!waitingOnRetry);
     assert(deferredPacketReady());
@@ -217,16 +202,13 @@ PacketQueue::sendDeferredPacket()
     }
 }
 
-void
-PacketQueue::processSendEvent()
-{
+void PacketQueue::processSendEvent() {
     assert(!waitingOnRetry);
     sendDeferredPacket();
 }
 
 DrainState
-PacketQueue::drain()
-{
+PacketQueue::drain() {
     if (transmitList.empty()) {
         return DrainState::Drained;
     } else {
@@ -235,46 +217,37 @@ PacketQueue::drain()
     }
 }
 
-ReqPacketQueue::ReqPacketQueue(EventManager& _em, RequestPort& _mem_side_port,
+ReqPacketQueue::ReqPacketQueue(EventManager &_em, RequestPort &_mem_side_port,
                                const std::string _label)
     : PacketQueue(_em, _label, name(_mem_side_port, _label)),
-      memSidePort(_mem_side_port)
-{
+      memSidePort(_mem_side_port) {
 }
 
-bool
-ReqPacketQueue::sendTiming(PacketPtr pkt)
-{
+bool ReqPacketQueue::sendTiming(PacketPtr pkt) {
     return memSidePort.sendTimingReq(pkt);
 }
 
-SnoopRespPacketQueue::SnoopRespPacketQueue(EventManager& _em,
-                                           RequestPort& _mem_side_port,
+SnoopRespPacketQueue::SnoopRespPacketQueue(EventManager &_em,
+                                           RequestPort &_mem_side_port,
                                            bool force_order,
                                            const std::string _label)
     : PacketQueue(_em, _label, name(_mem_side_port, _label), force_order),
-      memSidePort(_mem_side_port)
-{
+      memSidePort(_mem_side_port) {
 }
 
-bool
-SnoopRespPacketQueue::sendTiming(PacketPtr pkt)
-{
+bool SnoopRespPacketQueue::sendTiming(PacketPtr pkt) {
     return memSidePort.sendTimingSnoopResp(pkt);
 }
 
-RespPacketQueue::RespPacketQueue(EventManager& _em,
-                                 ResponsePort& _cpu_side_port,
+RespPacketQueue::RespPacketQueue(EventManager &_em,
+                                 ResponsePort &_cpu_side_port,
                                  bool force_order,
                                  const std::string _label)
     : PacketQueue(_em, _label, name(_cpu_side_port, _label), force_order),
-      cpuSidePort(_cpu_side_port)
-{
+      cpuSidePort(_cpu_side_port) {
 }
 
-bool
-RespPacketQueue::sendTiming(PacketPtr pkt)
-{
+bool RespPacketQueue::sendTiming(PacketPtr pkt) {
     return cpuSidePort.sendTimingResp(pkt);
 }
 

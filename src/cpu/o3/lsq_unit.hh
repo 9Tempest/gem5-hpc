@@ -63,13 +63,11 @@
 #include "mem/packet.hh"
 #include "mem/port.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 struct BaseO3CPUParams;
 
-namespace o3
-{
+namespace o3 {
 
 class IEW;
 
@@ -85,28 +83,26 @@ class IEW;
  * the LSQ until the store writes back. At that point the load is
  * replayed.
  */
-class LSQUnit
-{
-  public:
+class LSQUnit {
+public:
     static constexpr auto MaxDataBytes = MaxVecRegLenInBytes;
 
     using LSQRequest = LSQ::LSQRequest;
-  private:
-    class LSQEntry
-    {
-      private:
+
+private:
+    class LSQEntry {
+    private:
         /** The instruction. */
         DynInstPtr _inst;
         /** The request. */
-        LSQRequest* _request = nullptr;
+        LSQRequest *_request = nullptr;
         /** The size of the operation. */
         uint32_t _size = 0;
         /** Valid entry. */
         bool _valid = false;
 
-      public:
-        ~LSQEntry()
-        {
+    public:
+        ~LSQEntry() {
             if (_request != nullptr) {
                 _request->freeLSQEntry();
                 _request = nullptr;
@@ -114,8 +110,7 @@ class LSQUnit
         }
 
         void
-        clear()
-        {
+        clear() {
             _inst = nullptr;
             if (_request != nullptr) {
                 _request->freeLSQEntry();
@@ -126,29 +121,27 @@ class LSQUnit
         }
 
         void
-        set(const DynInstPtr& new_inst)
-        {
+        set(const DynInstPtr &new_inst) {
             assert(!_valid);
             _inst = new_inst;
             _valid = true;
             _size = 0;
         }
 
-        LSQRequest* request() { return _request; }
-        void setRequest(LSQRequest* r) { _request = r; }
+        LSQRequest *request() { return _request; }
+        void setRequest(LSQRequest *r) { _request = r; }
         bool hasRequest() { return _request != nullptr; }
         /** Member accessors. */
         /** @{ */
         bool valid() const { return _valid; }
-        uint32_t& size() { return _size; }
-        const uint32_t& size() const { return _size; }
-        const DynInstPtr& instruction() const { return _inst; }
+        uint32_t &size() { return _size; }
+        const uint32_t &size() const { return _size; }
+        const DynInstPtr &instruction() const { return _inst; }
         /** @} */
     };
 
-    class SQEntry : public LSQEntry
-    {
-      private:
+    class SQEntry : public LSQEntry {
+    private:
         /** The store data. */
         char _data[MaxDataBytes];
         /** Whether or not the store can writeback. */
@@ -163,52 +156,49 @@ class LSQUnit
          */
         bool _isAllZeros = false;
 
-      public:
+    public:
         static constexpr size_t DataSize = sizeof(_data);
         /** Constructs an empty store queue entry. */
-        SQEntry()
-        {
+        SQEntry() {
             std::memset(_data, 0, DataSize);
         }
 
-        void set(const DynInstPtr& inst) { LSQEntry::set(inst); }
+        void set(const DynInstPtr &inst) { LSQEntry::set(inst); }
 
         void
-        clear()
-        {
+        clear() {
             LSQEntry::clear();
             _canWB = _completed = _committed = _isAllZeros = false;
         }
 
         /** Member accessors. */
         /** @{ */
-        bool& canWB() { return _canWB; }
-        const bool& canWB() const { return _canWB; }
-        bool& completed() { return _completed; }
-        const bool& completed() const { return _completed; }
-        bool& committed() { return _committed; }
-        const bool& committed() const { return _committed; }
-        bool& isAllZeros() { return _isAllZeros; }
-        const bool& isAllZeros() const { return _isAllZeros; }
-        char* data() { return _data; }
-        const char* data() const { return _data; }
+        bool &canWB() { return _canWB; }
+        const bool &canWB() const { return _canWB; }
+        bool &completed() { return _completed; }
+        const bool &completed() const { return _completed; }
+        bool &committed() { return _committed; }
+        const bool &committed() const { return _committed; }
+        bool &isAllZeros() { return _isAllZeros; }
+        const bool &isAllZeros() const { return _isAllZeros; }
+        char *data() { return _data; }
+        const char *data() const { return _data; }
         /** @} */
     };
     using LQEntry = LSQEntry;
 
     /** Coverage of one address range with another */
-    enum class AddrRangeCoverage
-    {
+    enum class AddrRangeCoverage {
         PartialAddrRangeCoverage, /* Two ranges partly overlap */
-        FullAddrRangeCoverage, /* One range fully covers another */
-        NoAddrRangeCoverage /* Two ranges are disjoint */
+        FullAddrRangeCoverage,    /* One range fully covers another */
+        NoAddrRangeCoverage       /* Two ranges are disjoint */
     };
 
-  public:
+public:
     using LoadQueue = CircularQueue<LQEntry>;
     using StoreQueue = CircularQueue<SQEntry>;
 
-  public:
+public:
     /** Constructs an LSQ unit. init() must be called prior to use. */
     LSQUnit(uint32_t lqEntries, uint32_t sqEntries);
 
@@ -216,14 +206,13 @@ class LSQUnit
      * contructor is deleted explicitly. However, STL vector requires
      * a valid copy constructor for the base type at compile time.
      */
-    LSQUnit(const LSQUnit &l): stats(nullptr)
-    {
+    LSQUnit(const LSQUnit &l) : stats(nullptr) {
         panic("LSQUnit is not copy-able");
     }
 
     /** Initializes the LSQ unit with the specified number of entries. */
     void init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
-            LSQ *lsq_ptr, unsigned id);
+              LSQ *lsq_ptr, unsigned id);
 
     /** Returns the name of the LSQ unit. */
     std::string name() const;
@@ -250,8 +239,8 @@ class LSQUnit
      * @param load_idx index to start checking at
      * @param inst the instruction to check
      */
-    Fault checkViolations(typename LoadQueue::iterator& loadIt,
-            const DynInstPtr& inst);
+    Fault checkViolations(typename LoadQueue::iterator &loadIt,
+                          const DynInstPtr &inst);
 
     /** Check if an incoming invalidate hits in the lsq on a load
      * that might have issued out of order wrt another load beacuse
@@ -262,7 +251,10 @@ class LSQUnit
     /** Executes a load instruction. */
     Fault executeLoad(const DynInstPtr &inst);
 
-    Fault executeLoad(int lq_idx) { panic("Not implemented"); return NoFault; }
+    Fault executeLoad(int lq_idx) {
+        panic("Not implemented");
+        return NoFault;
+    }
     /** Executes a store instruction. */
     Fault executeStore(const DynInstPtr &inst);
 
@@ -310,8 +302,7 @@ class LSQUnit
     void resetHtmStartsStops() { htmStarts = htmStops = 0; }
     uint64_t getLatestHtmUid() const;
     void
-    setLastRetiredHtmUid(uint64_t htm_uid)
-    {
+    setLastRetiredHtmUid(uint64_t htm_uid) {
         assert(htm_uid >= lastRetiredHtmUid);
         lastRetiredHtmUid = htm_uid;
     }
@@ -349,20 +340,20 @@ class LSQUnit
 
     /** Returns if the LSQ unit will writeback on this cycle. */
     bool
-    willWB()
-    {
+    willWB() {
         return storeWBIt.dereferenceable() &&
-                        storeWBIt->valid() &&
-                        storeWBIt->canWB() &&
-                        !storeWBIt->completed() &&
-                        !isStoreBlocked;
+               storeWBIt->valid() &&
+               storeWBIt->canWB() &&
+               !storeWBIt->completed() &&
+               !isStoreBlocked;
     }
 
     /** Handles doing the retry. */
     void recvRetry();
 
     unsigned int cacheLineSize();
-  private:
+
+private:
     /** Reset the LSQ state */
     void resetState();
 
@@ -378,23 +369,22 @@ class LSQUnit
     /** Handles completing the send of a store to memory. */
     void storePostSend();
 
-  public:
+public:
     /** Attempts to send a packet to the cache.
      * Check if there are ports available. Return true if
      * there are, false if there are not.
      */
     bool trySendPacket(bool isLoad, PacketPtr data_pkt);
 
-
     /** Debugging function to dump instructions in the LSQ. */
     void dumpInsts() const;
 
     /** Schedule event for the cpu. */
-    void schedule(Event& ev, Tick when);
+    void schedule(Event &ev, Tick when);
 
     BaseMMU *getMMUPtr();
 
-  private:
+private:
     /** Pointer to the CPU. */
     CPU *cpu;
 
@@ -408,12 +398,11 @@ class LSQUnit
     RequestPort *dcachePort;
 
     /** Writeback event, specifically for when stores forward data to loads. */
-    class WritebackEvent : public Event
-    {
-      public:
+    class WritebackEvent : public Event {
+    public:
         /** Constructs a writeback event. */
         WritebackEvent(const DynInstPtr &_inst, PacketPtr pkt,
-                LSQUnit *lsq_ptr);
+                       LSQUnit *lsq_ptr);
 
         /** Processes the writeback event. */
         void process();
@@ -421,7 +410,7 @@ class LSQUnit
         /** Returns the description of this event. */
         const char *description() const;
 
-      private:
+    private:
         /** Instruction whose results are being written back. */
         DynInstPtr inst;
 
@@ -432,7 +421,7 @@ class LSQUnit
         LSQUnit *lsqPtr;
     };
 
-  public:
+public:
     /**
      * Handles writing back and completing the load or store that has
      * returned from memory.
@@ -441,17 +430,18 @@ class LSQUnit
      */
     bool recvTimingResp(PacketPtr pkt);
 
-  private:
+private:
     /** The LSQUnit thread id. */
     ThreadID lsqID;
-  public:
+
+public:
     /** The store queue. */
     StoreQueue storeQueue;
 
     /** The load queue. */
     LoadQueue loadQueue;
 
-  private:
+private:
     /** The number of places to shift addresses in the LSQ before checking
      * for dependency violations
      */
@@ -505,12 +495,11 @@ class LSQUnit
     /** Flag for memory model. */
     bool needsTSO;
 
-  protected:
+protected:
     // Will also need how many read/write ports the Dcache has.  Or keep track
     // of that in stage that is one level up, and only call executeLoad/Store
     // the appropriate number of times.
-    struct LSQUnitStats : public statistics::Group
-    {
+    struct LSQUnitStats : public statistics::Group {
         LSQUnitStats(statistics::Group *parent);
 
         /** Total number of loads forwaded from LSQ stores. */
@@ -540,7 +529,7 @@ class LSQUnit
         statistics::Distribution loadToUse;
     } stats;
 
-  public:
+public:
     /** Executes the load at the given index. */
     Fault read(LSQRequest *request, ssize_t load_idx);
 
@@ -559,8 +548,9 @@ class LSQUnit
     InstSeqNum getStoreHeadSeqNum();
 
     /** Returns whether or not the LSQ unit is stalled. */
-    bool isStalled()  { return stalled; }
-  public:
+    bool isStalled() { return stalled; }
+
+public:
     typedef typename CircularQueue<LQEntry>::iterator LQIterator;
     typedef typename CircularQueue<SQEntry>::iterator SQIterator;
 };

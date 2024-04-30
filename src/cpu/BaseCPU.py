@@ -49,6 +49,7 @@ from m5.objects.Platform import Platform
 from m5.objects.ResetPort import ResetResponsePort
 from m5.objects.SubSystem import SubSystem
 from m5.objects.XBar import L2XBar
+from m5.objects.XBar import L3XBar
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import *
@@ -212,9 +213,7 @@ class BaseCPU(ClockedObject):
                 "checker." + port for port in self.ArchMMU.walkerPorts()
             ]
 
-    def addTwoLevelCacheHierarchy(
-        self, ic, dc, l2c, iwc=None, dwc=None, xbar=None
-    ):
+    def addTwoLevelCacheHierarchy(self, ic, dc, l2c, iwc=None, dwc=None, xbar=None):
         self.addPrivateSplitL1Caches(ic, dc, iwc, dwc)
         self.toL2Bus = xbar if xbar else L2XBar()
         self.connectCachedPorts(self.toL2Bus.cpu_side_ports)

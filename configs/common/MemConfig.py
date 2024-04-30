@@ -40,6 +40,13 @@ from common import (
 
 import m5.objects
 
+import m5
+from m5.objects import *
+from m5.util import (
+    addToPath
+)
+
+addToPath("../")
 
 def create_mem_intf(intf, r, i, intlv_bits, intlv_size, xor_low_bit):
     """
@@ -208,6 +215,7 @@ def config_mem(options, system):
     # array of memory interfaces and set their parameters to match
     # their address mapping in the case of a DRAM
     range_iter = 0
+    print(f"Creating memory controllers for {system.mem_ranges} memory ranges and {nbr_mem_ctrls} memory channels")
     for r in system.mem_ranges:
         # As the loops iterates across ranges, assign them alternatively
         # to DRAM and NVM if both configured, starting with DRAM
@@ -240,7 +248,13 @@ def config_mem(options, system):
                     )
 
                 # Create the controller that will drive the interface
-                mem_ctrl = dram_intf.controller()
+                mem_ctrl = None
+                if issubclass(intf, Ramulator2):
+                    mem_ctrl = dram_intf
+                    mem_ctrl.config_path = "/home/arkhadem/gem5-hpc/ext/ramulator2/ramulator2/example_gem5_config.yaml"
+                    mem_ctrl.enlarge_buffer_factor = options.cpu_buffer_enlarge_factor
+                else:
+                    mem_ctrl = dram_intf.controller()
 
                 mem_ctrls.append(mem_ctrl)
 

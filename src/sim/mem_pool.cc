@@ -34,141 +34,107 @@
 #include "base/addr_range.hh"
 #include "base/logging.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 MemPool::MemPool(Addr page_shift, Addr ptr, Addr limit)
-        : pageShift(page_shift), startPageNum(ptr >> page_shift),
-        freePageNum(ptr >> page_shift),
-        _totalPages((limit - ptr) >> page_shift)
-{
+    : pageShift(page_shift), startPageNum(ptr >> page_shift),
+      freePageNum(ptr >> page_shift),
+      _totalPages((limit - ptr) >> page_shift) {
     gem5_assert(_totalPages > 0);
 }
 
 Counter
-MemPool::startPage() const
-{
+MemPool::startPage() const {
     return startPageNum;
 }
 
 Counter
-MemPool::freePage() const
-{
+MemPool::freePage() const {
     return freePageNum;
 }
 
-void
-MemPool::setFreePage(Counter value)
-{
+void MemPool::setFreePage(Counter value) {
     freePageNum = value;
 }
 
-Addr
-MemPool::freePageAddr() const
-{
+Addr MemPool::freePageAddr() const {
     return freePageNum << pageShift;
 }
 
 Counter
-MemPool::totalPages() const
-{
+MemPool::totalPages() const {
     return _totalPages;
 }
 
 Counter
-MemPool::allocatedPages() const
-{
+MemPool::allocatedPages() const {
     return freePageNum - startPageNum;
 }
 
 Counter
-MemPool::freePages() const
-{
+MemPool::freePages() const {
     return _totalPages - allocatedPages();
 }
 
-Addr
-MemPool::startAddr() const
-{
+Addr MemPool::startAddr() const {
     return startPage() << pageShift;
 }
 
-Addr
-MemPool::allocatedBytes() const
-{
+Addr MemPool::allocatedBytes() const {
     return allocatedPages() << pageShift;
 }
 
-Addr
-MemPool::freeBytes() const
-{
+Addr MemPool::freeBytes() const {
     return freePages() << pageShift;
 }
 
-Addr
-MemPool::totalBytes() const
-{
+Addr MemPool::totalBytes() const {
     return totalPages() << pageShift;
 }
 
-Addr
-MemPool::allocate(Addr npages)
-{
+Addr MemPool::allocate(Addr npages) {
     Addr return_addr = freePageAddr();
     freePageNum += npages;
 
     fatal_if(freePages() <= 0,
-            "Out of memory, please increase size of physical memory.");
+             "Out of memory, please increase size of physical memory.");
 
     return return_addr;
 }
 
-void
-MemPool::serialize(CheckpointOut &cp) const
-{
+void MemPool::serialize(CheckpointOut &cp) const {
     paramOut(cp, "page_shift", pageShift);
     paramOut(cp, "start_page", startPageNum);
     paramOut(cp, "free_page_num", freePageNum);
     paramOut(cp, "total_pages", _totalPages);
 }
 
-void
-MemPool::unserialize(CheckpointIn &cp)
-{
+void MemPool::unserialize(CheckpointIn &cp) {
     paramIn(cp, "page_shift", pageShift);
     paramIn(cp, "start_page", startPageNum);
     paramIn(cp, "free_page_num", freePageNum);
     paramIn(cp, "total_pages", _totalPages);
 }
 
-void
-MemPools::populate(const AddrRangeList &memories)
-{
-    for (const auto &mem : memories)
+void MemPools::populate(const AddrRangeList &memories) {
+    for (const auto &mem : memories) {
         pools.emplace_back(pageShift, mem.start(), mem.end());
+    }
 }
 
-Addr
-MemPools::allocPhysPages(int npages, int pool_id)
-{
+Addr MemPools::allocPhysPages(int npages, int pool_id) {
     return pools[pool_id].allocate(npages);
 }
 
-Addr
-MemPools::memSize(int pool_id) const
-{
+Addr MemPools::memSize(int pool_id) const {
     return pools[pool_id].totalBytes();
 }
 
-Addr
-MemPools::freeMemSize(int pool_id) const
-{
+Addr MemPools::freeMemSize(int pool_id) const {
     return pools[pool_id].freeBytes();
 }
 
-void
-MemPools::serialize(CheckpointOut &cp) const
-{
+void MemPools::serialize(CheckpointOut &cp) const {
     ScopedCheckpointSection sec(cp, "mempools");
     int num_pools = pools.size();
     SERIALIZE_SCALAR(num_pools);
@@ -177,9 +143,7 @@ MemPools::serialize(CheckpointOut &cp) const
         pools[i].serializeSection(cp, csprintf("pool%d", i));
 }
 
-void
-MemPools::unserialize(CheckpointIn &cp)
-{
+void MemPools::unserialize(CheckpointIn &cp) {
     // Delete previous mem_pools
     pools.clear();
 

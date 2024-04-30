@@ -547,6 +547,45 @@ def run(options, root, testsys, cpu_class):
                 ].branchPred.indirectBranchPred = IndirectBPClass()
             switch_cpus[i].createThreads()
 
+            cpu_type = ObjectList.cpu_list.get(options.cpu_type)
+            if ObjectList.is_o3_cpu(cpu_type):
+
+                switch_cpus[i].LQEntries = 72
+                switch_cpus[i].SQEntries = 56
+                switch_cpus[i].numIQEntries = 50
+                switch_cpus[i].numROBEntries = 224
+                switch_cpus[i].numPhysIntRegs = 180
+                switch_cpus[i].numPhysFloatRegs = 168
+                switch_cpus[i].numPhysVecRegs = 168
+                
+                if options.cpu_buffer_enlarge_factor != 1:
+                    print("Enlarging CPU buffers by a factor of %d" % options.cpu_buffer_enlarge_factor)
+                    switch_cpus[i].LQEntries = switch_cpus[i].LQEntries * options.cpu_buffer_enlarge_factor
+                    switch_cpus[i].SQEntries = switch_cpus[i].SQEntries * options.cpu_buffer_enlarge_factor
+                    switch_cpus[i].numIQEntries = switch_cpus[i].numIQEntries * options.cpu_buffer_enlarge_factor
+                    switch_cpus[i].numROBEntries = switch_cpus[i].numROBEntries * options.cpu_buffer_enlarge_factor
+                    switch_cpus[i].backComSize = switch_cpus[i].backComSize * options.cpu_buffer_enlarge_factor
+                    switch_cpus[i].forwardComSize = switch_cpus[i].forwardComSize * options.cpu_buffer_enlarge_factor
+
+                if options.cpu_width_enlarge_factor != 1:
+                    print("Enlarging CPU widths by a factor of %d" % options.cpu_width_enlarge_factor)
+                    switch_cpus[i].commitWidth = switch_cpus[i].commitWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].decodeWidth = switch_cpus[i].decodeWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].dispatchWidth = switch_cpus[i].dispatchWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].fetchWidth = switch_cpus[i].fetchWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].issueWidth = switch_cpus[i].issueWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].renameWidth = switch_cpus[i].renameWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].squashWidth = switch_cpus[i].squashWidth * options.cpu_width_enlarge_factor
+                    switch_cpus[i].wbWidth = switch_cpus[i].wbWidth * options.cpu_width_enlarge_factor
+
+                if options.cpu_register_enlarge_factor != 1:
+                    print("Enlarging CPU registers by a factor of %d" % options.cpu_register_enlarge_factor)
+                    switch_cpus[i].numPhysFloatRegs = switch_cpus[i].numPhysFloatRegs * options.cpu_register_enlarge_factor
+                    switch_cpus[i].numPhysIntRegs = switch_cpus[i].numPhysIntRegs * options.cpu_register_enlarge_factor
+                    switch_cpus[i].numPhysMatRegs = switch_cpus[i].numPhysMatRegs * options.cpu_register_enlarge_factor
+                    switch_cpus[i].numPhysVecPredRegs = switch_cpus[i].numPhysVecPredRegs * options.cpu_register_enlarge_factor
+                    switch_cpus[i].numPhysVecRegs = switch_cpus[i].numPhysVecRegs * options.cpu_register_enlarge_factor
+
         # If elastic tracing is enabled attach the elastic trace probe
         # to the switch CPUs
         if options.elastic_trace_en:
@@ -777,9 +816,7 @@ def run(options, root, testsys, cpu_class):
     # option only for finding the checkpoints to restore from.  This
     # lets us test checkpointing by restoring from one set of
     # checkpoints, generating a second set, and then comparing them.
-    if (
-        options.take_checkpoints or options.take_simpoint_checkpoints
-    ) and options.checkpoint_restore:
+    if (options.take_checkpoints or options.take_simpoint_checkpoints) and options.checkpoint_restore:
         if m5.options.outdir:
             cptdir = m5.options.outdir
         else:

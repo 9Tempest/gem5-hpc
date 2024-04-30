@@ -33,13 +33,12 @@
 #include <cstring>
 #include <vector>
 
-namespace gem5
-{
+
+namespace gem5 {
 
 template <class T>
-class TimeBuffer
-{
-  protected:
+class TimeBuffer {
+protected:
     int past;
     int future;
     unsigned size;
@@ -49,84 +48,71 @@ class TimeBuffer
     std::vector<char *> index;
     unsigned base;
 
-    void valid(int idx) const
-    {
-        assert (idx >= -past && idx <= future);
+    void valid(int idx) const {
+        assert(idx >= -past && idx <= future);
     }
 
-  public:
+public:
     friend class wire;
-    class wire
-    {
+    class wire {
         friend class TimeBuffer;
-      protected:
+
+    protected:
         TimeBuffer<T> *buffer;
         int index;
 
-        void set(int idx)
-        {
+        void set(int idx) {
             buffer->valid(idx);
             index = idx;
         }
 
         wire(TimeBuffer<T> *buf, int i)
-            : buffer(buf), index(i)
-        { }
+            : buffer(buf), index(i) {}
 
-      public:
-        wire()
-        { }
+    public:
+        wire() {}
 
         wire(const wire &i)
-            : buffer(i.buffer), index(i.index)
-        { }
+            : buffer(i.buffer), index(i.index) {}
 
-        const wire &operator=(const wire &i)
-        {
+        const wire &operator=(const wire &i) {
             buffer = i.buffer;
             set(i.index);
             return *this;
         }
 
-        const wire &operator=(int idx)
-        {
+        const wire &operator=(int idx) {
             set(idx);
             return *this;
         }
 
-        const wire &operator+=(int offset)
-        {
+        const wire &operator+=(int offset) {
             set(index + offset);
             return *this;
         }
 
-        const wire &operator-=(int offset)
-        {
+        const wire &operator-=(int offset) {
             set(index - offset);
             return *this;
         }
 
-        wire &operator++()
-        {
+        wire &operator++() {
             set(index + 1);
             return *this;
         }
 
-        wire &operator++(int)
-        {
+        wire &operator++(int) {
             int i = index;
             set(index + 1);
             return wire(this, i);
         }
 
-        wire &operator--()
-        {
+        wire &operator--() {
             set(index - 1);
             return *this;
         }
 
-        wire &operator--(int)
-        {
+        wire &operator--(int) {
             int i = index;
             set(index - 1);
             return wire(this, i);
@@ -135,12 +121,10 @@ class TimeBuffer
         T *operator->() const { return buffer->access(index); }
     };
 
-
-  public:
+public:
     TimeBuffer(int p, int f)
         : past(p), future(f), size(past + future + 1),
-          data(new char[size * sizeof(T)]), index(size), base(0)
-    {
+          data(new char[size * sizeof(T)]), index(size), base(0) {
         assert(past >= 0 && future >= 0);
         char *ptr = data;
         for (unsigned i = 0; i < size; i++) {
@@ -154,30 +138,25 @@ class TimeBuffer
     }
 
     TimeBuffer()
-        : data(NULL)
-    {
+        : data(NULL) {
     }
 
-    ~TimeBuffer()
-    {
+    ~TimeBuffer() {
         for (unsigned i = 0; i < size; ++i)
             (reinterpret_cast<T *>(index[i]))->~T();
-        delete [] data;
+        delete[] data;
     }
 
-    void id(int id)
-    {
+    void id(int id) {
         _id = id;
     }
 
-    int id()
-    {
+    int id() {
         return _id;
     }
 
     void
-    advance()
-    {
+    advance() {
         if (++base >= size)
             base = 0;
 
@@ -189,11 +168,10 @@ class TimeBuffer
         new (index[ptr]) T;
     }
 
-  protected:
+protected:
     //Calculate the index into this->index for element at position idx
     //relative to now
-    inline int calculateVectorIndex(int idx) const
-    {
+    inline int calculateVectorIndex(int idx) const {
         //Need more complex math here to calculate index.
         valid(idx);
 
@@ -207,42 +185,36 @@ class TimeBuffer
         return vector_index;
     }
 
-  public:
-    T *access(int idx)
-    {
+public:
+    T *access(int idx) {
         int vector_index = calculateVectorIndex(idx);
 
         return reinterpret_cast<T *>(index[vector_index]);
     }
 
-    T &operator[](int idx)
-    {
+    T &operator[](int idx) {
         int vector_index = calculateVectorIndex(idx);
 
         return reinterpret_cast<T &>(*index[vector_index]);
     }
 
-    const T &operator[] (int idx) const
-    {
+    const T &operator[](int idx) const {
         int vector_index = calculateVectorIndex(idx);
 
         return reinterpret_cast<const T &>(*index[vector_index]);
     }
 
-    wire getWire(int idx)
-    {
+    wire getWire(int idx) {
         valid(idx);
 
         return wire(this, idx);
     }
 
-    wire zero()
-    {
+    wire zero() {
         return wire(this, 0);
     }
 
-    unsigned getSize()
-    {
+    unsigned getSize() {
         return size;
     }
 };

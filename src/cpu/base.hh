@@ -59,16 +59,14 @@
 #include "sim/signal.hh"
 #include "sim/system.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 class BaseCPU;
 struct BaseCPUParams;
 class CheckerCPU;
 class ThreadContext;
 
-struct AddressMonitor
-{
+struct AddressMonitor {
     AddressMonitor();
     bool doMonitor(PacketPtr pkt);
 
@@ -76,19 +74,18 @@ struct AddressMonitor
     Addr vAddr;
     Addr pAddr;
     uint64_t val;
-    bool waiting;   // 0=normal, 1=mwaiting
+    bool waiting; // 0=normal, 1=mwaiting
     bool gotWakeup;
 };
 
-class CPUProgressEvent : public Event
-{
-  protected:
+class CPUProgressEvent : public Event {
+protected:
     Tick _interval;
     Counter lastNumInst;
     BaseCPU *cpu;
     bool _repeatEvent;
 
-  public:
+public:
     CPUProgressEvent(BaseCPU *_cpu, Tick ival = 0);
 
     void process();
@@ -101,10 +98,8 @@ class CPUProgressEvent : public Event
     virtual const char *description() const;
 };
 
-class BaseCPU : public ClockedObject
-{
-  protected:
-
+class BaseCPU : public ClockedObject {
+protected:
     /// Instruction count used for SPARC misc register
     /// @todo unify this with the counters that cpus individually keep
     Tick instCnt;
@@ -146,8 +141,7 @@ class BaseCPU : public ClockedObject
     const Addr _cacheLineSize;
 
     /** Global CPU statistics that are merged into the Root object. */
-    struct GlobalStats : public statistics::Group
-    {
+    struct GlobalStats : public statistics::Group {
         GlobalStats(statistics::Group *parent);
 
         statistics::Value simInsts;
@@ -165,8 +159,7 @@ class BaseCPU : public ClockedObject
 
     SignalSinkPort<bool> modelResetPort;
 
-  public:
-
+public:
     /**
      * Purely virtual method that returns a reference to the data
      * port. All subclasses must implement this method.
@@ -205,7 +198,7 @@ class BaseCPU : public ClockedObject
      * @return a reference to the port with the given name
      */
     Port &getPort(const std::string &if_name,
-                  PortID idx=InvalidPortID) override;
+                  PortID idx = InvalidPortID) override;
 
     /** Get cpu task id */
     uint32_t taskId() const { return _taskId; }
@@ -220,13 +213,12 @@ class BaseCPU : public ClockedObject
     // @todo remove me after debugging with legion done
     Tick instCount() { return instCnt; }
 
-  protected:
-    std::vector<BaseInterrupts*> interrupts;
+protected:
+    std::vector<BaseInterrupts *> interrupts;
 
-  public:
+public:
     BaseInterrupts *
-    getInterruptController(ThreadID tid)
-    {
+    getInterruptController(ThreadID tid) {
         if (interrupts.empty())
             return NULL;
 
@@ -239,37 +231,32 @@ class BaseCPU : public ClockedObject
     void postInterrupt(ThreadID tid, int int_num, int index);
 
     void
-    clearInterrupt(ThreadID tid, int int_num, int index)
-    {
+    clearInterrupt(ThreadID tid, int int_num, int index) {
         interrupts[tid]->clear(int_num, index);
     }
 
     void
-    clearInterrupts(ThreadID tid)
-    {
+    clearInterrupts(ThreadID tid) {
         interrupts[tid]->clearAll();
     }
 
     bool
-    checkInterrupts(ThreadID tid) const
-    {
+    checkInterrupts(ThreadID tid) const {
         return FullSystem && interrupts[tid]->checkInterrupts();
     }
 
-  protected:
+protected:
     std::vector<ThreadContext *> threadContexts;
 
-    trace::InstTracer * tracer;
+    trace::InstTracer *tracer;
 
-  public:
-
-
+public:
     /** Invalid or unknown Pid. Possible when operating system is not present
      *  or has not assigned a pid yet */
     static const uint32_t invldPid = std::numeric_limits<uint32_t>::max();
 
     /// Provide access to the tracer pointer
-    trace::InstTracer * getTracer() { return tracer; }
+    trace::InstTracer *getTracer() { return tracer; }
 
     /// Notify the CPU that the indicated context is now active.
     virtual void activateContext(ThreadID thread_num);
@@ -289,19 +276,17 @@ class BaseCPU : public ClockedObject
 
     /// Get the number of thread contexts available
     unsigned
-    numContexts()
-    {
+    numContexts() {
         return static_cast<unsigned>(threadContexts.size());
     }
 
     /// Convert ContextID to threadID
     ThreadID
-    contextToThread(ContextID cid)
-    {
+    contextToThread(ContextID cid) {
         return static_cast<ThreadID>(cid - threadContexts[0]->contextId());
     }
 
-  public:
+public:
     PARAMS(BaseCPU);
     BaseCPU(const Params &params, bool is_checker = false);
     virtual ~BaseCPU();
@@ -381,7 +366,7 @@ class BaseCPU : public ClockedObject
      * expects. If the check fails, the implementation should
      * terminate the simulation using fatal().
      */
-    virtual void verifyMemoryMode() const { };
+    virtual void verifyMemoryMode() const {};
 
     /**
      *  Number of threads we're actually simulating (<= SMT_MAX_THREADS).
@@ -434,7 +419,7 @@ class BaseCPU : public ClockedObject
      * @param cp The checkpoint use.
      * @param tid ID of the current thread.
      */
-    virtual void unserializeThread(CheckpointIn &cp, ThreadID tid) {};
+    virtual void unserializeThread(CheckpointIn &cp, ThreadID tid){};
 
     virtual Counter totalInsts() const = 0;
 
@@ -485,7 +470,7 @@ class BaseCPU : public ClockedObject
      */
     uint64_t getCurrentInstCount(ThreadID tid);
 
-  public:
+public:
     /**
      * @{
      * @name PMU Probe points.
@@ -500,7 +485,7 @@ class BaseCPU : public ClockedObject
      */
     virtual void probeInstCommit(const StaticInstPtr &inst, Addr pc);
 
-   protected:
+protected:
     /**
      * Helper method to instantiate probe points belonging to this
      * object.
@@ -546,8 +531,7 @@ class BaseCPU : public ClockedObject
     ProbePointArg<bool> *ppSleeping;
     /** @} */
 
-    enum CPUState
-    {
+    enum CPUState {
         CPU_STATE_ON,
         CPU_STATE_SLEEP,
         CPU_STATE_WAKEUP
@@ -558,8 +542,7 @@ class BaseCPU : public ClockedObject
 
     /** base method keeping track of cycle progression **/
     inline void
-    updateCycleCounters(CPUState state)
-    {
+    updateCycleCounters(CPUState state) {
         uint32_t delta = curCycle() - previousCycle;
 
         if (previousState == CPU_STATE_ON) {
@@ -567,13 +550,13 @@ class BaseCPU : public ClockedObject
         }
 
         switch (state) {
-          case CPU_STATE_WAKEUP:
+        case CPU_STATE_WAKEUP:
             ppSleeping->notify(false);
             break;
-          case CPU_STATE_SLEEP:
+        case CPU_STATE_SLEEP:
             ppSleeping->notify(true);
             break;
-          default:
+        default:
             break;
         }
 
@@ -584,7 +567,7 @@ class BaseCPU : public ClockedObject
     }
 
     // Function tracing
-  private:
+private:
     bool functionTracingEnabled;
     std::ostream *functionTraceStream;
     Addr currentFunctionStart;
@@ -593,21 +576,19 @@ class BaseCPU : public ClockedObject
     void enableFunctionTrace();
     void traceFunctionsInternal(Addr pc);
 
-  private:
-    static std::vector<BaseCPU *> cpuList;   //!< Static global cpu list
+private:
+    static std::vector<BaseCPU *> cpuList; //!< Static global cpu list
 
-  public:
+public:
     void
-    traceFunctions(Addr pc)
-    {
+    traceFunctions(Addr pc) {
         if (functionTracingEnabled)
             traceFunctionsInternal(pc);
     }
 
     static int numSimulatedCPUs() { return cpuList.size(); }
     static Counter
-    numSimulatedInsts()
-    {
+    numSimulatedInsts() {
         Counter total = 0;
 
         int size = cpuList.size();
@@ -618,8 +599,7 @@ class BaseCPU : public ClockedObject
     }
 
     static Counter
-    numSimulatedOps()
-    {
+    numSimulatedOps() {
         Counter total = 0;
 
         int size = cpuList.size();
@@ -629,9 +609,8 @@ class BaseCPU : public ClockedObject
         return total;
     }
 
-  public:
-    struct BaseCPUStats : public statistics::Group
-    {
+public:
+    struct BaseCPUStats : public statistics::Group {
         BaseCPUStats(statistics::Group *parent);
         // Number of CPU insts and ops committed at CPU core level
         statistics::Scalar numInsts;
@@ -645,16 +624,15 @@ class BaseCPU : public ClockedObject
         statistics::Scalar numWorkItemsCompleted;
     } baseStats;
 
-  private:
+private:
     std::vector<AddressMonitor> addressMonitor;
 
-  public:
+public:
     void armMonitor(ThreadID tid, Addr address);
     bool mwait(ThreadID tid, PacketPtr pkt);
     void mwaitAtomic(ThreadID tid, ThreadContext *tc, BaseMMU *mmu);
     AddressMonitor *
-    getCpuAddrMonitor(ThreadID tid)
-    {
+    getCpuAddrMonitor(ThreadID tid) {
         assert(tid < numThreads);
         return &addressMonitor[tid];
     }
@@ -671,23 +649,20 @@ class BaseCPU : public ClockedObject
      * well. */
     virtual void
     htmSendAbortSignal(ThreadID tid, uint64_t htm_uid,
-                       HtmFailureFaultCause cause)
-    {
+                       HtmFailureFaultCause cause) {
         panic("htmSendAbortSignal not implemented");
     }
 
-  // Enables CPU to enter power gating on a configurable cycle count
-  protected:
+    // Enables CPU to enter power gating on a configurable cycle count
+protected:
     void enterPwrGating();
 
     const Cycles pwrGatingLatency;
     const bool powerGatingOnIdle;
     EventFunctionWrapper enterPwrGatingEvent;
 
-
-  public:
-    struct FetchCPUStats : public statistics::Group
-    {
+public:
+    struct FetchCPUStats : public statistics::Group {
         FetchCPUStats(statistics::Group *parent, int thread_id);
 
         /* Total number of instructions fetched */
@@ -710,11 +685,9 @@ class BaseCPU : public ClockedObject
 
         /* Number of times fetch was asked to suspend by Execute */
         statistics::Scalar numFetchSuspends;
-
     };
 
-    struct ExecuteCPUStats: public statistics::Group
-    {
+    struct ExecuteCPUStats : public statistics::Group {
         ExecuteCPUStats(statistics::Group *parent, int thread_id);
 
         /* Stat for total number of executed instructions */
@@ -773,8 +746,7 @@ class BaseCPU : public ClockedObject
         statistics::Scalar numDiscardedOps;
     };
 
-    struct CommitCPUStats: public statistics::Group
-    {
+    struct CommitCPUStats : public statistics::Group {
         CommitCPUStats(statistics::Group *parent, int thread_id);
 
         /* Number of simulated instructions committed */
@@ -813,7 +785,6 @@ class BaseCPU : public ClockedObject
         /* number of control instructions committed by control inst type */
         statistics::Vector committedControl;
         void updateComCtrlStats(const StaticInstPtr staticInst);
-
     };
 
     std::vector<std::unique_ptr<FetchCPUStats>> fetchStats;

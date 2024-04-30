@@ -47,20 +47,17 @@
 #include "debug/IQ.hh"
 #include "debug/O3PipeView.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace o3
-{
+namespace o3 {
 
 DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &static_inst,
-        const StaticInstPtr &_macroop, InstSeqNum seq_num, CPU *_cpu)
+                 const StaticInstPtr &_macroop, InstSeqNum seq_num, CPU *_cpu)
     : seqNum(seq_num), staticInst(static_inst), cpu(_cpu),
       _numSrcs(arrays.numSrcs), _numDests(arrays.numDests),
       _flatDestIdx(arrays.flatDestIdx), _destIdx(arrays.destIdx),
       _prevDestIdx(arrays.prevDestIdx), _srcIdx(arrays.srcIdx),
-      _readySrcIdx(arrays.readySrcIdx), macroop(_macroop)
-{
+      _readySrcIdx(arrays.readySrcIdx), macroop(_macroop) {
     std::fill(_readySrcIdx, _readySrcIdx + (numSrcs() + 7) / 8, 0);
 
     status.reset();
@@ -73,38 +70,35 @@ DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &static_inst,
 #ifndef NDEBUG
     ++cpu->instcount;
 
-    if (cpu->instcount > 1500) {
+    if (cpu->instcount > 12000) {
 #ifdef GEM5_DEBUG
         cpu->dumpInsts();
         dumpSNList();
 #endif
-        assert(cpu->instcount <= 1500);
+        assert(cpu->instcount <= 12000);
     }
 
     DPRINTF(DynInst,
-        "DynInst: [sn:%lli] Instruction created. Instcount for %s = %i\n",
-        seqNum, cpu->name(), cpu->instcount);
+            "DynInst: [sn:%lli] Instruction created. Instcount for %s = %i\n",
+            seqNum, cpu->name(), cpu->instcount);
 #endif
 
 #ifdef GEM5_DEBUG
     cpu->snList.insert(seqNum);
 #endif
-
 }
 
 DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &static_inst,
-        const StaticInstPtr &_macroop, const PCStateBase &_pc,
-        const PCStateBase &pred_pc, InstSeqNum seq_num, CPU *_cpu)
-    : DynInst(arrays, static_inst, _macroop, seq_num, _cpu)
-{
+                 const StaticInstPtr &_macroop, const PCStateBase &_pc,
+                 const PCStateBase &pred_pc, InstSeqNum seq_num, CPU *_cpu)
+    : DynInst(arrays, static_inst, _macroop, seq_num, _cpu) {
     set(pc, _pc);
     set(predPC, pred_pc);
 }
 
 DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
-        const StaticInstPtr &_macroop)
-    : DynInst(arrays, _staticInst, _macroop, 0, nullptr)
-{}
+                 const StaticInstPtr &_macroop)
+    : DynInst(arrays, _staticInst, _macroop, 0, nullptr) {}
 
 /*
  * This custom "new" operator uses the default "new" operator to allocate space
@@ -134,8 +128,7 @@ DynInst::DynInst(const Arrays &arrays, const StaticInstPtr &_staticInst,
  * and are then consumed in the DynInst constructor.
  */
 void *
-DynInst::operator new(size_t count, Arrays &arrays)
-{
+DynInst::operator new(size_t count, Arrays &arrays) {
     // Convenience variables for brevity.
     const auto num_dests = arrays.numDests;
     const auto num_srcs = arrays.numSrcs;
@@ -190,14 +183,11 @@ DynInst::operator new(size_t count, Arrays &arrays)
 // Because of the custom "new" operator that allocates more bytes than the
 // size of the DynInst object, AddressSanitizer throw new-delete-type-mismatch.
 // Adding a custom delete function is enough to shut down this false positive
-void
-DynInst::operator delete(void *ptr)
-{
+void DynInst::operator delete(void *ptr) {
     ::operator delete(ptr);
 }
 
-DynInst::~DynInst()
-{
+DynInst::~DynInst() {
     /*
      * The buffer this DynInst occupies also holds some of the structures it
      * points to. We need to call their destructors manually to make sure that
@@ -246,12 +236,12 @@ DynInst::~DynInst()
 
             Tick valS = (storeTick == -1) ? 0 : fetch + storeTick;
             DPRINTFR(O3PipeView, "O3PipeView:retire:%llu:store:%llu\n",
-                    val, valS);
+                     val, valS);
         }
     }
 #endif
 
-    delete [] memData;
+    delete[] memData;
     delete traceData;
     fault = NoFault;
 
@@ -259,19 +249,16 @@ DynInst::~DynInst()
     --cpu->instcount;
 
     DPRINTF(DynInst,
-        "DynInst: [sn:%lli] Instruction destroyed. Instcount for %s = %i\n",
-        seqNum, cpu->name(), cpu->instcount);
+            "DynInst: [sn:%lli] Instruction destroyed. Instcount for %s = %i\n",
+            seqNum, cpu->name(), cpu->instcount);
 #endif
 #ifdef GEM5_DEBUG
     cpu->snList.erase(seqNum);
 #endif
 };
 
-
 #ifdef GEM5_DEBUG
-void
-DynInst::dumpSNList()
-{
+void DynInst::dumpSNList() {
     std::set<InstSeqNum>::iterator sn_it = cpu->snList.begin();
 
     int count = 0;
@@ -283,17 +270,13 @@ DynInst::dumpSNList()
 }
 #endif
 
-void
-DynInst::dump()
-{
+void DynInst::dump() {
     cprintf("T%d : %#08d `", threadNumber, pc->instAddr());
     std::cout << staticInst->disassemble(pc->instAddr());
     cprintf("'\n");
 }
 
-void
-DynInst::dump(std::string &outstring)
-{
+void DynInst::dump(std::string &outstring) {
     std::ostringstream s;
     s << "T" << threadNumber << " : 0x" << pc->instAddr() << " "
       << staticInst->disassemble(pc->instAddr());
@@ -301,27 +284,20 @@ DynInst::dump(std::string &outstring)
     outstring = s.str();
 }
 
-void
-DynInst::markSrcRegReady()
-{
+void DynInst::markSrcRegReady() {
     DPRINTF(IQ, "[sn:%lli] has %d ready out of %d sources. RTI %d)\n",
-            seqNum, readyRegs+1, numSrcRegs(), readyToIssue());
+            seqNum, readyRegs + 1, numSrcRegs(), readyToIssue());
     if (++readyRegs == numSrcRegs()) {
         setCanIssue();
     }
 }
 
-void
-DynInst::markSrcRegReady(RegIndex src_idx)
-{
+void DynInst::markSrcRegReady(RegIndex src_idx) {
     readySrcIdx(src_idx, true);
     markSrcRegReady();
 }
 
-
-void
-DynInst::setSquashed()
-{
+void DynInst::setSquashed() {
     status.set(Squashed);
 
     if (!isPinnedRegsRenamed() || isPinnedRegsSquashDone())
@@ -344,9 +320,7 @@ DynInst::setSquashed()
     setPinnedRegsSquashDone();
 }
 
-Fault
-DynInst::execute()
-{
+Fault DynInst::execute() {
     // @todo: Pretty convoluted way to avoid squashing from happening
     // when using the TC during an instruction's execution
     // (specifically for instructions that have side-effects that use
@@ -361,9 +335,7 @@ DynInst::execute()
     return fault;
 }
 
-Fault
-DynInst::initiateAcc()
-{
+Fault DynInst::initiateAcc() {
     // @todo: Pretty convoluted way to avoid squashing from happening
     // when using the TC during an instruction's execution
     // (specifically for instructions that have side-effects that use
@@ -378,9 +350,7 @@ DynInst::initiateAcc()
     return fault;
 }
 
-Fault
-DynInst::completeAcc(PacketPtr pkt)
-{
+Fault DynInst::completeAcc(PacketPtr pkt) {
     // @todo: Pretty convoluted way to avoid squashing from happening
     // when using the TC during an instruction's execution
     // (specifically for instructions that have side-effects that use
@@ -401,16 +371,12 @@ DynInst::completeAcc(PacketPtr pkt)
     return fault;
 }
 
-void
-DynInst::trap(const Fault &fault)
-{
+void DynInst::trap(const Fault &fault) {
     cpu->trap(fault, threadNumber, staticInst);
 }
 
-Fault
-DynInst::initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
-                               const std::vector<bool> &byte_enable)
-{
+Fault DynInst::initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
+                               const std::vector<bool> &byte_enable) {
     assert(byte_enable.size() == size);
     return cpu->pushRequest(
         dynamic_cast<DynInstPtr::PtrType>(this),
@@ -418,21 +384,17 @@ DynInst::initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
         byte_enable);
 }
 
-Fault
-DynInst::initiateMemMgmtCmd(Request::Flags flags)
-{
+Fault DynInst::initiateMemMgmtCmd(Request::Flags flags) {
     const unsigned int size = 8;
     return cpu->pushRequest(
-            dynamic_cast<DynInstPtr::PtrType>(this),
-            /* ld */ true, nullptr, size, 0x0ul, flags, nullptr, nullptr,
-            std::vector<bool>(size, true));
+        dynamic_cast<DynInstPtr::PtrType>(this),
+        /* ld */ true, nullptr, size, 0x0ul, flags, nullptr, nullptr,
+        std::vector<bool>(size, true));
 }
 
-Fault
-DynInst::writeMem(uint8_t *data, unsigned size, Addr addr,
+Fault DynInst::writeMem(uint8_t *data, unsigned size, Addr addr,
                         Request::Flags flags, uint64_t *res,
-                        const std::vector<bool> &byte_enable)
-{
+                        const std::vector<bool> &byte_enable) {
     assert(byte_enable.size() == size);
     return cpu->pushRequest(
         dynamic_cast<DynInstPtr::PtrType>(this),
@@ -440,19 +402,17 @@ DynInst::writeMem(uint8_t *data, unsigned size, Addr addr,
         byte_enable);
 }
 
-Fault
-DynInst::initiateMemAMO(Addr addr, unsigned size, Request::Flags flags,
-                              AtomicOpFunctorPtr amo_op)
-{
+Fault DynInst::initiateMemAMO(Addr addr, unsigned size, Request::Flags flags,
+                              AtomicOpFunctorPtr amo_op) {
     // atomic memory instructions do not have data to be written to memory yet
     // since the atomic operations will be executed directly in cache/memory.
     // Therefore, its `data` field is nullptr.
     // Atomic memory requests need to carry their `amo_op` fields to cache/
     // memory
     return cpu->pushRequest(
-            dynamic_cast<DynInstPtr::PtrType>(this),
-            /* atomic */ false, nullptr, size, addr, flags, nullptr,
-            std::move(amo_op), std::vector<bool>(size, true));
+        dynamic_cast<DynInstPtr::PtrType>(this),
+        /* atomic */ false, nullptr, size, addr, flags, nullptr,
+        std::move(amo_op), std::vector<bool>(size, true));
 }
 
 } // namespace o3

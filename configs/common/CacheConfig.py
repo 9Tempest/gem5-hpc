@@ -67,12 +67,130 @@ def _get_cache_opts(level, options):
     assoc_attr = f"{level}_assoc"
     if hasattr(options, assoc_attr):
         opts["assoc"] = getattr(options, assoc_attr)
+    
+    mshrs_attr = f"{level}_mshrs"
+    if hasattr(options, mshrs_attr):
+        opts["mshrs"] = getattr(options, mshrs_attr)
 
     prefetcher_attr = f"{level}_hwp_type"
     if hasattr(options, prefetcher_attr):
         opts["prefetcher"] = _get_hwp(getattr(options, prefetcher_attr))
 
     return opts
+
+
+
+def config_3L_cache(options, system):
+    if options.external_memory_system:
+        print("External caches and internal caches are exclusive options.\n")
+        sys.exit(1)
+    
+    if not options.caches or not options.l2cache or not options.l3cache:
+        print("config_3L_cache must be called only for 3 levels of the cache.\n")
+        sys.exit(1)
+    
+    if options.memchecker:
+        print("config_3L_cache must be called without memchecker.\n")
+        sys.exit(1)
+
+    if options.cpu_type == "O3_ARM_v7a_3":
+        print("L3 cache not supported for the O3_ARM_v7a_3 CPU type.\n")
+        sys.exit(1)
+        try:
+            import cores.arm.O3_ARM_v7a as core
+        except:
+            print("O3_ARM_v7a_3 is unavailable. Did you compile the O3 model?")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+            core.O3_ARM_v7a_DCache,
+            core.O3_ARM_v7a_ICache,
+            core.O3_ARM_v7aL2,
+            None,
+        )
+    elif options.cpu_type == "HPI":
+        print("L3 cache not supported for the HPI CPU type.\n")
+        sys.exit(1)
+        try:
+            import cores.arm.HPI as core
+        except:
+            print("HPI is unavailable.")
+            sys.exit(1)
+
+        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+            core.HPI_DCache,
+            core.HPI_ICache,
+            core.HPI_L2,
+            None,
+        )
+    else:
+        dcache_class, icache_class, l2_cache_class, l3_cache_class, walk_cache_class = (
+            L1_DCache,
+            L1_ICache,
+            L2Cache,
+            L3Cache,
+            None,
+        )
+
+    # Set the cache line size of the system
+    system.cache_line_size = options.cacheline_size
+
+    if options.l3cache:
+        # Provide a clock for the L3 and the L2-to-L3 bus here as they
+        # are not connected using addTwoLevelCacheHierarchy. Use the
+        # same clock as the CPUs.
+        system.l3 = l3_cache_class(
+            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l3", options)
+        )
+
+        if options.cpu_buffer_enlarge_factor != 1:
+            print("Enlarging Cache buffers by a factor of %d" % options.cpu_buffer_enlarge_factor)
+            system.l3.mshrs = system.l3.mshrs * options.cpu_buffer_enlarge_factor
+            system.l3.write_buffers = system.l3.write_buffers * options.cpu_buffer_enlarge_factor
+
+        system.tol3bus = L3XBar(clk_domain=system.cpu_clk_domain)
+        system.l3.cpu_side = system.tol3bus.mem_side_ports
+        system.l3.mem_side = system.membus.cpu_side_ports
+
+    for i in range(options.num_cpus):
+        icache = icache_class(**_get_cache_opts("l1i", options))
+        dcache = dcache_class(**_get_cache_opts("l1d", options))
+        l2cache = l2_cache_class(**_get_cache_opts("l2", options))
+
+        if options.cpu_buffer_enlarge_factor != 1:
+            icache.mshrs = icache.mshrs * options.cpu_buffer_enlarge_factor
+            icache.write_buffers = icache.write_buffers * options.cpu_buffer_enlarge_factor
+            dcache.mshrs = dcache.mshrs * options.cpu_buffer_enlarge_factor
+            dcache.write_buffers = dcache.write_buffers * options.cpu_buffer_enlarge_factor
+            l2cache.mshrs = l2cache.mshrs * options.cpu_buffer_enlarge_factor
+            l2cache.write_buffers = l2cache.write_buffers * options.cpu_buffer_enlarge_factor
+
+        # If we are using ISA.X86 or ISA.RISCV, we set walker caches.
+        if ObjectList.cpu_list.get_isa(options.cpu_type) in [
+            ISA.RISCV,
+            ISA.X86,
+        ]:
+            iwalkcache = PageTableWalkerCache()
+            dwalkcache = PageTableWalkerCache()
+        else:
+            iwalkcache = None
+            dwalkcache = None
+
+        # When connecting the caches, the clock is also inherited
+        # from the CPU in question
+        system.cpu[i].addTwoLevelCacheHierarchy(
+            icache, dcache, l2cache, iwalkcache, dwalkcache
+        )
+
+        system.cpu[i].createInterruptController()
+        system.cpu[i].connectAllPorts(
+            system.tol3bus.cpu_side_ports,
+            system.membus.cpu_side_ports,
+            system.membus.mem_side_ports,
+        )
+
+    return system
+
 
 
 def config_cache(options, system):

@@ -143,7 +143,10 @@ def addNoISAOptions(parser):
         help="type of memory to use",
     )
     parser.add_argument(
-        "--mem-channels", type=int, default=1, help="number of memory channels"
+        "--mem-channels",
+        type=int,
+        default=1,
+        help="number of memory channels"
     )
     parser.add_argument(
         "--mem-ranks",
@@ -185,6 +188,7 @@ def addNoISAOptions(parser):
     )
     parser.add_argument("--caches", action="store_true")
     parser.add_argument("--l2cache", action="store_true")
+    parser.add_argument("--l3cache", action="store_true")
     parser.add_argument("--num-dirs", type=int, default=1)
     parser.add_argument("--num-l2caches", type=int, default=1)
     parser.add_argument("--num-l3caches", type=int, default=1)
@@ -196,6 +200,10 @@ def addNoISAOptions(parser):
     parser.add_argument("--l1i_assoc", type=int, default=2)
     parser.add_argument("--l2_assoc", type=int, default=8)
     parser.add_argument("--l3_assoc", type=int, default=16)
+    parser.add_argument("--l1d_mshrs", type=int, default=16)
+    parser.add_argument("--l1i_mshrs", type=int, default=16)
+    parser.add_argument("--l2_mshrs", type=int, default=32)
+    parser.add_argument("--l3_mshrs", type=int, default=64)
     parser.add_argument("--cacheline_size", type=int, default=64)
 
     # Enable Ruby
@@ -264,6 +272,24 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
         default=CpuConfig.isa_string_map[isa] + "AtomicSimpleCPU",
         choices=ObjectList.cpu_list.get_names(),
         help="type of cpu to run with",
+    )
+    parser.add_argument(
+        "--cpu-buffer-enlarge-factor",
+        type=int,
+        default=1,
+        help="CPU enlarging factor for all buffers"
+    )
+    parser.add_argument(
+        "--cpu-register-enlarge-factor",
+        type=int,
+        default=1,
+        help="CPU enlarging factor for all registers"
+    )
+    parser.add_argument(
+        "--cpu-width-enlarge-factor",
+        type=int,
+        default=1,
+        help="CPU enlarging factor for the width of the operations"
     )
     parser.add_argument(
         "--list-bp-types",
