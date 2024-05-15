@@ -57,21 +57,16 @@
 #include "mem/cache/replacement_policies/base.hh"
 #include "params/StridePrefetcher.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace prefetch
-{
+namespace prefetch {
 
-Stride::StrideEntry::StrideEntry(const SatCounter8& init_confidence)
-  : TaggedEntry(), confidence(init_confidence)
-{
+Stride::StrideEntry::StrideEntry(const SatCounter8 &init_confidence)
+    : TaggedEntry(), confidence(init_confidence) {
     invalidate();
 }
 
-void
-Stride::StrideEntry::invalidate()
-{
+void Stride::StrideEntry::invalidate() {
     TaggedEntry::invalidate();
     lastAddr = 0;
     stride = 0;
@@ -79,19 +74,17 @@ Stride::StrideEntry::invalidate()
 }
 
 Stride::Stride(const StridePrefetcherParams &p)
-  : Queued(p),
-    initConfidence(p.confidence_counter_bits, p.initial_confidence),
-    threshConf(p.confidence_threshold/100.0),
-    useRequestorId(p.use_requestor_id),
-    degree(p.degree),
-    pcTableInfo(p.table_assoc, p.table_entries, p.table_indexing_policy,
-        p.table_replacement_policy)
-{
+    : Queued(p),
+      initConfidence(p.confidence_counter_bits, p.initial_confidence),
+      threshConf(p.confidence_threshold / 100.0),
+      useRequestorId(p.use_requestor_id),
+      degree(p.degree),
+      pcTableInfo(p.table_assoc, p.table_entries, p.table_indexing_policy,
+                  p.table_replacement_policy) {
 }
 
-Stride::PCTable*
-Stride::findTable(int context)
-{
+Stride::PCTable *
+Stride::findTable(int context) {
     // Check if table for given context exists
     auto it = pcTables.find(context);
     if (it != pcTables.end())
@@ -101,14 +94,13 @@ Stride::findTable(int context)
     return allocateNewContext(context);
 }
 
-Stride::PCTable*
-Stride::allocateNewContext(int context)
-{
+Stride::PCTable *
+Stride::allocateNewContext(int context) {
     // Create new table
     auto insertion_result = pcTables.insert(std::make_pair(context,
-        PCTable(pcTableInfo.assoc, pcTableInfo.numEntries,
-        pcTableInfo.indexingPolicy, pcTableInfo.replacementPolicy,
-        StrideEntry(initConfidence))));
+                                                           PCTable(pcTableInfo.assoc, pcTableInfo.numEntries,
+                                                                   pcTableInfo.indexingPolicy, pcTableInfo.replacementPolicy,
+                                                                   StrideEntry(initConfidence))));
 
     DPRINTF(HWPrefetch, "Adding context %i with stride entries\n", context);
 
@@ -116,11 +108,9 @@ Stride::allocateNewContext(int context)
     return &(insertion_result.first->second);
 }
 
-void
-Stride::calculatePrefetch(const PrefetchInfo &pfi,
-                                    std::vector<AddrPriority> &addresses,
-                                    const CacheAccessor &cache)
-{
+void Stride::calculatePrefetch(const PrefetchInfo &pfi,
+                               std::vector<AddrPriority> &addresses,
+                               const CacheAccessor &cache) {
     if (!pfi.hasPC()) {
         DPRINTF(HWPrefetch, "Ignoring request with no PC.\n");
         return;
@@ -133,7 +123,7 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
     RequestorID requestor_id = useRequestorId ? pfi.getRequestorId() : 0;
 
     // Get corresponding pc table
-    PCTable* pcTable = findTable(requestor_id);
+    PCTable *pcTable = findTable(requestor_id);
 
     // Search for entry in the pc table
     StrideEntry *entry = pcTable->findEntry(pc, is_secure);
@@ -157,7 +147,8 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
         }
 
         DPRINTF(HWPrefetch, "Hit: PC %x pkt_addr %x (%s) stride %d (%s), "
-                "conf %d\n", pc, pf_addr, is_secure ? "s" : "ns",
+                            "conf %d\n",
+                pc, pf_addr, is_secure ? "s" : "ns",
                 new_stride, stride_match ? "match" : "change",
                 (int)entry->confidence);
 
@@ -184,7 +175,7 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
         DPRINTF(HWPrefetch, "Miss: PC %x pkt_addr %x (%s)\n", pc, pf_addr,
                 is_secure ? "s" : "ns");
 
-        StrideEntry* entry = pcTable->findVictim(pc);
+        StrideEntry *entry = pcTable->findVictim(pc);
 
         // Insert new entry's data
         entry->lastAddr = pf_addr;
@@ -193,16 +184,13 @@ Stride::calculatePrefetch(const PrefetchInfo &pfi,
 }
 
 uint32_t
-StridePrefetcherHashedSetAssociative::extractSet(const Addr pc) const
-{
+StridePrefetcherHashedSetAssociative::extractSet(const Addr pc) const {
     const Addr hash1 = pc >> 1;
     const Addr hash2 = hash1 >> tagShift;
     return (hash1 ^ hash2) & setMask;
 }
 
-Addr
-StridePrefetcherHashedSetAssociative::extractTag(const Addr addr) const
-{
+Addr StridePrefetcherHashedSetAssociative::extractTag(const Addr addr) const {
     return addr;
 }
 

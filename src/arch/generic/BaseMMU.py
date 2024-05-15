@@ -72,3 +72,13 @@ class BaseMMU(SimObject):
                       table walker port
         """
         pass
+
+    def connectMtbWalkerPort(self, mport):
+        """
+        Connect the MAA table walker to the port passed as argument.
+        An ISA specific MMU should override this method, which is doing
+        nothing to support ISAs not implementing a table walker
+
+        :param mport: Port to be connected to the MAA walker port
+        """
+        pass

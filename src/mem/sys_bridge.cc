@@ -29,29 +29,26 @@
 
 #include "sim/system.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 SysBridge::PacketData
-SysBridge::BridgingPort::replaceReqID(PacketPtr pkt)
-{
+SysBridge::BridgingPort::replaceReqID(PacketPtr pkt) {
     RequestPtr old_req = pkt->req;
     RequestPtr new_req = std::make_shared<Request>(
-            old_req->getPaddr(), old_req->getSize(), old_req->getFlags(), id);
+        old_req->getPaddr(), old_req->getSize(), old_req->getFlags(), id);
+    new_req->setRegion(old_req->getRegion());
     pkt->req = new_req;
     return {old_req};
 }
 
 SysBridge::SysBridge(const SysBridgeParams &p) : SimObject(p),
-    sourcePort(p.name + ".source_port", &targetPort,
-            p.target->getRequestorId(this)),
-    targetPort(p.name + ".target_port", &sourcePort,
-            p.source->getRequestorId(this))
-{}
+                                                 sourcePort(p.name + ".source_port", &targetPort,
+                                                            p.target->getRequestorId(this)),
+                                                 targetPort(p.name + ".target_port", &sourcePort,
+                                                            p.source->getRequestorId(this)) {}
 
 Port &
-SysBridge::getPort(const std::string &if_name, PortID idx)
-{
+SysBridge::getPort(const std::string &if_name, PortID idx) {
     if (if_name == "source_port")
         return sourcePort;
     else if (if_name == "target_port")

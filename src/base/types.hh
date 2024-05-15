@@ -43,8 +43,7 @@
 #include <ostream>
 #include <stdexcept>
 
-namespace gem5
-{
+namespace gem5 {
 
 /** Statistics counter type.  Not much excuse for not using a 64-bit
  * integer here, but if you're desperate and only run short
@@ -75,67 +74,68 @@ const Tick MaxTick = 0xffffffffffffffffULL;
  * make do without the test and use the more elaborate comparison >
  * Cycles(0).
  */
-class Cycles
-{
+class Cycles {
 
-  private:
-
+private:
     /** Member holding the actual value. */
     uint64_t c;
 
-  public:
-
+public:
     /** Explicit constructor assigning a value. */
-    explicit constexpr Cycles(uint64_t _c) : c(_c) { }
+    explicit constexpr Cycles(uint64_t _c) : c(_c) {}
 
     /** Default constructor for parameter classes. */
-    Cycles() : c(0) { }
+    Cycles() : c(0) {}
 
     /** Converting back to the value type. */
     constexpr operator uint64_t() const { return c; }
 
     /** Prefix increment operator. */
-    Cycles& operator++() { ++c; return *this; }
+    Cycles &operator++() {
+        ++c;
+        return *this;
+    }
 
     /** Prefix decrement operator. Is only temporarily used in the O3 CPU. */
-    Cycles& operator--() { assert(c != 0); --c; return *this; }
+    Cycles &operator--() {
+        assert(c != 0);
+        --c;
+        return *this;
+    }
 
     /** In-place addition of cycles. */
-    Cycles& operator+=(const Cycles& cc) { c += cc.c; return *this; }
+    Cycles &operator+=(const Cycles &cc) {
+        c += cc.c;
+        return *this;
+    }
 
     /** Greater than comparison used for > Cycles(0). */
     constexpr bool
-    operator>(const Cycles& cc) const
-    {
+    operator>(const Cycles &cc) const {
         return c > cc.c;
     }
 
     constexpr Cycles
-    operator+(const Cycles& b) const
-    {
+    operator+(const Cycles &b) const {
         return Cycles(c + b.c);
     }
 
     constexpr Cycles
-    operator-(const Cycles& b) const
-    {
-        return c >= b.c ? Cycles(c - b.c) :
-            throw std::invalid_argument("RHS cycle value larger than LHS");
+    operator-(const Cycles &b) const {
+        return c >= b.c ? Cycles(c - b.c) : throw std::invalid_argument("RHS cycle value larger than LHS");
     }
 
     constexpr Cycles
-    operator <<(const int32_t shift) const
-    {
+    operator<<(const int32_t shift) const {
         return Cycles(c << shift);
     }
 
     constexpr Cycles
-    operator >>(const int32_t shift) const
-    {
+    operator>>(const int32_t shift) const {
         return Cycles(c >> shift);
     }
 
-    friend std::ostream& operator<<(std::ostream &out, const Cycles & cycles);
+    friend std::ostream &operator<<(std::ostream &out, const Cycles &cycles);
 };
 
 /**
@@ -151,20 +151,17 @@ typedef uint16_t MicroPC;
 static const MicroPC MicroPCRomBit = 1 << (sizeof(MicroPC) * 8 - 1);
 
 static inline MicroPC
-romMicroPC(MicroPC upc)
-{
+romMicroPC(MicroPC upc) {
     return upc | MicroPCRomBit;
 }
 
 static inline MicroPC
-normalMicroPC(MicroPC upc)
-{
+normalMicroPC(MicroPC upc) {
     return upc & ~MicroPCRomBit;
 }
 
 static inline bool
-isRomMicroPC(MicroPC upc)
-{
+isRomMicroPC(MicroPC upc) {
     return MicroPCRomBit & upc;
 }
 
@@ -176,10 +173,8 @@ using RegVal = uint64_t;
 using RegIndex = uint16_t;
 
 static inline uint32_t
-floatToBits32(float val)
-{
-    union
-    {
+floatToBits32(float val) {
+    union {
         float f;
         uint32_t i;
     } u;
@@ -188,10 +183,8 @@ floatToBits32(float val)
 }
 
 static inline uint64_t
-floatToBits64(double val)
-{
-    union
-    {
+floatToBits64(double val) {
+    union {
         double f;
         uint64_t i;
     } u;
@@ -203,10 +196,8 @@ static inline uint64_t floatToBits(double val) { return floatToBits64(val); }
 static inline uint32_t floatToBits(float val) { return floatToBits32(val); }
 
 static inline float
-bitsToFloat32(uint32_t val)
-{
-    union
-    {
+bitsToFloat32(uint32_t val) {
+    union {
         float f;
         uint32_t i;
     } u;
@@ -215,10 +206,8 @@ bitsToFloat32(uint32_t val)
 }
 
 static inline double
-bitsToFloat64(uint64_t val)
-{
-    union
-    {
+bitsToFloat64(uint64_t val) {
+    union {
         double f;
         uint64_t i;
     } u;

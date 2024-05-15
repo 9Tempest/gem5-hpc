@@ -41,23 +41,15 @@
 #include "cpu/thread_context.hh"
 #include "mem/port.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-PortProxy::PortProxy(ThreadContext *tc, Addr cache_line_size) :
-    PortProxy([tc](PacketPtr pkt)->void { tc->sendFunctional(pkt); },
-        cache_line_size)
-{}
+PortProxy::PortProxy(ThreadContext *tc, Addr cache_line_size) : PortProxy([tc](PacketPtr pkt) -> void { tc->sendFunctional(pkt); },
+                                                                          cache_line_size) {}
 
-PortProxy::PortProxy(const RequestPort &port, Addr cache_line_size) :
-    PortProxy([&port](PacketPtr pkt)->void { port.sendFunctional(pkt); },
-        cache_line_size)
-{}
+PortProxy::PortProxy(const RequestPort &port, Addr cache_line_size) : PortProxy([&port](PacketPtr pkt) -> void { port.sendFunctional(pkt); },
+                                                                                cache_line_size) {}
 
-void
-PortProxy::readBlobPhys(Addr addr, Request::Flags flags,
-                        void *p, uint64_t size) const
-{
+void PortProxy::readBlobPhys(Addr addr, Request::Flags flags, void *p, uint64_t size) const {
     for (ChunkGenerator gen(addr, size, _cacheLineSize); !gen.done();
          gen.next()) {
 
@@ -71,10 +63,7 @@ PortProxy::readBlobPhys(Addr addr, Request::Flags flags,
     }
 }
 
-void
-PortProxy::writeBlobPhys(Addr addr, Request::Flags flags,
-                         const void *p, uint64_t size) const
-{
+void PortProxy::writeBlobPhys(Addr addr, Request::Flags flags, const void *p, uint64_t size) const {
     for (ChunkGenerator gen(addr, size, _cacheLineSize); !gen.done();
          gen.next()) {
 
@@ -88,22 +77,18 @@ PortProxy::writeBlobPhys(Addr addr, Request::Flags flags,
     }
 }
 
-void
-PortProxy::memsetBlobPhys(Addr addr, Request::Flags flags,
-                          uint8_t v, uint64_t size) const
-{
+void PortProxy::memsetBlobPhys(Addr addr, Request::Flags flags,
+                               uint8_t v, uint64_t size) const {
     // quick and dirty...
     uint8_t *buf = new uint8_t[size];
 
     std::memset(buf, v, size);
     PortProxy::writeBlobPhys(addr, flags, buf, size);
 
-    delete [] buf;
+    delete[] buf;
 }
 
-bool
-PortProxy::tryWriteString(Addr addr, const char *str) const
-{
+bool PortProxy::tryWriteString(Addr addr, const char *str) const {
     do {
         if (!tryWriteBlob(addr++, str, 1))
             return false;
@@ -111,9 +96,7 @@ PortProxy::tryWriteString(Addr addr, const char *str) const
     return true;
 }
 
-bool
-PortProxy::tryReadString(std::string &str, Addr addr) const
-{
+bool PortProxy::tryReadString(std::string &str, Addr addr) const {
     while (true) {
         uint8_t c;
         if (!tryReadBlob(addr++, &c, 1))
@@ -124,9 +107,7 @@ PortProxy::tryReadString(std::string &str, Addr addr) const
     }
 }
 
-bool
-PortProxy::tryReadString(char *str, Addr addr, size_t maxlen) const
-{
+bool PortProxy::tryReadString(char *str, Addr addr, size_t maxlen) const {
     assert(maxlen);
     while (maxlen--) {
         if (!tryReadBlob(addr++, str, 1))

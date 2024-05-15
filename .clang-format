@@ -4,3 +4,4 @@ AccessModifierOffset: -4
 ColumnLimit: 0
 AllowAllArgumentsOnNextLine: true
 SortIncludes: false
+AlignConsecutiveMacros: true

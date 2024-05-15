@@ -47,11 +47,9 @@
 #include "mem/ruby/system/Sequencer.hh"
 #include "sim/system.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace ruby
-{
+namespace ruby {
 
 AbstractController::AbstractController(const Params &p)
     : ClockedObject(p), Consumer(this), m_version(p.version),
@@ -66,8 +64,7 @@ AbstractController::AbstractController(const Params &p)
       memoryPort(csprintf("%s.memory", name()), this),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       mRetryRespEvent{*this, false},
-      stats(this)
-{
+      stats(this) {
     if (m_version == 0) {
         // Combine the statistics from all controllers
         // of this particular type.
@@ -75,9 +72,7 @@ AbstractController::AbstractController(const Params &p)
     }
 }
 
-void
-AbstractController::init()
-{
+void AbstractController::init() {
     stats.delayHistogram.init(10);
     uint32_t size = Network::getNumberOfVirtualNetworks();
     for (uint32_t i = 0; i < size; i++) {
@@ -102,7 +97,7 @@ AbstractController::init()
             if ((i != downstreamAddrMap.end()) &&
                 (i->second.intersects(addr_range) != i->second.end())) {
                 fatal("%s: %s mapped to multiple machines of the same type\n",
-                    name(), addr_range.to_string());
+                      name(), addr_range.to_string());
             }
             downstreamAddrMap[mid.getType()].insert(addr_range, mid);
         }
@@ -117,9 +112,7 @@ AbstractController::init()
     }
 }
 
-void
-AbstractController::resetStats()
-{
+void AbstractController::resetStats() {
     stats.delayHistogram.reset();
     uint32_t size = Network::getNumberOfVirtualNetworks();
     for (uint32_t i = 0; i < size; i++) {
@@ -128,25 +121,19 @@ AbstractController::resetStats()
     ClockedObject::resetStats();
 }
 
-void
-AbstractController::regStats()
-{
+void AbstractController::regStats() {
     ClockedObject::regStats();
 }
 
-void
-AbstractController::profileMsgDelay(uint32_t virtualNetwork, Cycles delay)
-{
+void AbstractController::profileMsgDelay(uint32_t virtualNetwork, Cycles delay) {
     assert(virtualNetwork < stats.delayVCHistogram.size());
     stats.delayHistogram.sample(delay);
     stats.delayVCHistogram[virtualNetwork]->sample(delay);
 }
 
-void
-AbstractController::stallBuffer(MessageBuffer* buf, Addr addr)
-{
+void AbstractController::stallBuffer(MessageBuffer *buf, Addr addr) {
     if (m_waiting_buffers.count(addr) == 0) {
-        MsgVecType* msgVec = new MsgVecType;
+        MsgVecType *msgVec = new MsgVecType;
         msgVec->resize(m_in_ports, NULL);
         m_waiting_buffers[addr] = msgVec;
     }
@@ -156,13 +143,11 @@ AbstractController::stallBuffer(MessageBuffer* buf, Addr addr)
     (*(m_waiting_buffers[addr]))[m_cur_in_port] = buf;
 }
 
-void
-AbstractController::wakeUpBuffer(MessageBuffer* buf, Addr addr)
-{
+void AbstractController::wakeUpBuffer(MessageBuffer *buf, Addr addr) {
     auto iter = m_waiting_buffers.find(addr);
     if (iter != m_waiting_buffers.end()) {
         bool has_other_msgs = false;
-        MsgVecType* msgVec = iter->second;
+        MsgVecType *msgVec = iter->second;
         for (unsigned int port = 0; port < msgVec->size(); ++port) {
             if ((*msgVec)[port] == buf) {
                 buf->reanalyzeMessages(addr, clockEdge());
@@ -178,9 +163,7 @@ AbstractController::wakeUpBuffer(MessageBuffer* buf, Addr addr)
     }
 }
 
-void
-AbstractController::wakeUpBuffers(Addr addr)
-{
+void AbstractController::wakeUpBuffers(Addr addr) {
     if (m_waiting_buffers.count(addr) > 0) {
         //
         // Wake up all possible lower rank (i.e. lower priority) buffers that could
@@ -190,8 +173,7 @@ AbstractController::wakeUpBuffers(Addr addr)
              in_port_rank >= 0;
              in_port_rank--) {
             if ((*(m_waiting_buffers[addr]))[in_port_rank] != NULL) {
-                (*(m_waiting_buffers[addr]))[in_port_rank]->
-                    reanalyzeMessages(addr, clockEdge());
+                (*(m_waiting_buffers[addr]))[in_port_rank]->reanalyzeMessages(addr, clockEdge());
             }
         }
         delete m_waiting_buffers[addr];
@@ -199,9 +181,7 @@ AbstractController::wakeUpBuffers(Addr addr)
     }
 }
 
-void
-AbstractController::wakeUpAllBuffers(Addr addr)
-{
+void AbstractController::wakeUpAllBuffers(Addr addr) {
     if (m_waiting_buffers.count(addr) > 0) {
         //
         // Wake up all possible buffers that could be waiting on this message.
@@ -210,8 +190,7 @@ AbstractController::wakeUpAllBuffers(Addr addr)
              in_port_rank >= 0;
              in_port_rank--) {
             if ((*(m_waiting_buffers[addr]))[in_port_rank] != NULL) {
-                (*(m_waiting_buffers[addr]))[in_port_rank]->
-                    reanalyzeMessages(addr, clockEdge());
+                (*(m_waiting_buffers[addr]))[in_port_rank]->reanalyzeMessages(addr, clockEdge());
             }
         }
         delete m_waiting_buffers[addr];
@@ -219,68 +198,63 @@ AbstractController::wakeUpAllBuffers(Addr addr)
     }
 }
 
-void
-AbstractController::wakeUpAllBuffers()
-{
+void AbstractController::wakeUpAllBuffers() {
     //
     // Wake up all possible buffers that could be waiting on any message.
     //
 
-    std::vector<MsgVecType*> wokeUpMsgVecs;
+    std::vector<MsgVecType *> wokeUpMsgVecs;
     MsgBufType wokeUpMsgBufs;
 
     if (m_waiting_buffers.size() > 0) {
         for (WaitingBufType::iterator buf_iter = m_waiting_buffers.begin();
              buf_iter != m_waiting_buffers.end();
              ++buf_iter) {
-             for (MsgVecType::iterator vec_iter = buf_iter->second->begin();
-                  vec_iter != buf_iter->second->end();
-                  ++vec_iter) {
-                  //
-                  // Make sure the MessageBuffer has not already be reanalyzed
-                  //
-                  if (*vec_iter != NULL &&
-                      (wokeUpMsgBufs.count(*vec_iter) == 0)) {
-                      (*vec_iter)->reanalyzeAllMessages(clockEdge());
-                      wokeUpMsgBufs.insert(*vec_iter);
-                  }
-             }
-             wokeUpMsgVecs.push_back(buf_iter->second);
+            for (MsgVecType::iterator vec_iter = buf_iter->second->begin();
+                 vec_iter != buf_iter->second->end();
+                 ++vec_iter) {
+                //
+                // Make sure the MessageBuffer has not already be reanalyzed
+                //
+                if (*vec_iter != NULL &&
+                    (wokeUpMsgBufs.count(*vec_iter) == 0)) {
+                    (*vec_iter)->reanalyzeAllMessages(clockEdge());
+                    wokeUpMsgBufs.insert(*vec_iter);
+                }
+            }
+            wokeUpMsgVecs.push_back(buf_iter->second);
         }
 
-        for (std::vector<MsgVecType*>::iterator wb_iter = wokeUpMsgVecs.begin();
+        for (std::vector<MsgVecType *>::iterator wb_iter = wokeUpMsgVecs.begin();
              wb_iter != wokeUpMsgVecs.end();
              ++wb_iter) {
-             delete (*wb_iter);
+            delete (*wb_iter);
         }
 
         m_waiting_buffers.clear();
     }
 }
 
-bool
-AbstractController::serviceMemoryQueue()
-{
+bool AbstractController::serviceMemoryQueue() {
     auto mem_queue = getMemReqQueue();
     assert(mem_queue);
     if (m_waiting_mem_retry || !mem_queue->isReady(clockEdge())) {
         return false;
     }
 
-    const MemoryMsg *mem_msg = (const MemoryMsg*)mem_queue->peek();
+    const MemoryMsg *mem_msg = (const MemoryMsg *)mem_queue->peek();
     unsigned int req_size = RubySystem::getBlockSizeBytes();
     if (mem_msg->m_Len > 0) {
         req_size = mem_msg->m_Len;
     }
 
-    RequestPtr req
-        = std::make_shared<Request>(mem_msg->m_addr, req_size, 0, m_id);
+    RequestPtr req = std::make_shared<Request>(mem_msg->m_addr, req_size, 0, m_id);
     PacketPtr pkt;
     if (mem_msg->getType() == MemoryRequestType_MEMORY_WB) {
         pkt = Packet::createWrite(req);
         pkt->allocate();
         pkt->setData(mem_msg->m_DataBlk.getData(getOffset(mem_msg->m_addr),
-            req_size));
+                                                req_size));
     } else if (mem_msg->getType() == MemoryRequestType_MEMORY_READ) {
         pkt = Packet::createRead(req);
         uint8_t *newData = new uint8_t[req_size];
@@ -317,52 +291,39 @@ AbstractController::serviceMemoryQueue()
     return true;
 }
 
-void
-AbstractController::blockOnQueue(Addr addr, MessageBuffer* port)
-{
+void AbstractController::blockOnQueue(Addr addr, MessageBuffer *port) {
     m_is_blocking = true;
     m_block_map[addr] = port;
 }
 
-bool
-AbstractController::isBlocked(Addr addr) const
-{
+bool AbstractController::isBlocked(Addr addr) const {
     return m_is_blocking && (m_block_map.find(addr) != m_block_map.end());
 }
 
-void
-AbstractController::unblock(Addr addr)
-{
+void AbstractController::unblock(Addr addr) {
     m_block_map.erase(addr);
     if (m_block_map.size() == 0) {
-       m_is_blocking = false;
+        m_is_blocking = false;
     }
 }
 
-bool
-AbstractController::isBlocked(Addr addr)
-{
+bool AbstractController::isBlocked(Addr addr) {
     return (m_block_map.count(addr) > 0);
 }
 
 Port &
-AbstractController::getPort(const std::string &if_name, PortID idx)
-{
+AbstractController::getPort(const std::string &if_name, PortID idx) {
     return memoryPort;
 }
 
-void
-AbstractController::functionalMemoryRead(PacketPtr pkt)
-{
+void AbstractController::functionalMemoryRead(PacketPtr pkt) {
     // read from mem. req. queue if write data is pending there
     MessageBuffer *req_queue = getMemReqQueue();
     if (!req_queue || !req_queue->functionalRead(pkt))
         memoryPort.sendFunctional(pkt);
 }
 
-int
-AbstractController::functionalMemoryWrite(PacketPtr pkt)
-{
+int AbstractController::functionalMemoryWrite(PacketPtr pkt) {
     int num_functional_writes = 0;
 
     // Update memory itself.
@@ -370,10 +331,8 @@ AbstractController::functionalMemoryWrite(PacketPtr pkt)
     return num_functional_writes + 1;
 }
 
-bool
-AbstractController::recvTimingResp(PacketPtr pkt)
-{
-    auto* memRspQueue = getMemRespQueue();
+bool AbstractController::recvTimingResp(PacketPtr pkt) {
+    auto *memRspQueue = getMemRespQueue();
     gem5_assert(memRspQueue);
     gem5_assert(pkt->isResponse());
 
@@ -409,15 +368,12 @@ AbstractController::recvTimingResp(PacketPtr pkt)
     return true;
 }
 
-Tick
-AbstractController::recvAtomic(PacketPtr pkt)
-{
-   return ticksToCycles(memoryPort.sendAtomic(pkt));
+Tick AbstractController::recvAtomic(PacketPtr pkt) {
+    return ticksToCycles(memoryPort.sendAtomic(pkt));
 }
 
 MachineID
-AbstractController::mapAddressToMachine(Addr addr, MachineType mtype) const
-{
+AbstractController::mapAddressToMachine(Addr addr, MachineType mtype) const {
     NodeID node = m_net_ptr->addressToNodeID(addr, mtype);
     MachineID mach = {mtype, node};
     return mach;
@@ -425,8 +381,7 @@ AbstractController::mapAddressToMachine(Addr addr, MachineType mtype) const
 
 MachineID
 AbstractController::mapAddressToDownstreamMachine(Addr addr, MachineType mtype)
-const
-{
+    const {
     if (mtype == MachineType_NUM) {
         // map to the first match
         for (const auto &i : downstreamAddrMap) {
@@ -434,8 +389,7 @@ const
             if (mapping != i.second.end())
                 return mapping->second;
         }
-    }
-    else {
+    } else {
         const auto i = downstreamAddrMap.find(mtype);
         if (i != downstreamAddrMap.end()) {
             const auto mapping = i->second.contains(addr);
@@ -444,42 +398,34 @@ const
         }
     }
     fatal("%s: couldn't find mapping for address %x mtype=%s\n",
-        name(), addr, mtype);
+          name(), addr, mtype);
 }
 
-
-void
-AbstractController::memRespQueueDequeued() {
+void AbstractController::memRespQueueDequeued() {
     if (m_mem_ctrl_waiting_retry && !mRetryRespEvent.scheduled()) {
         schedule(mRetryRespEvent, clockEdge(Cycles{1}));
     }
 }
 
-void
-AbstractController::dequeueMemRespQueue() {
-    auto* q = getMemRespQueue();
+void AbstractController::dequeueMemRespQueue() {
+    auto *q = getMemRespQueue();
     gem5_assert(q);
     q->dequeue(clockEdge());
     memRespQueueDequeued();
 }
 
-void
-AbstractController::sendRetryRespToMem() {
+void AbstractController::sendRetryRespToMem() {
     if (m_mem_ctrl_waiting_retry) {
         m_mem_ctrl_waiting_retry = false;
         memoryPort.sendRetryResp();
     }
 }
 
-bool
-AbstractController::MemoryPort::recvTimingResp(PacketPtr pkt)
-{
+bool AbstractController::MemoryPort::recvTimingResp(PacketPtr pkt) {
     return controller->recvTimingResp(pkt);
 }
 
-void
-AbstractController::MemoryPort::recvReqRetry()
-{
+void AbstractController::MemoryPort::recvReqRetry() {
     controller->m_waiting_mem_retry = false;
     controller->serviceMemoryQueue();
 }
@@ -487,17 +433,15 @@ AbstractController::MemoryPort::recvReqRetry()
 AbstractController::MemoryPort::MemoryPort(const std::string &_name,
                                            AbstractController *_controller,
                                            PortID id)
-    : RequestPort(_name, id), controller(_controller)
-{
+    : RequestPort(_name, id), controller(_controller) {
 }
 
 AbstractController::
-ControllerStats::ControllerStats(statistics::Group *parent)
+    ControllerStats::ControllerStats(statistics::Group *parent)
     : statistics::Group(parent),
       ADD_STAT(fullyBusyCycles,
                "cycles for which number of transistions == max transitions"),
-      ADD_STAT(delayHistogram, "delay_histogram")
-{
+      ADD_STAT(delayHistogram, "delay_histogram") {
     fullyBusyCycles
         .flags(statistics::nozero);
     delayHistogram

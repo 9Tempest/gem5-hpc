@@ -49,20 +49,17 @@
 #include "debug/MSHR.hh"
 #include "mem/cache/mshr.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 MSHRQueue::MSHRQueue(const std::string &_label,
                      int num_entries, int reserve,
                      int demand_reserve, std::string cache_name = "")
     : Queue<MSHR>(_label, num_entries, reserve, cache_name + ".mshr_queue"),
-      demandReserve(demand_reserve)
-{}
+      demandReserve(demand_reserve) {}
 
 MSHR *
 MSHRQueue::allocate(Addr blk_addr, unsigned blk_size, PacketPtr pkt,
-                    Tick when_ready, Counter order, bool alloc_on_fill)
-{
+                    Tick when_ready, Counter order, bool alloc_on_fill) {
     assert(!freeList.empty());
     MSHR *mshr = freeList.front();
     assert(mshr->getNumTargets() == 0);
@@ -79,9 +76,7 @@ MSHRQueue::allocate(Addr blk_addr, unsigned blk_size, PacketPtr pkt,
     return mshr;
 }
 
-void
-MSHRQueue::deallocate(MSHR* mshr)
-{
+void MSHRQueue::deallocate(MSHR *mshr) {
 
     DPRINTF(MSHR, "Deallocating all targets: %s", mshr->print());
     Queue<MSHR>::deallocate(mshr);
@@ -89,10 +84,7 @@ MSHRQueue::deallocate(MSHR* mshr)
             allocatedList.size(), numEntries);
 }
 
-
-void
-MSHRQueue::moveToFront(MSHR *mshr)
-{
+void MSHRQueue::moveToFront(MSHR *mshr) {
     if (!mshr->inService) {
         assert(mshr == *(mshr->readyIter));
         readyList.erase(mshr->readyIter);
@@ -100,28 +92,22 @@ MSHRQueue::moveToFront(MSHR *mshr)
     }
 }
 
-void
-MSHRQueue::delay(MSHR *mshr, Tick delay_ticks)
-{
+void MSHRQueue::delay(MSHR *mshr, Tick delay_ticks) {
     mshr->delay(delay_ticks);
     auto it = std::find_if(mshr->readyIter, readyList.end(),
-                            [mshr] (const MSHR* _mshr) {
-                                return mshr->readyTime >= _mshr->readyTime;
-                            });
+                           [mshr](const MSHR *_mshr) {
+                               return mshr->readyTime >= _mshr->readyTime;
+                           });
     readyList.splice(it, readyList, mshr->readyIter);
 }
 
-void
-MSHRQueue::markInService(MSHR *mshr, bool pending_modified_resp)
-{
+void MSHRQueue::markInService(MSHR *mshr, bool pending_modified_resp) {
     mshr->markInService(pending_modified_resp);
     readyList.erase(mshr->readyIter);
     _numInService += 1;
 }
 
-void
-MSHRQueue::markPending(MSHR *mshr)
-{
+void MSHRQueue::markPending(MSHR *mshr) {
     assert(mshr->inService);
     mshr->inService = false;
     --_numInService;
@@ -132,9 +118,7 @@ MSHRQueue::markPending(MSHR *mshr)
     mshr->readyIter = addToReadyList(mshr);
 }
 
-bool
-MSHRQueue::forceDeallocateTarget(MSHR *mshr)
-{
+bool MSHRQueue::forceDeallocateTarget(MSHR *mshr) {
     bool was_full = isFull();
     assert(mshr->hasTargets());
     // Pop the prefetch off of the target list

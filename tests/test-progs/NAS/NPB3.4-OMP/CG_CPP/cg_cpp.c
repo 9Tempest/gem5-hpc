@@ -59,6 +59,7 @@ Authors of the OpenMP code:
 #include <iostream>
 #include <math.h>
 #include <stdlib.h>
+#include <omp.h>
 
 // #define TIMER_ENABLED
 #ifdef _OPENMP
@@ -68,6 +69,17 @@ Authors of the OpenMP code:
 #define GEM5
 #ifdef GEM5
 #include <gem5/m5ops.h>
+#define LOOP1_COLIDX_REGION 0
+#define LOOP1_ROWSTR_REGION 1
+#define LOOP1_A_REGION      2
+#define LOOP1_P_REGION      3
+#define LOOP1_Q_REGION      4
+
+#define LOOP2_COLIDX_REGION 5
+#define LOOP2_ROWSTR_REGION 6
+#define LOOP2_Z_REGION      7
+#define LOOP2_A_REGION      8
+#define LOOP2_R_REGION      9
 #endif
 
 #ifdef TIMER_ENABLED
@@ -96,7 +108,7 @@ Authors of the OpenMP code:
 
 typedef int boolean;
 
-#define TRUE 1
+#define TRUE  1
 #define FALSE 0
 
 /******************/
@@ -110,87 +122,87 @@ typedef int boolean;
 /*  CLASS S  */
 /*************/
 #if CLASS == 'S'
-#define NA 1400
+#define NA     1400
 #define NONZER 7
-#define NITER 15
-#define SHIFT 10.0
-#define RCOND 1.0e-1
+#define NITER  15
+#define SHIFT  10.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS W  */
 /*************/
 #if CLASS == 'W'
-#define NA 7000
+#define NA     7000
 #define NONZER 8
-#define NITER 15
-#define SHIFT 12.0
-#define RCOND 1.0e-1
+#define NITER  15
+#define SHIFT  12.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS A  */
 /*************/
 #if CLASS == 'A'
-#define NA 14000
+// Changed configuration
+// #define NITER  15
+#define NA     14000
 #define NONZER 11
-#define NITER 15
-#define SHIFT 20.0
-#define RCOND 1.0e-1
+#define NITER  4
+#define SHIFT  20.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS B  */
 /*************/
 #if CLASS == 'B'
-#define NA 75000
+#define NA     75000
 #define NONZER 13
-// Changed configuration
-// #define NITER 75
-#define NITER 2
-#define SHIFT 60.0
-#define RCOND 1.0e-1
+#define NITER  75
+#define SHIFT  60.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS C  */
 /*************/
 #if CLASS == 'C'
-#define NA 150000
+#define NA     150000
 #define NONZER 15
-#define NITER 75
-#define SHIFT 110.0
-#define RCOND 1.0e-1
+#define NITER  75
+#define SHIFT  110.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS D  */
 /*************/
 #if CLASS == 'D'
-#define NA 1500000
+#define NA     1500000
 #define NONZER 21
-#define NITER 100
-#define SHIFT 500.0
-#define RCOND 1.0e-1
+#define NITER  100
+#define SHIFT  500.0
+#define RCOND  1.0e-1
 #endif
 
 /*************/
 /*  CLASS E  */
 /*************/
 #if CLASS == 'E'
-#define NA 9000000
+#define NA     9000000
 #define NONZER 26
-#define NITER 100
-#define SHIFT 1.5e3
-#define RCOND 1.0e-1
+#define NITER  100
+#define SHIFT  1.5e3
+#define RCOND  1.0e-1
 #endif
 
-#define NZ (NA * (NONZER + 1) * (NONZER + 1))
-#define NAZ (NA * (NONZER + 1))
-#define T_INIT 0
-#define T_BENCH 1
+#define NZ          (NA * (NONZER + 1) * (NONZER + 1))
+#define NAZ         (NA * (NONZER + 1))
+#define T_INIT      0
+#define T_BENCH     1
 #define T_CONJ_GRAD 2
-#define T_LAST 3
+#define T_LAST      3
 
 /* global variables */
 // Total: 26MB
@@ -476,7 +488,7 @@ int main(int argc, char **argv) {
 #ifdef GEM5
 #pragma omp master
         {
-            std::cout << "ROI Begin!!!" << std::endl;
+            std::cout << "ROI started: " << omp_get_num_threads() << " threads" << std::endl;
             m5_work_begin(0, 0);
             m5_reset_stats(0, 0);
         }
@@ -671,8 +683,16 @@ static void conj_grad(int colidx[],
             rho = 0.0;
         }
 
+        // LOOP 1
+#ifdef GEM5
+        m5_clear_mem_region();
+        m5_add_mem_region(colidx, &colidx[NZ], LOOP1_COLIDX_REGION);
+        m5_add_mem_region(rowstr, &rowstr[NA + 1], LOOP1_ROWSTR_REGION);
+        m5_add_mem_region(a, &a[NZ], LOOP1_A_REGION);
+        m5_add_mem_region(p, &p[NA + 2], LOOP1_P_REGION);
+        m5_add_mem_region(q, &q[NA + 2], LOOP1_Q_REGION);
+#endif
 #pragma omp for nowait
-        // LOOP1
         for (j = 0; j < lastrow - firstrow + 1; j++) {
             suml = 0.0;
             for (k = rowstr[j]; k < rowstr[j + 1]; k++) {
@@ -680,6 +700,9 @@ static void conj_grad(int colidx[],
             }
             q[j] = suml;
         }
+#ifdef GEM5
+        m5_clear_mem_region();
+#endif
 
         /*
 		 * --------------------------------------------------------------------
@@ -746,6 +769,14 @@ static void conj_grad(int colidx[],
 	 * ---------------------------------------------------------------------
 	 */
     // LOOP 2
+#ifdef GEM5
+    m5_clear_mem_region();
+    m5_add_mem_region(colidx, &colidx[NZ], LOOP2_COLIDX_REGION);
+    m5_add_mem_region(rowstr, &rowstr[NA + 1], LOOP2_ROWSTR_REGION);
+    m5_add_mem_region(a, &a[NZ], LOOP2_A_REGION);
+    m5_add_mem_region(z, &z[NA + 2], LOOP2_Z_REGION);
+    m5_add_mem_region(r, &r[NA + 2], LOOP2_R_REGION);
+#endif
 #pragma omp for nowait
     for (j = 0; j < lastrow - firstrow + 1; j++) {
         suml = 0.0;
@@ -754,6 +785,9 @@ static void conj_grad(int colidx[],
         }
         r[j] = suml;
     }
+#ifdef GEM5
+    m5_clear_mem_region();
+#endif
 
 /*
 	 * ---------------------------------------------------------------------

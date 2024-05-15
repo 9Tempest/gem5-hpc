@@ -53,8 +53,7 @@
 #include "mem/xbar.hh"
 #include "params/CoherentXBar.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 /**
  * A coherent crossbar connects a number of (potentially) snooping
@@ -67,88 +66,73 @@ namespace gem5
  * for the L1-to-L2 buses and as the main system interconnect.  @sa
  * \ref gem5MemorySystem "gem5 Memory System"
  */
-class CoherentXBar : public BaseXBar
-{
+class CoherentXBar : public BaseXBar {
 
-  protected:
-
+protected:
     /**
      * Declare the layers of this crossbar, one vector for requests,
      * one for responses, and one for snoop responses
      */
-    std::vector<ReqLayer*> reqLayers;
-    std::vector<RespLayer*> respLayers;
-    std::vector<SnoopRespLayer*> snoopLayers;
+    std::vector<ReqLayer *> reqLayers;
+    std::vector<RespLayer *> respLayers;
+    std::vector<SnoopRespLayer *> snoopLayers;
 
     /**
      * Declaration of the coherent crossbar CPU-side port type, one will
      * be instantiated for each of the mem_side_ports connecting to the
      * crossbar.
      */
-    class CoherentXBarResponsePort : public QueuedResponsePort
-    {
+    class CoherentXBarResponsePort : public QueuedResponsePort {
 
-      private:
-
+    private:
         /** A reference to the crossbar to which this port belongs. */
         CoherentXBar &xbar;
 
         /** A normal packet queue used to store responses. */
         RespPacketQueue queue;
 
-      public:
-
+    public:
         CoherentXBarResponsePort(const std::string &_name,
-                             CoherentXBar &_xbar, PortID _id)
+                                 CoherentXBar &_xbar, PortID _id)
             : QueuedResponsePort(_name, queue, _id), xbar(_xbar),
-              queue(_xbar, *this)
-        { }
+              queue(_xbar, *this) {}
 
-      protected:
-
+    protected:
         bool
-        recvTimingReq(PacketPtr pkt) override
-        {
+        recvTimingReq(PacketPtr pkt) override {
             return xbar.recvTimingReq(pkt, id);
         }
 
         bool
-        recvTimingSnoopResp(PacketPtr pkt) override
-        {
+        recvTimingSnoopResp(PacketPtr pkt) override {
             return xbar.recvTimingSnoopResp(pkt, id);
         }
 
         Tick
-        recvAtomic(PacketPtr pkt) override
-        {
+        recvAtomic(PacketPtr pkt) override {
             return xbar.recvAtomicBackdoor(pkt, id);
         }
 
         Tick
-        recvAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor) override
-        {
+        recvAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor) override {
             return xbar.recvAtomicBackdoor(pkt, id, &backdoor);
         }
 
         void
-        recvFunctional(PacketPtr pkt) override
-        {
+        recvFunctional(PacketPtr pkt) override {
             xbar.recvFunctional(pkt, id);
         }
 
         void
         recvMemBackdoorReq(const MemBackdoorReq &req,
-                MemBackdoorPtr &backdoor) override
-        {
+                           MemBackdoorPtr &backdoor) override {
             xbar.recvMemBackdoorReq(req, backdoor);
         }
 
         AddrRangeList
-        getAddrRanges() const override
-        {
+        getAddrRanges() const override {
             return xbar.getAddrRanges();
         }
-
     };
 
     /**
@@ -156,21 +140,17 @@ class CoherentXBar : public BaseXBar
      * instantiated for each of the CPU-side-port interfaces connecting to the
      * crossbar.
      */
-    class CoherentXBarRequestPort : public RequestPort
-    {
-      private:
+    class CoherentXBarRequestPort : public RequestPort {
+    private:
         /** A reference to the crossbar to which this port belongs. */
         CoherentXBar &xbar;
 
-      public:
-
+    public:
         CoherentXBarRequestPort(const std::string &_name,
-                              CoherentXBar &_xbar, PortID _id)
-            : RequestPort(_name, _id), xbar(_xbar)
-        { }
+                                CoherentXBar &_xbar, PortID _id)
+            : RequestPort(_name, _id), xbar(_xbar) {}
 
-      protected:
-
+    protected:
         /**
          * Determine if this port should be considered a snooper. For
          * a coherent crossbar memory-side port this is always true.
@@ -180,32 +160,27 @@ class CoherentXBar : public BaseXBar
         bool isSnooping() const override { return true; }
 
         bool
-        recvTimingResp(PacketPtr pkt) override
-        {
+        recvTimingResp(PacketPtr pkt) override {
             return xbar.recvTimingResp(pkt, id);
         }
 
         void
-        recvTimingSnoopReq(PacketPtr pkt) override
-        {
+        recvTimingSnoopReq(PacketPtr pkt) override {
             return xbar.recvTimingSnoopReq(pkt, id);
         }
 
         Tick
-        recvAtomicSnoop(PacketPtr pkt) override
-        {
+        recvAtomicSnoop(PacketPtr pkt) override {
             return xbar.recvAtomicSnoop(pkt, id);
         }
 
         void
-        recvFunctionalSnoop(PacketPtr pkt) override
-        {
+        recvFunctionalSnoop(PacketPtr pkt) override {
             xbar.recvFunctionalSnoop(pkt, id);
         }
 
         void recvRangeChange() override { xbar.recvRangeChange(id); }
         void recvReqRetry() override { xbar.recvReqRetry(id); }
-
     };
 
     /**
@@ -213,52 +188,44 @@ class CoherentXBar : public BaseXBar
      * from a CPU-side port and forwarding it through an outgoing
      * CPU-side port. It is effectively a dangling memory-side port.
      */
-    class SnoopRespPort : public RequestPort
-    {
+    class SnoopRespPort : public RequestPort {
 
-      private:
-
+    private:
         /** The port which we mirror internally. */
-        QueuedResponsePort& cpuSidePort;
+        QueuedResponsePort &cpuSidePort;
 
-      public:
-
+    public:
         /**
          * Create a snoop response port that mirrors a given CPU-side port.
          */
-        SnoopRespPort(QueuedResponsePort& cpu_side_port,
-                      CoherentXBar& _xbar) :
-            RequestPort(cpu_side_port.name() + ".snoopRespPort"),
-            cpuSidePort(cpu_side_port) { }
+        SnoopRespPort(QueuedResponsePort &cpu_side_port,
+                      CoherentXBar &_xbar) : RequestPort(cpu_side_port.name() + ".snoopRespPort"),
+                                             cpuSidePort(cpu_side_port) {}
 
         /**
          * Override the sending of retries and pass them on through
          * the mirrored CPU-side port.
          */
         void
-        sendRetryResp() override
-        {
+        sendRetryResp() override {
             // forward it as a snoop response retry
             cpuSidePort.sendRetrySnoopResp();
         }
 
         void
-        recvReqRetry() override
-        {
+        recvReqRetry() override {
             panic("SnoopRespPort should never see retry");
         }
 
         bool
-        recvTimingResp(PacketPtr pkt) override
-        {
+        recvTimingResp(PacketPtr pkt) override {
             panic("SnoopRespPort should never see timing response");
         }
-
     };
 
-    std::vector<SnoopRespPort*> snoopRespPorts;
+    std::vector<SnoopRespPort *> snoopRespPorts;
 
-    std::vector<QueuedResponsePort*> snoopPorts;
+    std::vector<QueuedResponsePort *> snoopPorts;
 
     /**
      * Store the outstanding requests that we are expecting snoop
@@ -320,8 +287,7 @@ class CoherentXBar : public BaseXBar
      * @param exclude_cpu_side_port_id Id of CPU-side port to exclude
      */
     void
-    forwardTiming(PacketPtr pkt, PortID exclude_cpu_side_port_id)
-    {
+    forwardTiming(PacketPtr pkt, PortID exclude_cpu_side_port_id) {
         forwardTiming(pkt, exclude_cpu_side_port_id, snoopPorts);
     }
 
@@ -335,10 +301,10 @@ class CoherentXBar : public BaseXBar
      * @param dests Vector of destination ports for the forwarded pkt
      */
     void forwardTiming(PacketPtr pkt, PortID exclude_cpu_side_port_id,
-                       const std::vector<QueuedResponsePort*>& dests);
+                       const std::vector<QueuedResponsePort *> &dests);
 
     Tick recvAtomicBackdoor(PacketPtr pkt, PortID cpu_side_port_id,
-                            MemBackdoorPtr *backdoor=nullptr);
+                            MemBackdoorPtr *backdoor = nullptr);
     Tick recvAtomicSnoop(PacketPtr pkt, PortID mem_side_port_id);
 
     /**
@@ -352,8 +318,7 @@ class CoherentXBar : public BaseXBar
      * @return a pair containing the snoop response and snoop latency
      */
     std::pair<MemCmd, Tick>
-    forwardAtomic(PacketPtr pkt, PortID exclude_cpu_side_port_id)
-    {
+    forwardAtomic(PacketPtr pkt, PortID exclude_cpu_side_port_id) {
         return forwardAtomic(pkt, exclude_cpu_side_port_id, InvalidPortID,
                              snoopPorts);
     }
@@ -374,8 +339,8 @@ class CoherentXBar : public BaseXBar
     std::pair<MemCmd, Tick> forwardAtomic(PacketPtr pkt,
                                           PortID exclude_cpu_side_port_id,
                                           PortID source_mem_side_port_id,
-                                          const std::vector<QueuedResponsePort*>&
-                                          dests);
+                                          const std::vector<QueuedResponsePort *> &
+                                              dests);
 
     /** Function called by the port when the crossbar is receiving a Functional
         transaction.*/
@@ -384,7 +349,7 @@ class CoherentXBar : public BaseXBar
     /** Function called by the port when the crossbar receives a request for
         a memory backdoor.*/
     void recvMemBackdoorReq(const MemBackdoorReq &req,
-            MemBackdoorPtr &backdoor);
+                            MemBackdoorPtr &backdoor);
 
     /** Function called by the port when the crossbar is receiving a functional
         snoop transaction.*/
@@ -424,18 +389,16 @@ class CoherentXBar : public BaseXBar
      * @return Whether the memory below is the destination for the packet
      */
     bool
-    isDestination(const PacketPtr pkt) const
-    {
+    isDestination(const PacketPtr pkt) const {
         return (pkt->req->isToPOC() && pointOfCoherency) ||
-            (pkt->req->isToPOU() && pointOfUnification);
+               (pkt->req->isToPOU() && pointOfUnification);
     }
 
     statistics::Scalar snoops;
     statistics::Scalar snoopTraffic;
     statistics::Distribution snoopFanout;
 
-  public:
-
+public:
     virtual void init();
 
     CoherentXBar(const CoherentXBarParams &p);

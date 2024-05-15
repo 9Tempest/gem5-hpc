@@ -503,30 +503,30 @@ protected:
         LSQUnitStats(statistics::Group *parent);
 
         /** Total number of loads forwaded from LSQ stores. */
-        statistics::Scalar forwLoads;
+        std::vector<statistics::Scalar *> forwLoads;
 
         /** Total number of squashed loads. */
-        statistics::Scalar squashedLoads;
+        std::vector<statistics::Scalar *> squashedLoads;
 
         /** Total number of responses from the memory system that are
          * ignored due to the instruction already being squashed. */
-        statistics::Scalar ignoredResponses;
+        std::vector<statistics::Scalar *> ignoredResponses;
 
         /** Tota number of memory ordering violations. */
-        statistics::Scalar memOrderViolation;
+        std::vector<statistics::Scalar *> memOrderViolation;
 
         /** Total number of squashed stores. */
-        statistics::Scalar squashedStores;
+        std::vector<statistics::Scalar *> squashedStores;
 
         /** Number of loads that were rescheduled. */
-        statistics::Scalar rescheduledLoads;
+        std::vector<statistics::Scalar *> rescheduledLoads;
 
         /** Number of times the LSQ is blocked due to the cache. */
-        statistics::Scalar blockedByCache;
+        std::vector<statistics::Scalar *> blockedByCache;
 
         /** Distribution of cycle latency between the first time a load
          * is issued and its completion */
-        statistics::Distribution loadToUse;
+        std::vector<statistics::Distribution *> loadToUse;
     } stats;
 
 public:

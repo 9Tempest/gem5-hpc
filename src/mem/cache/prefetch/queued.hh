@@ -48,19 +48,15 @@
 #include "mem/cache/prefetch/base.hh"
 #include "mem/packet.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 struct QueuedPrefetcherParams;
 
-namespace prefetch
-{
+namespace prefetch {
 
-class Queued : public Base
-{
-  protected:
-    struct DeferredPacket : public BaseMMU::Translation
-    {
+class Queued : public Base {
+protected:
+    struct DeferredPacket : public BaseMMU::Translation {
         /** Owner of the packet */
         Queued *owner;
         /** Prefetch info corresponding to this packet */
@@ -77,6 +73,8 @@ class Queued : public Base
         bool ongoingTranslation;
         const CacheAccessor *cache;
 
+        int8_t region;
+
         /**
          * Constructor
          * @param o QueuedPrefetcher in charge of this request
@@ -86,22 +84,19 @@ class Queued : public Base
          * @param prio This prefetch priority
          */
         DeferredPacket(Queued *o, PrefetchInfo const &pfi, Tick t,
-            int32_t prio, const CacheAccessor &_cache)
+                       int32_t prio, const CacheAccessor &_cache)
             : owner(o), pfInfo(pfi), tick(t), pkt(nullptr),
-            priority(prio), translationRequest(), tc(nullptr),
-            ongoingTranslation(false), cache(&_cache) {
+              priority(prio), translationRequest(), tc(nullptr),
+              ongoingTranslation(false), cache(&_cache) {
         }
 
-        bool operator>(const DeferredPacket& that) const
-        {
+        bool operator>(const DeferredPacket &that) const {
             return priority > that.priority;
         }
-        bool operator<(const DeferredPacket& that) const
-        {
+        bool operator<(const DeferredPacket &that) const {
             return priority < that.priority;
         }
-        bool operator<=(const DeferredPacket& that) const
-        {
+        bool operator<=(const DeferredPacket &that) const {
             return !(*this > that);
         }
 
@@ -123,16 +118,14 @@ class Queued : public Base
          * of this request.
          * @param req The Request with the virtual address of this request
          */
-        void setTranslationRequest(const RequestPtr &req)
-        {
+        void setTranslationRequest(const RequestPtr &req) {
             translationRequest = req;
         }
 
-        void markDelayed() override
-        {}
+        void markDelayed() override {}
 
         void finish(const Fault &fault, const RequestPtr &req,
-                            ThreadContext *tc, BaseMMU::Mode mode) override;
+                    ThreadContext *tc, BaseMMU::Mode mode) override;
 
         /**
          * Issues the translation request to the provided MMU
@@ -176,8 +169,7 @@ class Queued : public Base
     /** Percentage of requests that can be throttled */
     const unsigned int throttleControlPct;
 
-    struct QueuedStats : public statistics::Group
-    {
+    struct QueuedStats : public statistics::Group {
         QueuedStats(statistics::Group *parent);
         // STATS
         statistics::Scalar pfIdentified;
@@ -188,7 +180,8 @@ class Queued : public Base
         statistics::Scalar pfSpanPage;
         statistics::Scalar pfUsefulSpanPage;
     } statsQueued;
-  public:
+
+public:
     using AddrPriority = std::pair<Addr, int32_t>;
 
     Queued(const QueuedPrefetcherParams &p);
@@ -205,15 +198,13 @@ class Queued : public Base
                                    const CacheAccessor &cache) = 0;
     PacketPtr getPacket() override;
 
-    Tick nextPrefetchReadyTime() const override
-    {
+    Tick nextPrefetchReadyTime() const override {
         return pfq.empty() ? MaxTick : pfq.front().tick;
     }
 
     void printQueue(const std::list<DeferredPacket> &queue) const;
 
-  private:
-
+private:
     /**
      * Adds a DeferredPacket to the specified queue
      * @param queue selected queue to use
@@ -263,7 +254,7 @@ class Queued : public Base
     size_t getMaxPermittedPrefetches(size_t total) const;
 
     RequestPtr createPrefetchRequest(Addr addr, PrefetchInfo const &pfi,
-                                        PacketPtr pkt);
+                                     PacketPtr pkt);
 };
 
 } // namespace prefetch

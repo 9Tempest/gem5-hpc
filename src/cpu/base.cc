@@ -73,8 +73,7 @@
 // Hack
 #include "sim/stat_control.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 std::unique_ptr<BaseCPU::GlobalStats> BaseCPU::globalStats;
 
@@ -87,15 +86,12 @@ int maxThreadsPerCPU = 1;
 
 CPUProgressEvent::CPUProgressEvent(BaseCPU *_cpu, Tick ival)
     : Event(Event::Progress_Event_Pri), _interval(ival), lastNumInst(0),
-      cpu(_cpu), _repeatEvent(true)
-{
+      cpu(_cpu), _repeatEvent(true) {
     if (_interval)
         cpu->schedule(this, curTick() + _interval);
 }
 
-void
-CPUProgressEvent::process()
-{
+void CPUProgressEvent::process() {
     Counter temp = cpu->totalOps();
 
     if (_repeatEvent)
@@ -109,20 +105,21 @@ CPUProgressEvent::process()
     double ipc = double(temp - lastNumInst) / (_interval / cpu->clockPeriod());
 
     DPRINTFN("%s progress event, total committed:%i, progress insts committed: "
-             "%lli, IPC: %0.8d\n", cpu->name(), temp, temp - lastNumInst,
+             "%lli, IPC: %0.8d\n",
+             cpu->name(), temp, temp - lastNumInst,
              ipc);
     ipc = 0.0;
 #else
     cprintf("%lli: %s progress event, total committed:%i, progress insts "
-            "committed: %lli\n", curTick(), cpu->name(), temp,
+            "committed: %lli\n",
+            curTick(), cpu->name(), temp,
             temp - lastNumInst);
 #endif
     lastNumInst = temp;
 }
 
 const char *
-CPUProgressEvent::description() const
-{
+CPUProgressEvent::description() const {
     return "CPU Progress";
 }
 
@@ -142,10 +139,9 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
       syscallRetryLatency(p.syscallRetryLatency),
       pwrGatingLatency(p.pwr_gating_latency),
       powerGatingOnIdle(p.power_gating_on_idle),
-      enterPwrGatingEvent([this]{ enterPwrGating(); }, name())
-{
+      enterPwrGatingEvent([this] { enterPwrGating(); }, name()) {
     // if Python did not provide a valid ID, do it here
-    if (_cpuId == -1 ) {
+    if (_cpuId == -1) {
         _cpuId = cpuList.size();
     }
 
@@ -170,7 +166,7 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
             functionTracingEnabled = true;
         } else {
             Event *event = new EventFunctionWrapper(
-                [this]{ enableFunctionTrace(); }, name(), true);
+                [this] { enableFunctionTrace(); }, name(), true);
             schedule(event, p.function_trace_start);
         }
     }
@@ -179,7 +175,8 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
 
     if (params().isa.size() != numThreads) {
         fatal("Number of ISAs (%i) assigned to the CPU does not equal number "
-              "of threads (%i).\n", params().isa.size(), numThreads);
+              "of threads (%i).\n",
+              params().isa.size(), numThreads);
     }
 
     if (!FullSystem && params().workload.size() != numThreads) {
@@ -197,39 +194,34 @@ BaseCPU::BaseCPU(const Params &p, bool is_checker)
     commitStats.reserve(numThreads);
     for (int i = 0; i < numThreads; i++) {
         // create fetchStat object for thread i and set rate formulas
-        FetchCPUStats* fetchStatptr = new FetchCPUStats(this, i);
+        FetchCPUStats *fetchStatptr = new FetchCPUStats(this, i);
         fetchStatptr->fetchRate = fetchStatptr->numInsts / baseStats.numCycles;
         fetchStatptr->branchRate = fetchStatptr->numBranches /
-            baseStats.numCycles;
+                                   baseStats.numCycles;
         fetchStats.emplace_back(fetchStatptr);
 
         // create executeStat object for thread i and set rate formulas
-        ExecuteCPUStats* executeStatptr = new ExecuteCPUStats(this, i);
+        ExecuteCPUStats *executeStatptr = new ExecuteCPUStats(this, i);
         executeStatptr->instRate = executeStatptr->numInsts /
-            baseStats.numCycles;
+                                   baseStats.numCycles;
         executeStats.emplace_back(executeStatptr);
 
         // create commitStat object for thread i and set ipc, cpi formulas
-        CommitCPUStats* commitStatptr = new CommitCPUStats(this, i);
+        CommitCPUStats *commitStatptr = new CommitCPUStats(this, i);
         commitStatptr->ipc = commitStatptr->numInsts / baseStats.numCycles;
         commitStatptr->cpi = baseStats.numCycles / commitStatptr->numInsts;
         commitStats.emplace_back(commitStatptr);
     }
 }
 
-void
-BaseCPU::enableFunctionTrace()
-{
+void BaseCPU::enableFunctionTrace() {
     functionTracingEnabled = true;
 }
 
-BaseCPU::~BaseCPU()
-{
+BaseCPU::~BaseCPU() {
 }
 
-void
-BaseCPU::postInterrupt(ThreadID tid, int int_num, int index)
-{
+void BaseCPU::postInterrupt(ThreadID tid, int int_num, int index) {
     interrupts[tid]->post(int_num, index);
     // Only wake up syscall emulation if it is not waiting on a futex.
     // This is to model the fact that instructions such as ARM SEV
@@ -238,9 +230,7 @@ BaseCPU::postInterrupt(ThreadID tid, int int_num, int index)
         wakeup(tid);
 }
 
-void
-BaseCPU::armMonitor(ThreadID tid, Addr address)
-{
+void BaseCPU::armMonitor(ThreadID tid, Addr address) {
     assert(tid < numThreads);
     AddressMonitor &monitor = addressMonitor[tid];
 
@@ -250,9 +240,7 @@ BaseCPU::armMonitor(ThreadID tid, Addr address)
     DPRINTF(Mwait, "[tid:%d] Armed monitor (vAddr=0x%lx)\n", tid, address);
 }
 
-bool
-BaseCPU::mwait(ThreadID tid, PacketPtr pkt)
-{
+bool BaseCPU::mwait(ThreadID tid, PacketPtr pkt) {
     assert(tid < numThreads);
     AddressMonitor &monitor = addressMonitor[tid];
 
@@ -265,7 +253,8 @@ BaseCPU::mwait(ThreadID tid, PacketPtr pkt)
         monitor.waiting = true;
 
         DPRINTF(Mwait, "[tid:%d] mwait called (vAddr=0x%lx, "
-                "line's paddr=0x%lx)\n", tid, monitor.vAddr, monitor.pAddr);
+                       "line's paddr=0x%lx)\n",
+                tid, monitor.vAddr, monitor.pAddr);
         return true;
     } else {
         monitor.gotWakeup = false;
@@ -273,9 +262,7 @@ BaseCPU::mwait(ThreadID tid, PacketPtr pkt)
     }
 }
 
-void
-BaseCPU::mwaitAtomic(ThreadID tid, ThreadContext *tc, BaseMMU *mmu)
-{
+void BaseCPU::mwaitAtomic(ThreadID tid, ThreadContext *tc, BaseMMU *mmu) {
     assert(tid < numThreads);
     AddressMonitor &monitor = addressMonitor[tid];
 
@@ -292,8 +279,7 @@ BaseCPU::mwaitAtomic(ThreadID tid, ThreadContext *tc, BaseMMU *mmu)
     if (secondAddr > addr)
         size = secondAddr - addr;
 
-    req->setVirt(addr, size, 0x0, dataRequestorId(),
-            tc->pcState().instAddr());
+    req->setVirt(addr, size, 0x0, dataRequestorId(), tc->pcState().instAddr());
 
     // translate to physical address
     Fault fault = mmu->translateAtomic(req, tc, BaseMMU::Read);
@@ -306,9 +292,7 @@ BaseCPU::mwaitAtomic(ThreadID tid, ThreadContext *tc, BaseMMU *mmu)
             tid, monitor.vAddr, monitor.pAddr);
 }
 
-void
-BaseCPU::init()
-{
+void BaseCPU::init() {
     // Set up instruction-count-based termination events, if any. This needs
     // to happen after threadContexts has been constructed.
     if (params().max_insts_any_thread != 0) {
@@ -334,7 +318,7 @@ BaseCPU::init()
         for (ThreadID tid = 0; tid < numThreads; ++tid) {
             Event *event = new CountedExitEvent(cause, *counter);
             threadContexts[tid]->scheduleInstCountEvent(
-                    event, params().max_insts_all_threads);
+                event, params().max_insts_all_threads);
         }
     }
 
@@ -345,9 +329,7 @@ BaseCPU::init()
     }
 }
 
-void
-BaseCPU::startup()
-{
+void BaseCPU::startup() {
     if (params().progress_interval) {
         new CPUProgressEvent(this, params().progress_interval);
     }
@@ -358,21 +340,17 @@ BaseCPU::startup()
     // Assumption CPU start to operate instantaneously without any latency
     if (powerState->get() == enums::PwrState::UNDEFINED)
         powerState->set(enums::PwrState::ON);
-
 }
 
 probing::PMUUPtr
-BaseCPU::pmuProbePoint(const char *name)
-{
+BaseCPU::pmuProbePoint(const char *name) {
     probing::PMUUPtr ptr;
     ptr.reset(new probing::PMU(getProbeManager(), name));
 
     return ptr;
 }
 
-void
-BaseCPU::regProbePoints()
-{
+void BaseCPU::regProbePoints() {
     ppAllCycles = pmuProbePoint("Cycles");
     ppActiveCycles = pmuProbePoint("ActiveCycles");
 
@@ -386,9 +364,7 @@ BaseCPU::regProbePoints()
                                          "Sleeping");
 }
 
-void
-BaseCPU::probeInstCommit(const StaticInstPtr &inst, Addr pc)
-{
+void BaseCPU::probeInstCommit(const StaticInstPtr &inst, Addr pc) {
     if (!inst->isMicroop() || inst->isLastMicroop()) {
         ppRetiredInsts->notify(1);
         ppRetiredInstsPC->notify(pc);
@@ -405,21 +381,18 @@ BaseCPU::probeInstCommit(const StaticInstPtr &inst, Addr pc)
 }
 
 BaseCPU::
-BaseCPUStats::BaseCPUStats(statistics::Group *parent)
+    BaseCPUStats::BaseCPUStats(statistics::Group *parent)
     : statistics::Group(parent),
       ADD_STAT(numCycles, statistics::units::Cycle::get(),
                "Number of cpu cycles simulated"),
-      ADD_STAT(cpi, statistics::units::Rate<
-                statistics::units::Cycle, statistics::units::Count>::get(),
+      ADD_STAT(cpi, statistics::units::Rate<statistics::units::Cycle, statistics::units::Count>::get(),
                "CPI: cycles per instruction (core level)"),
-      ADD_STAT(ipc, statistics::units::Rate<
-                statistics::units::Count, statistics::units::Cycle>::get(),
+      ADD_STAT(ipc, statistics::units::Rate<statistics::units::Count, statistics::units::Cycle>::get(),
                "IPC: instructions per cycle (core level)"),
       ADD_STAT(numWorkItemsStarted, statistics::units::Count::get(),
                "Number of work items this cpu started"),
       ADD_STAT(numWorkItemsCompleted, statistics::units::Count::get(),
-               "Number of work items this cpu completed")
-{
+               "Number of work items this cpu completed") {
     cpi.precision(6);
     cpi = numCycles / numInsts;
 
@@ -427,9 +400,7 @@ BaseCPUStats::BaseCPUStats(statistics::Group *parent)
     ipc = numInsts / numCycles;
 }
 
-void
-BaseCPU::regStats()
-{
+void BaseCPU::regStats() {
     ClockedObject::regStats();
 
     if (!globalStats) {
@@ -452,8 +423,7 @@ BaseCPU::regStats()
 }
 
 Port &
-BaseCPU::getPort(const std::string &if_name, PortID idx)
-{
+BaseCPU::getPort(const std::string &if_name, PortID idx) {
     // Get the right port based on name. This applies to all the
     // subclasses of the base CPU and relies on their implementation
     // of getDataPort and getInstPort.
@@ -467,9 +437,7 @@ BaseCPU::getPort(const std::string &if_name, PortID idx)
         return ClockedObject::getPort(if_name, idx);
 }
 
-void
-BaseCPU::registerThreadContexts()
-{
+void BaseCPU::registerThreadContexts() {
     assert(system->multiThread || numThreads == 1);
 
     fatal_if(interrupts.size() != numThreads,
@@ -490,17 +458,13 @@ BaseCPU::registerThreadContexts()
     }
 }
 
-void
-BaseCPU::deschedulePowerGatingEvent()
-{
-    if (enterPwrGatingEvent.scheduled()){
+void BaseCPU::deschedulePowerGatingEvent() {
+    if (enterPwrGatingEvent.scheduled()) {
         deschedule(enterPwrGatingEvent);
     }
 }
 
-void
-BaseCPU::schedulePowerGatingEvent()
-{
+void BaseCPU::schedulePowerGatingEvent() {
     for (auto tc : threadContexts) {
         if (tc->status() == ThreadContext::Active)
             return;
@@ -515,9 +479,7 @@ BaseCPU::schedulePowerGatingEvent()
     }
 }
 
-int
-BaseCPU::findContext(ThreadContext *tc)
-{
+int BaseCPU::findContext(ThreadContext *tc) {
     ThreadID size = threadContexts.size();
     for (ThreadID tid = 0; tid < size; ++tid) {
         if (tc == threadContexts[tid])
@@ -526,9 +488,7 @@ BaseCPU::findContext(ThreadContext *tc)
     return 0;
 }
 
-void
-BaseCPU::activateContext(ThreadID thread_num)
-{
+void BaseCPU::activateContext(ThreadID thread_num) {
     if (modelResetPort.state()) {
         DPRINTF(Thread, "CPU in reset, not activating context %d\n",
                 threadContexts[thread_num]->contextId());
@@ -546,9 +506,7 @@ BaseCPU::activateContext(ThreadID thread_num)
     updateCycleCounters(CPU_STATE_WAKEUP);
 }
 
-void
-BaseCPU::suspendContext(ThreadID thread_num)
-{
+void BaseCPU::suspendContext(ThreadID thread_num) {
     DPRINTF(Thread, "suspend contextId %d\n",
             threadContexts[thread_num]->contextId());
     // Check if all threads are suspended
@@ -572,21 +530,15 @@ BaseCPU::suspendContext(ThreadID thread_num)
     }
 }
 
-void
-BaseCPU::haltContext(ThreadID thread_num)
-{
+void BaseCPU::haltContext(ThreadID thread_num) {
     updateCycleCounters(BaseCPU::CPU_STATE_SLEEP);
 }
 
-void
-BaseCPU::enterPwrGating(void)
-{
+void BaseCPU::enterPwrGating(void) {
     powerState->set(enums::PwrState::OFF);
 }
 
-void
-BaseCPU::switchOut()
-{
+void BaseCPU::switchOut() {
     assert(!_switchedOut);
     _switchedOut = true;
 
@@ -598,9 +550,7 @@ BaseCPU::switchOut()
     powerState->set(enums::PwrState::OFF);
 }
 
-void
-BaseCPU::takeOverFrom(BaseCPU *oldCPU)
-{
+void BaseCPU::takeOverFrom(BaseCPU *oldCPU) {
     assert(threadContexts.size() == oldCPU->threadContexts.size());
     assert(_cpuId == oldCPU->cpuId());
     assert(_switchedOut);
@@ -664,10 +614,8 @@ BaseCPU::takeOverFrom(BaseCPU *oldCPU)
         modelResetPort.takeOverFrom(&oldCPU->modelResetPort);
 }
 
-void
-BaseCPU::setReset(bool state)
-{
-    for (auto tc: threadContexts) {
+void BaseCPU::setReset(bool state) {
+    for (auto tc : threadContexts) {
         if (state) {
             // As we enter reset, stop execution.
             tc->quiesce();
@@ -686,9 +634,7 @@ BaseCPU::setReset(bool state)
     }
 }
 
-void
-BaseCPU::flushTLBs()
-{
+void BaseCPU::flushTLBs() {
     for (ThreadID i = 0; i < threadContexts.size(); ++i) {
         ThreadContext &tc(*threadContexts[i]);
         CheckerCPU *checker(tc.getCheckerCpuPtr());
@@ -700,9 +646,7 @@ BaseCPU::flushTLBs()
     }
 }
 
-void
-BaseCPU::serialize(CheckpointOut &cp) const
-{
+void BaseCPU::serialize(CheckpointOut &cp) const {
     SERIALIZE_SCALAR(instCnt);
 
     if (!_switchedOut) {
@@ -721,9 +665,7 @@ BaseCPU::serialize(CheckpointOut &cp) const
     }
 }
 
-void
-BaseCPU::unserialize(CheckpointIn &cp)
-{
+void BaseCPU::unserialize(CheckpointIn &cp) {
     UNSERIALIZE_SCALAR(instCnt);
 
     if (!_switchedOut) {
@@ -738,31 +680,24 @@ BaseCPU::unserialize(CheckpointIn &cp)
     }
 }
 
-void
-BaseCPU::scheduleInstStop(ThreadID tid, Counter insts, std::string cause)
-{
+void BaseCPU::scheduleInstStop(ThreadID tid, Counter insts, std::string cause) {
     const Tick now(getCurrentInstCount(tid));
     Event *event(new LocalSimLoopExitEvent(cause, 0));
 
     threadContexts[tid]->scheduleInstCountEvent(event, now + insts);
 }
 
-Tick
-BaseCPU::getCurrentInstCount(ThreadID tid)
-{
+Tick BaseCPU::getCurrentInstCount(ThreadID tid) {
     return threadContexts[tid]->getCurrentInstCount();
 }
 
-AddressMonitor::AddressMonitor()
-{
+AddressMonitor::AddressMonitor() {
     armed = false;
     waiting = false;
     gotWakeup = false;
 }
 
-bool
-AddressMonitor::doMonitor(PacketPtr pkt)
-{
+bool AddressMonitor::doMonitor(PacketPtr pkt) {
     assert(pkt->req->hasPaddr());
     if (armed && waiting) {
         if (pAddr == pkt->getAddr()) {
@@ -775,10 +710,7 @@ AddressMonitor::doMonitor(PacketPtr pkt)
     return false;
 }
 
-
-void
-BaseCPU::traceFunctionsInternal(Addr pc)
-{
+void BaseCPU::traceFunctionsInternal(Addr pc) {
     if (loader::debugSymbolTable.empty())
         return;
 
@@ -786,7 +718,7 @@ BaseCPU::traceFunctionsInternal(Addr pc)
     // update saved range.  Otherwise do nothing.
     if (pc < currentFunctionStart || pc >= currentFunctionEnd) {
         auto it = loader::debugSymbolTable.findNearest(
-                pc, currentFunctionEnd);
+            pc, currentFunctionEnd);
 
         std::string sym_str;
         if (it == loader::debugSymbolTable.end()) {
@@ -805,18 +737,14 @@ BaseCPU::traceFunctionsInternal(Addr pc)
     }
 }
 
-void
-BaseCPU::scheduleSimpointsInstStop(std::vector<Counter> inst_starts)
-{
+void BaseCPU::scheduleSimpointsInstStop(std::vector<Counter> inst_starts) {
     std::string cause = "simpoint starting point found";
     for (size_t i = 0; i < inst_starts.size(); ++i) {
         scheduleInstStop(0, inst_starts[i], cause);
     }
 }
 
-void
-BaseCPU::scheduleInstStopAnyThread(Counter max_insts)
-{
+void BaseCPU::scheduleInstStopAnyThread(Counter max_insts) {
     std::string cause = "a thread reached the max instruction count";
     for (ThreadID tid = 0; tid < numThreads; ++tid) {
         scheduleInstStop(tid, max_insts, cause);
@@ -825,61 +753,53 @@ BaseCPU::scheduleInstStopAnyThread(Counter max_insts)
 
 BaseCPU::GlobalStats::GlobalStats(statistics::Group *parent)
     : statistics::Group(parent),
-    ADD_STAT(simInsts, statistics::units::Count::get(),
-             "Number of instructions simulated"),
-    ADD_STAT(simOps, statistics::units::Count::get(),
-             "Number of ops (including micro ops) simulated"),
-    ADD_STAT(hostInstRate, statistics::units::Rate<
-                statistics::units::Count, statistics::units::Second>::get(),
-             "Simulator instruction rate (inst/s)"),
-    ADD_STAT(hostOpRate, statistics::units::Rate<
-                statistics::units::Count, statistics::units::Second>::get(),
-             "Simulator op (including micro ops) rate (op/s)")
-{
+      ADD_STAT(simInsts, statistics::units::Count::get(),
+               "Number of instructions simulated"),
+      ADD_STAT(simOps, statistics::units::Count::get(),
+               "Number of ops (including micro ops) simulated"),
+      ADD_STAT(hostInstRate, statistics::units::Rate<statistics::units::Count, statistics::units::Second>::get(),
+               "Simulator instruction rate (inst/s)"),
+      ADD_STAT(hostOpRate, statistics::units::Rate<statistics::units::Count, statistics::units::Second>::get(),
+               "Simulator op (including micro ops) rate (op/s)") {
     simInsts
         .functor(BaseCPU::numSimulatedInsts)
         .precision(0)
-        .prereq(simInsts)
-        ;
+        .prereq(simInsts);
 
     simOps
         .functor(BaseCPU::numSimulatedOps)
         .precision(0)
-        .prereq(simOps)
-        ;
+        .prereq(simOps);
 
     hostInstRate
         .precision(0)
-        .prereq(simInsts)
-        ;
+        .prereq(simInsts);
 
     hostOpRate
         .precision(0)
-        .prereq(simOps)
-        ;
+        .prereq(simOps);
 
     hostInstRate = simInsts / hostSeconds;
     hostOpRate = simOps / hostSeconds;
 }
 
 BaseCPU::
-FetchCPUStats::FetchCPUStats(statistics::Group *parent, int thread_id)
+    FetchCPUStats::FetchCPUStats(statistics::Group *parent, int thread_id)
     : statistics::Group(parent, csprintf("fetchStats%i", thread_id).c_str()),
-    ADD_STAT(numInsts, statistics::units::Count::get(),
-             "Number of instructions fetched (thread level)"),
-    ADD_STAT(numOps, statistics::units::Count::get(),
-             "Number of ops (including micro ops) fetched (thread level)"),
-    ADD_STAT(fetchRate, statistics::units::Rate<
-             statistics::units::Count, statistics::units::Cycle>::get(),
-             "Number of inst fetches per cycle"),
-    ADD_STAT(numBranches, statistics::units::Count::get(),
-             "Number of branches fetched"),
-    ADD_STAT(branchRate, statistics::units::Ratio::get(),
-             "Number of branch fetches per cycle"),
-    ADD_STAT(icacheStallCycles, statistics::units::Cycle::get(),
-             "ICache total stall cycles"),
-    ADD_STAT(numFetchSuspends, statistics::units::Count::get(),
-             "Number of times Execute suspended instruction fetching")
+      ADD_STAT(numInsts, statistics::units::Count::get(),
+               "Number of instructions fetched (thread level)"),
+      ADD_STAT(numOps, statistics::units::Count::get(),
+               "Number of ops (including micro ops) fetched (thread level)"),
+      ADD_STAT(fetchRate, statistics::units::Rate<statistics::units::Count, statistics::units::Cycle>::get(),
+               "Number of inst fetches per cycle"),
+      ADD_STAT(numBranches, statistics::units::Count::get(),
+               "Number of branches fetched"),
+      ADD_STAT(branchRate, statistics::units::Ratio::get(),
+               "Number of branch fetches per cycle"),
+      ADD_STAT(icacheStallCycles, statistics::units::Cycle::get(),
+               "ICache total stall cycles"),
+      ADD_STAT(numFetchSuspends, statistics::units::Count::get(),
+               "Number of times Execute suspended instruction fetching")
 
 {
     fetchRate
@@ -893,64 +813,61 @@ FetchCPUStats::FetchCPUStats(statistics::Group *parent, int thread_id)
 
     icacheStallCycles
         .prereq(icacheStallCycles);
-
 }
 
 // means it is incremented in a vector indexing and not directly
 BaseCPU::
-ExecuteCPUStats::ExecuteCPUStats(statistics::Group *parent, int thread_id)
+    ExecuteCPUStats::ExecuteCPUStats(statistics::Group *parent, int thread_id)
     : statistics::Group(parent, csprintf("executeStats%i", thread_id).c_str()),
-    ADD_STAT(numInsts, statistics::units::Count::get(),
-             "Number of executed instructions"),
-    ADD_STAT(numNop, statistics::units::Count::get(),
-             "Number of nop insts executed"),
-    ADD_STAT(numBranches, statistics::units::Count::get(),
-             "Number of branches executed"),
-    ADD_STAT(numLoadInsts, statistics::units::Count::get(),
-             "Number of load instructions executed"),
-    ADD_STAT(numStoreInsts, statistics::units::Count::get(),
-             "Number of stores executed"),
-    ADD_STAT(instRate, statistics::units::Rate<
-                statistics::units::Count, statistics::units::Cycle>::get(),
-             "Inst execution rate"),
-    ADD_STAT(dcacheStallCycles, statistics::units::Cycle::get(),
-             "DCache total stall cycles"),
-    ADD_STAT(numCCRegReads, statistics::units::Count::get(),
-             "Number of times the CC registers were read"),
-    ADD_STAT(numCCRegWrites, statistics::units::Count::get(),
-             "Number of times the CC registers were written"),
-    ADD_STAT(numFpAluAccesses, statistics::units::Count::get(),
-             "Number of float alu accesses"),
-    ADD_STAT(numFpRegReads, statistics::units::Count::get(),
-             "Number of times the floating registers were read"),
-    ADD_STAT(numFpRegWrites, statistics::units::Count::get(),
-             "Number of times the floating registers were written"),
-    ADD_STAT(numIntAluAccesses, statistics::units::Count::get(),
-             "Number of integer alu accesses"),
-    ADD_STAT(numIntRegReads, statistics::units::Count::get(),
-             "Number of times the integer registers were read"),
-    ADD_STAT(numIntRegWrites, statistics::units::Count::get(),
-             "Number of times the integer registers were written"),
-    ADD_STAT(numMemRefs, statistics::units::Count::get(),
-             "Number of memory refs"),
-    ADD_STAT(numMiscRegReads, statistics::units::Count::get(),
-             "Number of times the Misc registers were read"),
-    ADD_STAT(numMiscRegWrites, statistics::units::Count::get(),
-             "Number of times the Misc registers were written"),
-    ADD_STAT(numVecAluAccesses, statistics::units::Count::get(),
-             "Number of vector alu accesses"),
-    ADD_STAT(numVecPredRegReads, statistics::units::Count::get(),
-             "Number of times the predicate registers were read"),
-    ADD_STAT(numVecPredRegWrites, statistics::units::Count::get(),
-             "Number of times the predicate registers were written"),
-    ADD_STAT(numVecRegReads, statistics::units::Count::get(),
-             "Number of times the vector registers were read"),
-    ADD_STAT(numVecRegWrites, statistics::units::Count::get(),
-             "Number of times the vector registers were written"),
-    ADD_STAT(numDiscardedOps, statistics::units::Count::get(),
-             "Number of ops (including micro ops) which were discarded before "
-             "commit")
-{
+      ADD_STAT(numInsts, statistics::units::Count::get(),
+               "Number of executed instructions"),
+      ADD_STAT(numNop, statistics::units::Count::get(),
+               "Number of nop insts executed"),
+      ADD_STAT(numBranches, statistics::units::Count::get(),
+               "Number of branches executed"),
+      ADD_STAT(numLoadInsts, statistics::units::Count::get(),
+               "Number of load instructions executed"),
+      ADD_STAT(numStoreInsts, statistics::units::Count::get(),
+               "Number of stores executed"),
+      ADD_STAT(instRate, statistics::units::Rate<statistics::units::Count, statistics::units::Cycle>::get(),
+               "Inst execution rate"),
+      ADD_STAT(dcacheStallCycles, statistics::units::Cycle::get(),
+               "DCache total stall cycles"),
+      ADD_STAT(numCCRegReads, statistics::units::Count::get(),
+               "Number of times the CC registers were read"),
+      ADD_STAT(numCCRegWrites, statistics::units::Count::get(),
+               "Number of times the CC registers were written"),
+      ADD_STAT(numFpAluAccesses, statistics::units::Count::get(),
+               "Number of float alu accesses"),
+      ADD_STAT(numFpRegReads, statistics::units::Count::get(),
+               "Number of times the floating registers were read"),
+      ADD_STAT(numFpRegWrites, statistics::units::Count::get(),
+               "Number of times the floating registers were written"),
+      ADD_STAT(numIntAluAccesses, statistics::units::Count::get(),
+               "Number of integer alu accesses"),
+      ADD_STAT(numIntRegReads, statistics::units::Count::get(),
+               "Number of times the integer registers were read"),
+      ADD_STAT(numIntRegWrites, statistics::units::Count::get(),
+               "Number of times the integer registers were written"),
+      ADD_STAT(numMemRefs, statistics::units::Count::get(),
+               "Number of memory refs"),
+      ADD_STAT(numMiscRegReads, statistics::units::Count::get(),
+               "Number of times the Misc registers were read"),
+      ADD_STAT(numMiscRegWrites, statistics::units::Count::get(),
+               "Number of times the Misc registers were written"),
+      ADD_STAT(numVecAluAccesses, statistics::units::Count::get(),
+               "Number of vector alu accesses"),
+      ADD_STAT(numVecPredRegReads, statistics::units::Count::get(),
+               "Number of times the predicate registers were read"),
+      ADD_STAT(numVecPredRegWrites, statistics::units::Count::get(),
+               "Number of times the predicate registers were written"),
+      ADD_STAT(numVecRegReads, statistics::units::Count::get(),
+               "Number of times the vector registers were read"),
+      ADD_STAT(numVecRegWrites, statistics::units::Count::get(),
+               "Number of times the vector registers were written"),
+      ADD_STAT(numDiscardedOps, statistics::units::Count::get(),
+               "Number of ops (including micro ops) which were discarded before "
+               "commit") {
     numStoreInsts = numMemRefs - numLoadInsts;
 
     dcacheStallCycles
@@ -986,39 +903,36 @@ ExecuteCPUStats::ExecuteCPUStats(statistics::Group *parent, int thread_id)
 }
 
 BaseCPU::
-CommitCPUStats::CommitCPUStats(statistics::Group *parent, int thread_id)
+    CommitCPUStats::CommitCPUStats(statistics::Group *parent, int thread_id)
     : statistics::Group(parent, csprintf("commitStats%i", thread_id).c_str()),
-    ADD_STAT(numInsts, statistics::units::Count::get(),
-             "Number of instructions committed (thread level)"),
-    ADD_STAT(numOps, statistics::units::Count::get(),
-             "Number of ops (including micro ops) committed (thread level)"),
-    ADD_STAT(numInstsNotNOP, statistics::units::Count::get(),
-             "Number of instructions committed excluding NOPs or prefetches"),
-    ADD_STAT(numOpsNotNOP, statistics::units::Count::get(),
-             "Number of Ops (including micro ops) Simulated"),
-    ADD_STAT(cpi, statistics::units::Rate<
-                statistics::units::Cycle, statistics::units::Count>::get(),
-             "CPI: cycles per instruction (thread level)"),
-    ADD_STAT(ipc, statistics::units::Rate<
-                statistics::units::Count, statistics::units::Cycle>::get(),
-             "IPC: instructions per cycle (thread level)"),
-    ADD_STAT(numMemRefs, statistics::units::Count::get(),
-            "Number of memory references committed"),
-    ADD_STAT(numFpInsts, statistics::units::Count::get(),
-            "Number of float instructions"),
-    ADD_STAT(numIntInsts, statistics::units::Count::get(),
-            "Number of integer instructions"),
-    ADD_STAT(numLoadInsts, statistics::units::Count::get(),
-            "Number of load instructions"),
-    ADD_STAT(numStoreInsts, statistics::units::Count::get(),
-            "Number of store instructions"),
-    ADD_STAT(numVecInsts, statistics::units::Count::get(),
-            "Number of vector instructions"),
-    ADD_STAT(committedInstType, statistics::units::Count::get(),
-            "Class of committed instruction."),
-    ADD_STAT(committedControl, statistics::units::Count::get(),
-             "Class of control type instructions committed")
-{
+      ADD_STAT(numInsts, statistics::units::Count::get(),
+               "Number of instructions committed (thread level)"),
+      ADD_STAT(numOps, statistics::units::Count::get(),
+               "Number of ops (including micro ops) committed (thread level)"),
+      ADD_STAT(numInstsNotNOP, statistics::units::Count::get(),
+               "Number of instructions committed excluding NOPs or prefetches"),
+      ADD_STAT(numOpsNotNOP, statistics::units::Count::get(),
+               "Number of Ops (including micro ops) Simulated"),
+      ADD_STAT(cpi, statistics::units::Rate<statistics::units::Cycle, statistics::units::Count>::get(),
+               "CPI: cycles per instruction (thread level)"),
+      ADD_STAT(ipc, statistics::units::Rate<statistics::units::Count, statistics::units::Cycle>::get(),
+               "IPC: instructions per cycle (thread level)"),
+      ADD_STAT(numMemRefs, statistics::units::Count::get(),
+               "Number of memory references committed"),
+      ADD_STAT(numFpInsts, statistics::units::Count::get(),
+               "Number of float instructions"),
+      ADD_STAT(numIntInsts, statistics::units::Count::get(),
+               "Number of integer instructions"),
+      ADD_STAT(numLoadInsts, statistics::units::Count::get(),
+               "Number of load instructions"),
+      ADD_STAT(numStoreInsts, statistics::units::Count::get(),
+               "Number of store instructions"),
+      ADD_STAT(numVecInsts, statistics::units::Count::get(),
+               "Number of vector instructions"),
+      ADD_STAT(committedInstType, statistics::units::Count::get(),
+               "Class of committed instruction."),
+      ADD_STAT(committedControl, statistics::units::Count::get(),
+               "Class of control type instructions committed") {
     numInsts
         .prereq(numInsts);
 
@@ -1042,11 +956,8 @@ CommitCPUStats::CommitCPUStats(statistics::Group *parent, int thread_id)
     }
 }
 
-
-void
-BaseCPU::
-CommitCPUStats::updateComCtrlStats(const StaticInstPtr staticInst)
-{
+void BaseCPU::
+    CommitCPUStats::updateComCtrlStats(const StaticInstPtr staticInst) {
     /* Add a count for every control instruction type */
     if (staticInst->isControl()) {
         if (staticInst->isReturn()) {

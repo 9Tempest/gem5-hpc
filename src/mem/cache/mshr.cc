@@ -56,31 +56,25 @@
 #include "mem/cache/base.hh"
 #include "mem/request.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 MSHR::MSHR(const std::string &name)
-    :   QueueEntry(name),
-        downstreamPending(false),
-        pendingModified(false),
-        postInvalidate(false), postDowngrade(false),
-        wasWholeLineWrite(false), isForward(false),
-        targets(name + ".targets"),
-        deferredTargets(name + ".deferredTargets")
-{
+    : QueueEntry(name),
+      downstreamPending(false),
+      pendingModified(false),
+      postInvalidate(false), postDowngrade(false),
+      wasWholeLineWrite(false), isForward(false),
+      targets(name + ".targets"),
+      deferredTargets(name + ".deferredTargets") {
 }
 
 MSHR::TargetList::TargetList(const std::string &name)
-    :   Named(name),
-        needsWritable(false), hasUpgrade(false),
-        allocOnFill(false), hasFromCache(false)
-{}
+    : Named(name),
+      needsWritable(false), hasUpgrade(false),
+      allocOnFill(false), hasFromCache(false) {}
 
-
-void
-MSHR::TargetList::updateFlags(PacketPtr pkt, Target::Source source,
-                              bool alloc_on_fill)
-{
+void MSHR::TargetList::updateFlags(PacketPtr pkt, Target::Source source,
+                                   bool alloc_on_fill) {
     if (source != Target::FromSnoop) {
         if (pkt->needsWritable()) {
             needsWritable = true;
@@ -105,18 +99,14 @@ MSHR::TargetList::updateFlags(PacketPtr pkt, Target::Source source,
     }
 }
 
-void
-MSHR::TargetList::populateFlags()
-{
+void MSHR::TargetList::populateFlags() {
     resetFlags();
-    for (auto& t: *this) {
+    for (auto &t : *this) {
         updateFlags(t.pkt, t.source, t.allocOnFill);
     }
 }
 
-void
-MSHR::TargetList::updateWriteFlags(PacketPtr pkt)
-{
+void MSHR::TargetList::updateWriteFlags(PacketPtr pkt) {
     if (isWholeLineWrite()) {
         // if we have already seen writes for the full block
         // stop here, this might be a full line write followed
@@ -163,8 +153,7 @@ MSHR::TargetList::updateWriteFlags(PacketPtr pkt)
 inline void
 MSHR::TargetList::add(PacketPtr pkt, Tick readyTime,
                       Counter order, Target::Source source, bool markPending,
-                      bool alloc_on_fill)
-{
+                      bool alloc_on_fill) {
     updateFlags(pkt, source, alloc_on_fill);
     if (markPending) {
         // Iterate over the SenderState stack and see if we find
@@ -185,10 +174,8 @@ MSHR::TargetList::add(PacketPtr pkt, Tick readyTime,
     DPRINTF(MSHR, "New target allocated: %s\n", pkt->print());
 }
 
-
 static void
-replaceUpgrade(PacketPtr pkt)
-{
+replaceUpgrade(PacketPtr pkt) {
     // remember if the current packet has data allocated
     bool has_data = pkt->hasData() || pkt->hasRespData();
 
@@ -217,25 +204,19 @@ replaceUpgrade(PacketPtr pkt)
     }
 }
 
-
-void
-MSHR::TargetList::replaceUpgrades()
-{
+void MSHR::TargetList::replaceUpgrades() {
     if (!hasUpgrade)
         return;
 
-    for (auto& t : *this) {
+    for (auto &t : *this) {
         replaceUpgrade(t.pkt);
     }
 
     hasUpgrade = false;
 }
 
-
-void
-MSHR::TargetList::clearDownstreamPending(MSHR::TargetList::iterator begin,
-                                         MSHR::TargetList::iterator end)
-{
+void MSHR::TargetList::clearDownstreamPending(MSHR::TargetList::iterator begin,
+                                              MSHR::TargetList::iterator end) {
     for (auto t = begin; t != end; t++) {
         if (t->markedPending) {
             // Iterate over the SenderState stack and see if we find
@@ -253,17 +234,12 @@ MSHR::TargetList::clearDownstreamPending(MSHR::TargetList::iterator begin,
     }
 }
 
-void
-MSHR::TargetList::clearDownstreamPending()
-{
+void MSHR::TargetList::clearDownstreamPending() {
     clearDownstreamPending(begin(), end());
 }
 
-
-bool
-MSHR::TargetList::trySatisfyFunctional(PacketPtr pkt)
-{
-    for (auto& t : *this) {
+bool MSHR::TargetList::trySatisfyFunctional(PacketPtr pkt) {
+    for (auto &t : *this) {
         if (pkt->trySatisfyFunctional(t.pkt)) {
             return true;
         }
@@ -272,24 +248,21 @@ MSHR::TargetList::trySatisfyFunctional(PacketPtr pkt)
     return false;
 }
 
-
-void
-MSHR::TargetList::print(std::ostream &os, int verbosity,
-                        const std::string &prefix) const
-{
-    for (auto& t : *this) {
+void MSHR::TargetList::print(std::ostream &os, int verbosity,
+                             const std::string &prefix) const {
+    for (auto &t : *this) {
         const char *s;
         switch (t.source) {
-          case Target::FromCPU:
+        case Target::FromCPU:
             s = "FromCPU";
             break;
-          case Target::FromSnoop:
+        case Target::FromSnoop:
             s = "FromSnoop";
             break;
-          case Target::FromPrefetcher:
+        case Target::FromPrefetcher:
             s = "FromPrefetcher";
             break;
-          default:
+        default:
             s = "";
             break;
         }
@@ -299,11 +272,8 @@ MSHR::TargetList::print(std::ostream &os, int verbosity,
     }
 }
 
-
-void
-MSHR::allocate(Addr blk_addr, unsigned blk_size, PacketPtr target,
-               Tick when_ready, Counter _order, bool alloc_on_fill)
-{
+void MSHR::allocate(Addr blk_addr, unsigned blk_size, PacketPtr target,
+                    Tick when_ready, Counter _order, bool alloc_on_fill) {
     blkAddr = blk_addr;
     blkSize = blk_size;
     isSecure = target->isSecure();
@@ -321,18 +291,14 @@ MSHR::allocate(Addr blk_addr, unsigned blk_size, PacketPtr target,
 
     // Don't know of a case where we would allocate a new MSHR for a
     // snoop (mem-side request), so set source according to request here
-    Target::Source source = (target->cmd == MemCmd::HardPFReq) ?
-        Target::FromPrefetcher : Target::FromCPU;
+    Target::Source source = (target->cmd == MemCmd::HardPFReq) ? Target::FromPrefetcher : Target::FromCPU;
     targets.add(target, when_ready, _order, source, true, alloc_on_fill);
 
     // All targets must refer to the same block
     assert(target->matchBlockAddr(targets.front().pkt, blkSize));
 }
 
-
-void
-MSHR::clearDownstreamPending()
-{
+void MSHR::clearDownstreamPending() {
     assert(downstreamPending);
     downstreamPending = false;
     // recursively clear flag on any MSHRs we will be forwarding
@@ -340,9 +306,7 @@ MSHR::clearDownstreamPending()
     targets.clearDownstreamPending();
 }
 
-void
-MSHR::markInService(bool pending_modified_resp)
-{
+void MSHR::markInService(bool pending_modified_resp) {
     assert(!inService);
 
     inService = true;
@@ -360,10 +324,7 @@ MSHR::markInService(bool pending_modified_resp)
     wasWholeLineWrite = isWholeLineWrite();
 }
 
-
-void
-MSHR::deallocate()
-{
+void MSHR::deallocate() {
     assert(targets.empty());
     targets.resetFlags();
     assert(deferredTargets.isReset());
@@ -373,10 +334,8 @@ MSHR::deallocate()
 /*
  * Adds a target to an MSHR
  */
-void
-MSHR::allocateTarget(PacketPtr pkt, Tick whenReady, Counter _order,
-                     bool alloc_on_fill)
-{
+void MSHR::allocateTarget(PacketPtr pkt, Tick whenReady, Counter _order,
+                          bool alloc_on_fill) {
     // assume we'd never issue a prefetch when we've got an
     // outstanding miss
     assert(pkt->cmd != MemCmd::HardPFReq);
@@ -420,18 +379,17 @@ MSHR::allocateTarget(PacketPtr pkt, Tick whenReady, Counter _order,
     DPRINTF(MSHR, "After target allocation: %s", print());
 }
 
-bool
-MSHR::handleSnoop(PacketPtr pkt, Counter _order)
-{
+bool MSHR::handleSnoop(PacketPtr pkt, Counter _order) {
     DPRINTF(MSHR, "%s for %s\n", __func__, pkt->print());
 
     // when we snoop packets the needsWritable and isInvalidate flags
     // should always be the same, however, this assumes that we never
     // snoop writes as they are currently not marked as invalidations
     panic_if((pkt->needsWritable() != pkt->isInvalidate()) &&
-             !pkt->req->isCacheMaintenance(),
+                 !pkt->req->isCacheMaintenance(),
              "%s got snoop %s where needsWritable, "
-             "does not match isInvalidate", name(), pkt->print());
+             "does not match isInvalidate",
+             name(), pkt->print());
 
     if (!inService || (pkt->isExpressSnoop() && downstreamPending)) {
         // Request has not been issued yet, or it's been issued
@@ -475,7 +433,7 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
     // Start by determining if we will eventually respond or not,
     // matching the conditions checked in Cache::handleSnoop
     const bool will_respond = isPendingModified() && pkt->needsResponse() &&
-        !pkt->isClean();
+                              !pkt->isClean();
     if (isPendingModified() || pkt->isInvalidate()) {
         // We need to save and replay the packet in two cases:
         // 1. We're awaiting a writable copy (Modified or Exclusive),
@@ -495,9 +453,7 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
         // the latter case the cache is responsible for deleting both
         // the packet and the request as part of handling the deferred
         // snoop.
-        PacketPtr cp_pkt = will_respond ? new Packet(pkt, true, true) :
-            new Packet(std::make_shared<Request>(*pkt->req), pkt->cmd,
-                       blkSize, pkt->id);
+        PacketPtr cp_pkt = will_respond ? new Packet(pkt, true, true) : new Packet(std::make_shared<Request>(*pkt->req), pkt->cmd, blkSize, pkt->id);
 
         if (will_respond) {
             // we are the ordering point, and will consequently
@@ -545,8 +501,7 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
 }
 
 MSHR::TargetList
-MSHR::extractServiceableTargets(PacketPtr pkt)
-{
+MSHR::extractServiceableTargets(PacketPtr pkt) {
     TargetList ready_targets;
     ready_targets.init(blkAddr, blkSize);
     // If the downstream MSHR got an invalidation request then we only
@@ -593,9 +548,7 @@ MSHR::extractServiceableTargets(PacketPtr pkt)
     return ready_targets;
 }
 
-bool
-MSHR::promoteDeferredTargets()
-{
+bool MSHR::promoteDeferredTargets() {
     if (targets.empty() && deferredTargets.empty()) {
         // nothing to promote
         return false;
@@ -632,12 +585,10 @@ MSHR::promoteDeferredTargets()
     return true;
 }
 
-void
-MSHR::promoteIf(const std::function<bool (Target &)>& pred)
-{
+void MSHR::promoteIf(const std::function<bool(Target &)> &pred) {
     // if any of the deferred targets were upper-level cache
     // requests marked downstreamPending, need to clear that
-    assert(!downstreamPending);  // not pending here anymore
+    assert(!downstreamPending); // not pending here anymore
 
     // find the first target does not satisfy the condition
     auto last_it = std::find_if_not(deferredTargets.begin(),
@@ -655,9 +606,7 @@ MSHR::promoteIf(const std::function<bool (Target &)>& pred)
     deferredTargets.populateFlags();
 }
 
-void
-MSHR::promoteReadable()
-{
+void MSHR::promoteReadable() {
     if (!deferredTargets.empty() && !hasPostInvalidate()) {
         // We got a non invalidating response, and we have the block
         // but we have deferred targets which are waiting and they do
@@ -676,9 +625,7 @@ MSHR::promoteReadable()
     }
 }
 
-void
-MSHR::promoteWritable()
-{
+void MSHR::promoteWritable() {
     if (deferredTargets.empty()) {
         return;
     }
@@ -705,10 +652,7 @@ MSHR::promoteWritable()
     }
 }
 
-
-bool
-MSHR::trySatisfyFunctional(PacketPtr pkt)
-{
+bool MSHR::trySatisfyFunctional(PacketPtr pkt) {
     // For printing, we treat the MSHR as a whole as single entity.
     // For other requests, we iterate over the individual targets
     // since that's where the actual data lies.
@@ -721,15 +665,11 @@ MSHR::trySatisfyFunctional(PacketPtr pkt)
     }
 }
 
-bool
-MSHR::sendPacket(BaseCache &cache)
-{
+bool MSHR::sendPacket(BaseCache &cache) {
     return cache.sendMSHRQueuePacket(this);
 }
 
-void
-MSHR::print(std::ostream &os, int verbosity, const std::string &prefix) const
-{
+void MSHR::print(std::ostream &os, int verbosity, const std::string &prefix) const {
     ccprintf(os, "%s[%#llx:%#llx](%s) %s %s %s state: %s %s %s %s %s %s\n",
              prefix, blkAddr, blkAddr + blkSize - 1,
              isSecure ? "s" : "ns",
@@ -754,51 +694,39 @@ MSHR::print(std::ostream &os, int verbosity, const std::string &prefix) const
 }
 
 std::string
-MSHR::print() const
-{
+MSHR::print() const {
     std::ostringstream str;
     print(str);
     return str.str();
 }
 
-bool
-MSHR::matchBlockAddr(const Addr addr, const bool is_secure) const
-{
+bool MSHR::matchBlockAddr(const Addr addr, const bool is_secure) const {
     assert(hasTargets());
     return (blkAddr == addr) && (isSecure == is_secure);
 }
 
-bool
-MSHR::matchBlockAddr(const PacketPtr pkt) const
-{
+bool MSHR::matchBlockAddr(const PacketPtr pkt) const {
     assert(hasTargets());
     return pkt->matchBlockAddr(blkAddr, isSecure, blkSize);
 }
 
-bool
-MSHR::conflictAddr(const QueueEntry* entry) const
-{
+bool MSHR::conflictAddr(const QueueEntry *entry) const {
     assert(hasTargets());
     return entry->matchBlockAddr(blkAddr, isSecure);
 }
 
-void
-MSHR::updateLockedRMWReadTarget(PacketPtr pkt)
-{
+void MSHR::updateLockedRMWReadTarget(PacketPtr pkt) {
     assert(!targets.empty() && targets.front().pkt == pkt);
     RequestPtr r = std::make_shared<Request>(*(pkt->req));
     targets.front().pkt = new Packet(r, MemCmd::LockedRMWReadReq);
 }
 
-bool
-MSHR::hasLockedRMWReadTarget()
-{
+bool MSHR::hasLockedRMWReadTarget() {
     if (!targets.empty() &&
         targets.front().pkt->cmd == MemCmd::LockedRMWReadReq) {
         return true;
     }
     return false;
 }
-
 
 } // namespace gem5

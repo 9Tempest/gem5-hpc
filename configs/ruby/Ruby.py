@@ -168,6 +168,7 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
         dir_ranges = []
         for r in system.mem_ranges:
             mem_type = ObjectList.mem_list.get(options.mem_type)
+            print("using memory type: %s" % mem_type)
             dram_intf = MemConfig.create_mem_intf(
                 mem_type,
                 r,
@@ -178,6 +179,9 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             )
             if issubclass(mem_type, DRAMInterface):
                 mem_ctrl = m5.objects.MemCtrl(dram=dram_intf)
+            elif issubclass(mem_type, Ramulator2):
+                mem_ctrl = dram_intf
+                mem_ctrl.config_path = "/home/arkhadem/gem5-hpc/ext/ramulator2/ramulator2/example_gem5_config.yaml"
             else:
                 mem_ctrl = dram_intf
 

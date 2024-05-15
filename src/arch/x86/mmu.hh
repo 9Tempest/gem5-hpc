@@ -44,37 +44,31 @@
 
 #include "params/X86MMU.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 namespace X86ISA {
 
-class MMU : public BaseMMU
-{
-  public:
+class MMU : public BaseMMU {
+public:
     MMU(const X86MMUParams &p)
-      : BaseMMU(p)
-    {}
+        : BaseMMU(p) {}
 
     void
-    flushNonGlobal()
-    {
-        static_cast<TLB*>(itb)->flushNonGlobal();
-        static_cast<TLB*>(dtb)->flushNonGlobal();
+    flushNonGlobal() {
+        static_cast<TLB *>(itb)->flushNonGlobal();
+        static_cast<TLB *>(dtb)->flushNonGlobal();
     }
 
-    Walker*
-    getDataWalker()
-    {
-        return static_cast<TLB*>(dtb)->getWalker();
+    Walker *
+    getDataWalker() {
+        return static_cast<TLB *>(dtb)->getWalker();
     }
 
     TranslationGenPtr
     translateFunctional(Addr start, Addr size, ThreadContext *tc,
-            Mode mode, Request::Flags flags) override
-    {
+                        Mode mode, Request::Flags flags) override {
         return TranslationGenPtr(new MMUTranslationGen(
-                PageBytes, start, size, tc, this, mode, flags));
+            PageBytes, start, size, tc, this, mode, flags));
     }
 };
 

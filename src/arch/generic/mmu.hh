@@ -45,21 +45,19 @@
 #include "params/BaseMMU.hh"
 #include "sim/sim_object.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 class BaseTLB;
 
-class BaseMMU : public SimObject
-{
-  public:
-    enum Mode { Read, Write, Execute };
+class BaseMMU : public SimObject {
+public:
+    enum Mode { Read,
+                Write,
+                Execute };
 
-    class Translation
-    {
-      public:
-        virtual ~Translation()
-        {}
+    class Translation {
+    public:
+        virtual ~Translation() {}
 
         /**
          * Signal that the translation has been delayed due to a hw page table
@@ -84,23 +82,21 @@ class BaseMMU : public SimObject
         virtual bool squashed() const { return false; }
     };
 
-  protected:
+protected:
     typedef BaseMMUParams Params;
 
     BaseMMU(const Params &p)
-      : SimObject(p), dtb(p.dtb), itb(p.itb)
-    {}
+        : SimObject(p), dtb(p.dtb), itb(p.itb) {}
 
-    BaseTLB*
-    getTlb(Mode mode) const
-    {
+    BaseTLB *
+    getTlb(Mode mode) const {
         if (mode == Execute)
             return itb;
         else
             return dtb;
     }
 
-  public:
+public:
     /**
      * Called at init time, this method is traversing the TLB hierarchy
      * and pupulating the instruction/data/unified containers accordingly
@@ -123,9 +119,8 @@ class BaseMMU : public SimObject
     translateFunctional(const RequestPtr &req, ThreadContext *tc,
                         Mode mode);
 
-    class MMUTranslationGen : public TranslationGen
-    {
-      private:
+    class MMUTranslationGen : public TranslationGen {
+    private:
         ThreadContext *tc;
         ContextID cid;
         BaseMMU *mmu;
@@ -135,10 +130,10 @@ class BaseMMU : public SimObject
 
         void translate(Range &range) const override;
 
-      public:
+    public:
         MMUTranslationGen(Addr page_bytes, Addr new_start, Addr new_size,
-                ThreadContext *new_tc, BaseMMU *new_mmu,
-                BaseMMU::Mode new_mode, Request::Flags new_flags);
+                          ThreadContext *new_tc, BaseMMU *new_mmu,
+                          BaseMMU::Mode new_mode, Request::Flags new_flags);
     };
 
     /**
@@ -146,7 +141,7 @@ class BaseMMU : public SimObject
      * instead of directly translating a specific address.
      */
     virtual TranslationGenPtr translateFunctional(Addr start, Addr size,
-            ThreadContext *tc, BaseMMU::Mode mode, Request::Flags flags) = 0;
+                                                  ThreadContext *tc, BaseMMU::Mode mode, Request::Flags flags) = 0;
 
     virtual Fault
     finalizePhysical(const RequestPtr &req, ThreadContext *tc,
@@ -154,11 +149,11 @@ class BaseMMU : public SimObject
 
     virtual void takeOverFrom(BaseMMU *old_mmu);
 
-  public:
-    BaseTLB* dtb;
-    BaseTLB* itb;
+public:
+    BaseTLB *dtb;
+    BaseTLB *itb;
 
-  protected:
+protected:
     /**
      * It is possible from the MMU to traverse the entire hierarchy of
      * TLBs, starting from the DTB and ITB (generally speaking from the
@@ -178,10 +173,9 @@ class BaseMMU : public SimObject
      * TLB to the appropriate set. This makes invalidation (and any
      * operation targeting a specific kind of TLBs) easier.
      */
-    std::set<BaseTLB*> instruction;
-    std::set<BaseTLB*> data;
-    std::set<BaseTLB*> unified;
-
+    std::set<BaseTLB *> instruction;
+    std::set<BaseTLB *> data;
+    std::set<BaseTLB *> unified;
 };
 
 } // namespace gem5

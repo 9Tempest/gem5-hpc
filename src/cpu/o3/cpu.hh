@@ -70,8 +70,7 @@
 #include "params/BaseO3CPU.hh"
 #include "sim/process.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 template <class>
 class Checker;
@@ -80,8 +79,7 @@ class ThreadContext;
 class Checkpoint;
 class Process;
 
-namespace o3
-{
+namespace o3 {
 
 class ThreadContext;
 
@@ -90,16 +88,14 @@ class ThreadContext;
  * within it, as well as all of the time buffers between stages.  The
  * tick() function for the CPU is defined here.
  */
-class CPU : public BaseCPU
-{
-  public:
+class CPU : public BaseCPU {
+public:
     typedef std::list<DynInstPtr>::iterator ListIt;
 
     friend class ThreadContext;
 
-  public:
-    enum Status
-    {
+public:
+    enum Status {
         Running,
         Idle,
         Halted,
@@ -113,8 +109,7 @@ class CPU : public BaseCPU
     /** Overall CPU status. */
     Status _status;
 
-  private:
-
+private:
     /** The tick event used for scheduling CPU ticks. */
     EventFunctionWrapper tickEvent;
 
@@ -123,8 +118,7 @@ class CPU : public BaseCPU
 
     /** Schedule tick event, regardless of its current state. */
     void
-    scheduleTickEvent(Cycles delay)
-    {
+    scheduleTickEvent(Cycles delay) {
         if (tickEvent.squashed())
             reschedule(tickEvent, clockEdge(delay));
         else if (!tickEvent.scheduled())
@@ -133,8 +127,7 @@ class CPU : public BaseCPU
 
     /** Unschedule tick event, regardless of its current state. */
     void
-    unscheduleTickEvent()
-    {
+    unscheduleTickEvent() {
         if (tickEvent.scheduled())
             tickEvent.squash();
     }
@@ -166,19 +159,18 @@ class CPU : public BaseCPU
     /** Check if a system is in a drained state. */
     bool isCpuDrained() const;
 
-  public:
+public:
     /** Constructs a CPU with the given parameters. */
     CPU(const BaseO3CPUParams &params);
 
     ProbePointArg<PacketPtr> *ppInstAccessComplete;
-    ProbePointArg<std::pair<DynInstPtr, PacketPtr> > *ppDataAccessComplete;
+    ProbePointArg<std::pair<DynInstPtr, PacketPtr>> *ppDataAccessComplete;
 
     /** Register probe points. */
     void regProbePoints() override;
 
     void
-    demapPage(Addr vaddr, uint64_t asn)
-    {
+    demapPage(Addr vaddr, uint64_t asn) {
         mmu->demapPage(vaddr, asn);
     }
 
@@ -194,8 +186,7 @@ class CPU : public BaseCPU
 
     /** Returns the Number of Active Threads in the CPU */
     int
-    numActiveThreads()
-    {
+    numActiveThreads() {
         return activeThreads.size();
     }
 
@@ -252,7 +243,7 @@ class CPU : public BaseCPU
     /** Terminate all threads that are ready to exit */
     void exitThreads();
 
-  public:
+public:
     /** Starts draining the CPU's pipeline of all instructions in
      * order to stop all memory accesses. */
     DrainState drain() override;
@@ -371,7 +362,15 @@ class CPU : public BaseCPU
     /** Debug function to print all instructions on the list. */
     void dumpInsts();
 
-  public:
+    inline void addMemRegion(Addr begin, Addr end, int8_t id) {
+        iew.ldstQueue.addAddrRegion(begin, end, id);
+    }
+
+    inline void clearMemRegion() {
+        iew.ldstQueue.clearAddrRegion();
+    }
+
+public:
 #ifndef NDEBUG
     /** Count of total number of dynamic instructions in flight. */
     int instcount;
@@ -397,7 +396,7 @@ class CPU : public BaseCPU
      */
     bool removeInstsThisCycle;
 
-  protected:
+protected:
     /** The fetch stage. */
     Fetch fetch;
 
@@ -443,13 +442,12 @@ class CPU : public BaseCPU
 
     std::vector<BaseISA *> isa;
 
-  public:
+public:
     /** Enum to give each stage a specific index, so when calling
      *  activateStage() or deactivateStage(), they can specify which stage
      *  is being activated/deactivated.
      */
-    enum StageIdx
-    {
+    enum StageIdx {
         FetchIdx,
         DecodeIdx,
         RenameIdx,
@@ -473,28 +471,26 @@ class CPU : public BaseCPU
     /** The IEW stage's instruction queue. */
     TimeBuffer<IEWStruct> iewQueue;
 
-  private:
+private:
     /** The activity recorder; used to tell if the CPU has any
      * activity remaining or if it can go to idle and deschedule
      * itself.
      */
     ActivityRecorder activityRec;
 
-  public:
+public:
     /** Records that there was time buffer activity this cycle. */
     void activityThisCycle() { activityRec.activity(); }
 
     /** Changes a stage's status to active within the activity recorder. */
     void
-    activateStage(const StageIdx idx)
-    {
+    activateStage(const StageIdx idx) {
         activityRec.activateStage(idx);
     }
 
     /** Changes a stage's status to inactive within the activity recorder. */
     void
-    deactivateStage(const StageIdx idx)
-    {
+    deactivateStage(const StageIdx idx) {
         activityRec.deactivateStage(idx);
     }
 
@@ -506,16 +502,15 @@ class CPU : public BaseCPU
     /** Gets a free thread id. Use if thread ids change across system. */
     ThreadID getFreeTid();
 
-  public:
+public:
     /** Returns a pointer to a thread context. */
     gem5::ThreadContext *
-    tcBase(ThreadID tid)
-    {
+    tcBase(ThreadID tid) {
         return thread[tid]->getTC();
     }
 
     /** The global sequence number counter. */
-    InstSeqNum globalSeqNum;//[MaxThreads];
+    InstSeqNum globalSeqNum; //[MaxThreads];
 
     /** Pointer to the checker, which can dynamically verify
      * instruction results at run time.  This can be set to NULL if it
@@ -546,32 +541,29 @@ class CPU : public BaseCPU
 
     /** CPU pushRequest function, forwards request to LSQ. */
     Fault
-    pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
+    pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
                 unsigned int size, Addr addr, Request::Flags flags,
                 uint64_t *res, AtomicOpFunctorPtr amo_op = nullptr,
-                const std::vector<bool>& byte_enable=std::vector<bool>())
+                const std::vector<bool> &byte_enable = std::vector<bool>())
 
     {
         return iew.ldstQueue.pushRequest(inst, isLoad, data, size, addr,
-                flags, res, std::move(amo_op), byte_enable);
+                                         flags, res, std::move(amo_op), byte_enable);
     }
 
     /** Used by the fetch unit to get a hold of the instruction port. */
     Port &
-    getInstPort() override
-    {
+    getInstPort() override {
         return fetch.getInstPort();
     }
 
     /** Get the dcache port (used to find block size for translations). */
     Port &
-    getDataPort() override
-    {
+    getDataPort() override {
         return iew.ldstQueue.getDataPort();
     }
 
-    struct CPUStats : public statistics::Group
-    {
+    struct CPUStats : public statistics::Group {
         CPUStats(CPU *cpu);
 
         /** Stat for total number of times the CPU is descheduled. */
@@ -583,7 +575,7 @@ class CPU : public BaseCPU
         statistics::Scalar quiesceCycles;
     } cpuStats;
 
-  public:
+public:
     // hardware transactional memory
     void htmSendAbortSignal(ThreadID tid, uint64_t htm_uid,
                             HtmFailureFaultCause cause) override;

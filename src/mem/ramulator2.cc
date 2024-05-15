@@ -161,7 +161,7 @@ bool Ramulator2::recvTimingReq(PacketPtr pkt) {
     bool enqueue_success = false;
     if (pkt->isRead()) {
         // Generate ramulator READ request and try to send to ramulator's memory system
-        enqueue_success = ramulator2_frontend->receive_external_requests(0, pkt->getAddr(), 0,
+        enqueue_success = ramulator2_frontend->receive_external_requests(0, pkt->getAddr(), 0, pkt->getRegion(),
                                                                          [this](Ramulator::Request &req) {
                                                                              DPRINTF(Ramulator2, "Read to %ld completed.\n", req.addr);
                                                                              auto &pkt_q = outstandingReads.find(req.addr)->second;
@@ -188,7 +188,7 @@ bool Ramulator2::recvTimingReq(PacketPtr pkt) {
         }
     } else if (pkt->isWrite()) {
         // Generate ramulator WRITE request and try to send to ramulator's memory system
-        enqueue_success = ramulator2_frontend->receive_external_requests(1, pkt->getAddr(), 0,
+        enqueue_success = ramulator2_frontend->receive_external_requests(1, pkt->getAddr(), 0, pkt->getRegion(),
                                                                          [this](Ramulator::Request &req) {
                                                                              DPRINTF(Ramulator2, "Write to %ld completed.\n", req.addr);
                                                                              auto &pkt_q = outstandingWrites.find(req.addr)->second;

@@ -35,11 +35,9 @@
 #include "base/compiler.hh"
 #include "base/cprintf.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace replacement_policy
-{
+namespace replacement_policy {
 
 /**
  * The replacement data needed by replacement policies. Each replacement policy
@@ -59,9 +57,8 @@ struct ReplacementData {};
  * replacement policy before being used.
  * @sa Replacement Policies
  */
-class ReplaceableEntry
-{
-  protected:
+class ReplaceableEntry {
+protected:
     /**
      * Set to which this entry belongs.
      */
@@ -72,7 +69,7 @@ class ReplaceableEntry
      */
     uint32_t _way;
 
-  public:
+public:
     ReplaceableEntry() = default;
     virtual ~ReplaceableEntry() = default;
 
@@ -89,8 +86,7 @@ class ReplaceableEntry
      * @param way The way of this entry.
      */
     virtual void
-    setPosition(const uint32_t set, const uint32_t way)
-    {
+    setPosition(const uint32_t set, const uint32_t way) {
         _set = set;
         _way = way;
     }
@@ -115,8 +111,7 @@ class ReplaceableEntry
      * @return A string containg the contents of this entry.
      */
     virtual std::string
-    print() const
-    {
+    print() const {
         return csprintf("set: %#x way: %#x", getSet(), getWay());
     }
 };

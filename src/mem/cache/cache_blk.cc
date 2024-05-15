@@ -43,13 +43,10 @@
 
 #include "base/cprintf.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-void
-CacheBlk::insert(const Addr tag, const bool is_secure,
-                 const int src_requestor_ID, const uint32_t task_ID)
-{
+void CacheBlk::insert(const Addr tag, const bool is_secure,
+                      const int src_requestor_ID, const uint32_t task_ID) {
     // Make sure that the block has been properly invalidated
     assert(!isValid());
 
@@ -68,15 +65,13 @@ CacheBlk::insert(const Addr tag, const bool is_secure,
     increaseRefCount();
 }
 
-void
-CacheBlkPrintWrapper::print(std::ostream &os, int verbosity,
-                            const std::string &prefix) const
-{
+void CacheBlkPrintWrapper::print(std::ostream &os, int verbosity,
+                                 const std::string &prefix) const {
     ccprintf(os, "%sblk %c%c%c%c\n", prefix,
-             blk->isValid()    ? 'V' : '-',
+             blk->isValid() ? 'V' : '-',
              blk->isSet(CacheBlk::WritableBit) ? 'E' : '-',
-             blk->isSet(CacheBlk::DirtyBit)    ? 'M' : '-',
-             blk->isSecure()   ? 'S' : '-');
+             blk->isSet(CacheBlk::DirtyBit) ? 'M' : '-',
+             blk->isSecure() ? 'S' : '-');
 }
 
 } // namespace gem5

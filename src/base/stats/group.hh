@@ -45,8 +45,7 @@
 #include "base/compiler.hh"
 #include "base/stats/units.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 /**
  * Convenience macro to add a stat to a statistics group.
@@ -74,8 +73,7 @@ namespace gem5
 
 #define ADD_STAT(n, ...) n(this, #n, __VA_ARGS__)
 
-namespace statistics
-{
+namespace statistics {
 
 class Info;
 
@@ -89,9 +87,8 @@ class Info;
  * their own class/struct and then be merged into the parent group
  * (typically a SimObject).
  */
-class Group
-{
-  public:
+class Group {
+public:
     /**
      * @ingroup api_stats
      * @{
@@ -176,7 +173,7 @@ class Group
      */
     const std::vector<Info *> &getStats() const;
 
-     /**
+    /**
      * Add a stat block as a child of this block
      *
      * This method may only be called from a Group constructor or from
@@ -201,7 +198,7 @@ class Group
      * @param name Name of the desired stat
      * @return Pointer to the stat with the provided name
      */
-    const Info * resolveStat(std::string name) const;
+    const Info *resolveStat(std::string name) const;
 
     /**
      * Merge the contents (stats & children) of a block to this block.
@@ -211,7 +208,7 @@ class Group
      */
     void mergeStatGroup(Group *block);
 
-  private:
+private:
     /** Parent pointer if merged into parent */
     Group *mergedParent;
 

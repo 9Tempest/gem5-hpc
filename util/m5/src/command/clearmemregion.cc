@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003-2005 The Regents of The University of Michigan
+ * Copyright (c) 2022 The Regents of the University of California.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,55 +26,21 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __COMMAND_HH__
-#define __COMMAND_HH__
+#include "args.hh"
+#include "command.hh"
+#include "dispatch_table.hh"
 
-#include <map>
-#include <string>
-#include <utility>
+namespace {
 
-class Args;
-class DispatchTable;
+bool do_clear_mem_region(const DispatchTable &dt, Args &args) {
 
-class Command {
-private:
-    const std::string name;
+    (*dt.m5_clear_mem_region)();
 
-    // The minimum number of arguments the command expects.
-    const int minArgs;
-    // The maximum number of arguments the command can handle.
-    const int maxArgs;
+    return true;
+}
 
-    using FuncType = bool (*)(const DispatchTable &dt, Args &args);
-    // A function which processes command line arguments and passes them to
-    // the underlying function through the dispatch table.
-    FuncType func;
+Command clearmemregion = {
+    "clearmemregion", 0, 0, do_clear_mem_region, "[start][end]\n"
+                                                 "        clear [start-end] memory region to the LSQ"};
 
-    // Help text for this command.
-    const std::string usageStr;
-
-    static std::map<std::string, Command &> &map();
-
-public:
-    Command(const std::string &_name, int _min, int _max, FuncType _func,
-            const std::string &_usage) : name(_name), minArgs(_min), maxArgs(_max), func(_func),
-                                         usageStr(_usage) {
-        map().emplace(std::piecewise_construct,
-                      std::forward_as_tuple(std::string(_name)),
-                      std::forward_as_tuple(*this));
-    }
-
-    ~Command() { map().erase(name); }
-
-    static bool run(const DispatchTable &dt, Args &args);
-
-    static std::string
-    usageSummary() {
-        std::string summary;
-        for (auto &p : Command::map())
-            summary += "    " + p.first + " " + p.second.usageStr + "\n";
-        return summary;
-    }
-};
-
-#endif // __COMMAND_HH__
+} // anonymous namespace

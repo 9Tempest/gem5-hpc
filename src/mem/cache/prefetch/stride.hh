@@ -60,41 +60,35 @@
 #include "mem/packet.hh"
 #include "params/StridePrefetcherHashedSetAssociative.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 class BaseIndexingPolicy;
-namespace replacement_policy
-{
-    class Base;
+namespace replacement_policy {
+class Base;
 }
 struct StridePrefetcherParams;
 
-namespace prefetch
-{
+namespace prefetch {
 
 /**
  * Override the default set associative to apply a specific hash function
  * when extracting a set.
  */
-class StridePrefetcherHashedSetAssociative : public SetAssociative
-{
-  protected:
+class StridePrefetcherHashedSetAssociative : public SetAssociative {
+protected:
     uint32_t extractSet(const Addr addr) const override;
     Addr extractTag(const Addr addr) const override;
 
-  public:
+public:
     StridePrefetcherHashedSetAssociative(
         const StridePrefetcherHashedSetAssociativeParams &p)
-      : SetAssociative(p)
-    {
+        : SetAssociative(p) {
     }
     ~StridePrefetcherHashedSetAssociative() = default;
 };
 
-class Stride : public Queued
-{
-  protected:
+class Stride : public Queued {
+protected:
     /** Initial confidence counter value for the pc tables. */
     const SatCounter8 initConfidence;
 
@@ -108,27 +102,24 @@ class Stride : public Queued
     /**
      * Information used to create a new PC table. All of them behave equally.
      */
-    const struct PCTableInfo
-    {
+    const struct PCTableInfo {
         const int assoc;
         const int numEntries;
 
-        BaseIndexingPolicy* const indexingPolicy;
-        replacement_policy::Base* const replacementPolicy;
+        BaseIndexingPolicy *const indexingPolicy;
+        replacement_policy::Base *const replacementPolicy;
 
         PCTableInfo(int assoc, int num_entries,
-            BaseIndexingPolicy* indexing_policy,
-            replacement_policy::Base* repl_policy)
-          : assoc(assoc), numEntries(num_entries),
-            indexingPolicy(indexing_policy), replacementPolicy(repl_policy)
-        {
+                    BaseIndexingPolicy *indexing_policy,
+                    replacement_policy::Base *repl_policy)
+            : assoc(assoc), numEntries(num_entries),
+              indexingPolicy(indexing_policy), replacementPolicy(repl_policy) {
         }
     } pcTableInfo;
 
     /** Tagged by hashed PCs. */
-    struct StrideEntry : public TaggedEntry
-    {
-        StrideEntry(const SatCounter8& init_confidence);
+    struct StrideEntry : public TaggedEntry {
+        StrideEntry(const SatCounter8 &init_confidence);
 
         void invalidate() override;
 
@@ -146,7 +137,7 @@ class Stride : public Queued
      * @param context The context to be searched for.
      * @return The table corresponding to the given context.
      */
-    PCTable* findTable(int context);
+    PCTable *findTable(int context);
 
     /**
      * Create a PC table for the given context.
@@ -154,9 +145,9 @@ class Stride : public Queued
      * @param context The context of the new PC table.
      * @return The new PC table
      */
-    PCTable* allocateNewContext(int context);
+    PCTable *allocateNewContext(int context);
 
-  public:
+public:
     Stride(const StridePrefetcherParams &p);
 
     void calculatePrefetch(const PrefetchInfo &pfi,

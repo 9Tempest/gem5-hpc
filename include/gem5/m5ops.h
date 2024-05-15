@@ -48,16 +48,14 @@ void m5_wake_cpu(uint64_t cpuid);
 void m5_exit(uint64_t ns_delay);
 void m5_fail(uint64_t ns_delay, uint64_t code);
 // m5_sum is for sanity checking the gem5 op interface.
-unsigned m5_sum(unsigned a, unsigned b, unsigned c,
-                unsigned d, unsigned e, unsigned f);
+unsigned m5_sum(unsigned a, unsigned b, unsigned c, unsigned d, unsigned e, unsigned f);
 uint64_t m5_init_param(uint64_t key_str1, uint64_t key_str2);
 void m5_checkpoint(uint64_t ns_delay, uint64_t ns_period);
 void m5_reset_stats(uint64_t ns_delay, uint64_t ns_period);
 void m5_dump_stats(uint64_t ns_delay, uint64_t ns_period);
 void m5_dump_reset_stats(uint64_t ns_delay, uint64_t ns_period);
 uint64_t m5_read_file(void *buffer, uint64_t len, uint64_t offset);
-uint64_t m5_write_file(void *buffer, uint64_t len, uint64_t offset,
-                       const char *filename);
+uint64_t m5_write_file(void *buffer, uint64_t len, uint64_t offset, const char *filename);
 void m5_debug_break(void);
 void m5_switch_cpu(void);
 void m5_dist_toggle_sync(void);
@@ -66,6 +64,9 @@ void m5_load_symbol();
 void m5_panic(void);
 void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
+void m5_add_mem_region(void *start, void *end, int8_t id);
+void m5_clear_mem_region();
+// int *m5_MAA_load(int *a, int *b, int min, int max);
 
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
@@ -84,8 +85,9 @@ void m5_workload();
  * does not have _semi, but we felt that ifdefing them out could cause more
  * trouble tham leaving them in.
  */
-#define M5OP(name, func) __typeof__(name) M5OP_MERGE_TOKENS(name, _addr); \
-                         __typeof__(name) M5OP_MERGE_TOKENS(name, _semi);
+#define M5OP(name, func)                             \
+    __typeof__(name) M5OP_MERGE_TOKENS(name, _addr); \
+    __typeof__(name) M5OP_MERGE_TOKENS(name, _semi);
 M5OP_FOREACH
 #undef M5OP
 

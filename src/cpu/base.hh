@@ -419,7 +419,7 @@ public:
      * @param cp The checkpoint use.
      * @param tid ID of the current thread.
      */
-    virtual void unserializeThread(CheckpointIn &cp, ThreadID tid){};
+    virtual void unserializeThread(CheckpointIn &cp, ThreadID tid) {};
 
     virtual Counter totalInsts() const = 0;
 

@@ -54,8 +54,7 @@
 #include "debug/TLBVerbose.hh"
 #include "sim/system.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 using namespace ArmISA;
 
@@ -70,16 +69,15 @@ TableWalker::TableWalker(const Params &p)
       stats(this),
       pendingReqs(0),
       pendingChangeTick(curTick()),
-      doL1DescEvent([this]{ doL1DescriptorWrapper(); }, name()),
-      doL2DescEvent([this]{ doL2DescriptorWrapper(); }, name()),
-      doL0LongDescEvent([this]{ doL0LongDescriptorWrapper(); }, name()),
-      doL1LongDescEvent([this]{ doL1LongDescriptorWrapper(); }, name()),
-      doL2LongDescEvent([this]{ doL2LongDescriptorWrapper(); }, name()),
-      doL3LongDescEvent([this]{ doL3LongDescriptorWrapper(); }, name()),
-      LongDescEventByLevel { &doL0LongDescEvent, &doL1LongDescEvent,
-                             &doL2LongDescEvent, &doL3LongDescEvent },
-      doProcessEvent([this]{ processWalkWrapper(); }, name())
-{
+      doL1DescEvent([this] { doL1DescriptorWrapper(); }, name()),
+      doL2DescEvent([this] { doL2DescriptorWrapper(); }, name()),
+      doL0LongDescEvent([this] { doL0LongDescriptorWrapper(); }, name()),
+      doL1LongDescEvent([this] { doL1LongDescriptorWrapper(); }, name()),
+      doL2LongDescEvent([this] { doL2LongDescriptorWrapper(); }, name()),
+      doL3LongDescEvent([this] { doL3LongDescriptorWrapper(); }, name()),
+      LongDescEventByLevel{&doL0LongDescEvent, &doL1LongDescEvent,
+                           &doL2LongDescEvent, &doL3LongDescEvent},
+      doProcessEvent([this] { processWalkWrapper(); }, name()) {
     sctlr = 0;
 
     // Cache system-level properties
@@ -92,67 +90,57 @@ TableWalker::TableWalker(const Params &p)
         _haveLargeAsid64 = false;
         _physAddrRange = 48;
     }
-
 }
 
-TableWalker::~TableWalker()
-{
+TableWalker::~TableWalker() {
     ;
 }
 
 TableWalker::Port &
-TableWalker::getTableWalkerPort()
-{
-    return static_cast<Port&>(getPort("port"));
+TableWalker::getTableWalkerPort() {
+    return static_cast<Port &>(getPort("port"));
 }
 
 Port &
-TableWalker::getPort(const std::string &if_name, PortID idx)
-{
+TableWalker::getPort(const std::string &if_name, PortID idx) {
     if (if_name == "port") {
         return *port;
     }
     return ClockedObject::getPort(if_name, idx);
 }
 
-void
-TableWalker::setMmu(MMU *_mmu)
-{
+void TableWalker::setMmu(MMU *_mmu) {
     mmu = _mmu;
     release = mmu->release();
 }
 
-TableWalker::WalkerState::WalkerState() :
-    tc(nullptr), aarch64(false), el(EL0), physAddrRange(0), req(nullptr),
-    asid(0), vmid(0), isHyp(false), transState(nullptr),
-    vaddr(0), vaddr_tainted(0),
-    sctlr(0), scr(0), cpsr(0), tcr(0),
-    htcr(0), hcr(0), vtcr(0),
-    isWrite(false), isFetch(false), isSecure(false),
-    isUncacheable(false),
-    secureLookup(false), rwTable(false), userTable(false), xnTable(false),
-    pxnTable(false), hpd(false), stage2Req(false),
-    stage2Tran(nullptr), timing(false), functional(false),
-    mode(BaseMMU::Read), tranType(MMU::NormalTran), l2Desc(l1Desc),
-    delayed(false), tableWalker(nullptr)
-{
+TableWalker::WalkerState::WalkerState() : tc(nullptr), aarch64(false), el(EL0), physAddrRange(0), req(nullptr),
+                                          asid(0), vmid(0), isHyp(false), transState(nullptr),
+                                          vaddr(0), vaddr_tainted(0),
+                                          sctlr(0), scr(0), cpsr(0), tcr(0),
+                                          htcr(0), hcr(0), vtcr(0),
+                                          isWrite(false), isFetch(false), isSecure(false),
+                                          isUncacheable(false),
+                                          secureLookup(false), rwTable(false), userTable(false), xnTable(false),
+                                          pxnTable(false), hpd(false), stage2Req(false),
+                                          stage2Tran(nullptr), timing(false), functional(false),
+                                          mode(BaseMMU::Read), tranType(MMU::NormalTran), l2Desc(l1Desc),
+                                          delayed(false), tableWalker(nullptr) {
 }
 
-TableWalker::Port::Port(TableWalker& _walker, RequestorID id)
-  : QueuedRequestPort(_walker.name() + ".port", reqQueue, snoopRespQueue),
-    owner{_walker},
-    reqQueue(_walker, *this),
-    snoopRespQueue(_walker, *this),
-    requestorId(id)
-{
+TableWalker::Port::Port(TableWalker &_walker, RequestorID id)
+    : QueuedRequestPort(_walker.name() + ".port", reqQueue, snoopRespQueue),
+      owner{_walker},
+      reqQueue(_walker, *this),
+      snoopRespQueue(_walker, *this),
+      requestorId(id) {
 }
 
 PacketPtr
 TableWalker::Port::createPacket(
     Addr desc_addr, int size,
     uint8_t *data, Request::Flags flags, Tick delay,
-    Event *event)
-{
+    Event *event) {
     RequestPtr req = std::make_shared<Request>(
         desc_addr, size, flags, requestorId);
     req->taskId(context_switch_task_id::DMA);
@@ -168,11 +156,9 @@ TableWalker::Port::createPacket(
     return pkt;
 }
 
-void
-TableWalker::Port::sendFunctionalReq(
+void TableWalker::Port::sendFunctionalReq(
     Addr desc_addr, int size,
-    uint8_t *data, Request::Flags flags)
-{
+    uint8_t *data, Request::Flags flags) {
     auto pkt = createPacket(desc_addr, size, data, flags, 0, nullptr);
 
     sendFunctional(pkt);
@@ -180,11 +166,9 @@ TableWalker::Port::sendFunctionalReq(
     handleRespPacket(pkt);
 }
 
-void
-TableWalker::Port::sendAtomicReq(
+void TableWalker::Port::sendAtomicReq(
     Addr desc_addr, int size,
-    uint8_t *data, Request::Flags flags, Tick delay)
-{
+    uint8_t *data, Request::Flags flags, Tick delay) {
     auto pkt = createPacket(desc_addr, size, data, flags, delay, nullptr);
 
     Tick lat = sendAtomic(pkt);
@@ -192,20 +176,16 @@ TableWalker::Port::sendAtomicReq(
     handleRespPacket(pkt, lat);
 }
 
-void
-TableWalker::Port::sendTimingReq(
+void TableWalker::Port::sendTimingReq(
     Addr desc_addr, int size,
     uint8_t *data, Request::Flags flags, Tick delay,
-    Event *event)
-{
+    Event *event) {
     auto pkt = createPacket(desc_addr, size, data, flags, delay, event);
 
     schedTimingReq(pkt, curTick());
 }
 
-bool
-TableWalker::Port::recvTimingResp(PacketPtr pkt)
-{
+bool TableWalker::Port::recvTimingResp(PacketPtr pkt) {
     // We shouldn't ever get a cacheable block in Modified state.
     assert(pkt->req->isUncacheable() ||
            !(pkt->cacheResponding() && !pkt->hasSharers()));
@@ -215,14 +195,12 @@ TableWalker::Port::recvTimingResp(PacketPtr pkt)
     return true;
 }
 
-void
-TableWalker::Port::handleRespPacket(PacketPtr pkt, Tick delay)
-{
+void TableWalker::Port::handleRespPacket(PacketPtr pkt, Tick delay) {
     // Should always see a response with a sender state.
     assert(pkt->isResponse());
 
     // Get the DMA sender state.
-    auto *state = dynamic_cast<TableWalkerState*>(pkt->senderState);
+    auto *state = dynamic_cast<TableWalkerState *>(pkt->senderState);
     assert(state);
 
     handleResp(state, pkt->getAddr(), pkt->req->getSize(), delay);
@@ -230,19 +208,15 @@ TableWalker::Port::handleRespPacket(PacketPtr pkt, Tick delay)
     delete pkt;
 }
 
-void
-TableWalker::Port::handleResp(TableWalkerState *state, Addr addr,
-                              Addr size, Tick delay)
-{
+void TableWalker::Port::handleResp(TableWalkerState *state, Addr addr,
+                                   Addr size, Tick delay) {
     if (state->event) {
         owner.schedule(state->event, curTick() + delay);
     }
     delete state;
 }
 
-void
-TableWalker::completeDrain()
-{
+void TableWalker::completeDrain() {
     if (drainState() == DrainState::Draining &&
         stateQueues[LookupLevel::L0].empty() &&
         stateQueues[LookupLevel::L1].empty() &&
@@ -256,8 +230,7 @@ TableWalker::completeDrain()
 }
 
 DrainState
-TableWalker::drain()
-{
+TableWalker::drain() {
     bool state_queues_not_empty = false;
 
     for (int i = 0; i < LookupLevel::Num_ArmLookupLevel; ++i) {
@@ -276,9 +249,7 @@ TableWalker::drain()
     }
 }
 
-void
-TableWalker::drainResume()
-{
+void TableWalker::drainResume() {
     if (params().sys->isTimingMode() && currState) {
         delete currState;
         currState = NULL;
@@ -286,13 +257,11 @@ TableWalker::drainResume()
     }
 }
 
-Fault
-TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
-                  vmid_t _vmid, bool _isHyp, MMU::Mode _mode,
-                  MMU::Translation *_trans, bool _timing, bool _functional,
-                  bool secure, MMU::ArmTranslationType tranType,
-                  bool _stage2Req, const TlbEntry *walk_entry)
-{
+Fault TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
+                        vmid_t _vmid, bool _isHyp, MMU::Mode _mode,
+                        MMU::Translation *_trans, bool _timing, bool _functional,
+                        bool secure, MMU::ArmTranslationType tranType,
+                        bool _stage2Req, const TlbEntry *walk_entry) {
     assert(!(_functional && _timing));
     ++stats.walks;
 
@@ -367,7 +336,7 @@ TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
     if (currState->aarch64)
         currState->vaddr = purifyTaggedAddr(currState->vaddr_tainted,
                                             currState->tc, currState->el,
-                                            currState->mode==BaseMMU::Execute);
+                                            currState->mode == BaseMMU::Execute);
     else
         currState->vaddr = currState->vaddr_tainted;
 
@@ -382,43 +351,44 @@ TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
                 currState->vtcr =
                     currState->tc->readMiscReg(MISCREG_VTCR_EL2);
             }
-        } else switch (currState->el) {
-          case EL0:
-            if (HaveExt(currState->tc, ArmExtension::FEAT_VHE) &&
-                  currState->hcr.tge == 1 && currState->hcr.e2h ==1) {
-              currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL2);
-              currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL2);
-            } else {
-              currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL1);
-              currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL1);
+        } else
+            switch (currState->el) {
+            case EL0:
+                if (HaveExt(currState->tc, ArmExtension::FEAT_VHE) &&
+                    currState->hcr.tge == 1 && currState->hcr.e2h == 1) {
+                    currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL2);
+                    currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL2);
+                } else {
+                    currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL1);
+                    currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL1);
+                }
+                break;
+            case EL1:
+                currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL1);
+                currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL1);
+                break;
+            case EL2:
+                assert(release->has(ArmExtension::VIRTUALIZATION));
+                currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL2);
+                currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL2);
+                break;
+            case EL3:
+                assert(release->has(ArmExtension::SECURITY));
+                currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL3);
+                currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL3);
+                break;
+            default:
+                panic("Invalid exception level");
+                break;
             }
-            break;
-          case EL1:
-            currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL1);
-            currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL1);
-            break;
-          case EL2:
-            assert(release->has(ArmExtension::VIRTUALIZATION));
-            currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL2);
-            currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL2);
-            break;
-          case EL3:
-            assert(release->has(ArmExtension::SECURITY));
-            currState->sctlr = currState->tc->readMiscReg(MISCREG_SCTLR_EL3);
-            currState->tcr = currState->tc->readMiscReg(MISCREG_TCR_EL3);
-            break;
-          default:
-            panic("Invalid exception level");
-            break;
-        }
     } else {
         currState->sctlr = currState->tc->readMiscReg(snsBankedIndex(
             MISCREG_SCTLR, currState->tc, !currState->isSecure));
         currState->ttbcr = currState->tc->readMiscReg(snsBankedIndex(
             MISCREG_TTBCR, currState->tc, !currState->isSecure));
-        currState->htcr  = currState->tc->readMiscReg(MISCREG_HTCR);
-        currState->hcr   = currState->tc->readMiscReg(MISCREG_HCR);
-        currState->vtcr  = currState->tc->readMiscReg(MISCREG_VTCR);
+        currState->htcr = currState->tc->readMiscReg(MISCREG_HTCR);
+        currState->hcr = currState->tc->readMiscReg(MISCREG_HCR);
+        currState->vtcr = currState->tc->readMiscReg(MISCREG_VTCR);
     }
     sctlr = currState->sctlr;
 
@@ -481,9 +451,7 @@ TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
     return NoFault;
 }
 
-void
-TableWalker::processWalkWrapper()
-{
+void TableWalker::processWalkWrapper() {
     assert(!currState);
     assert(pendingQueue.size());
     pendingChange();
@@ -491,9 +459,9 @@ TableWalker::processWalkWrapper()
 
     // Check if a previous walk filled this request already
     // @TODO Should this always be the TLB or should we look in the stage2 TLB?
-    TlbEntry* te = mmu->lookup(currState->vaddr, currState->asid,
-        currState->vmid, currState->isHyp, currState->isSecure, true, false,
-        currState->el, false, isStage2, currState->mode);
+    TlbEntry *te = mmu->lookup(currState->vaddr, currState->asid,
+                               currState->vmid, currState->isHyp, currState->isSecure, true, false,
+                               currState->el, false, isStage2, currState->mode);
 
     // Check if we still need to have a walk for this request. If the requesting
     // instruction has been squashed, or a previous walk has filled the TLB with
@@ -521,13 +489,12 @@ TableWalker::processWalkWrapper()
 
         if (f != NoFault) {
             curr_state_copy->transState->finish(f, curr_state_copy->req,
-                    curr_state_copy->tc, curr_state_copy->mode);
+                                                curr_state_copy->tc, curr_state_copy->mode);
 
             delete curr_state_copy;
         }
         return;
     }
-
 
     // If the instruction that we were translating for has been
     // squashed we shouldn't bother.
@@ -541,7 +508,7 @@ TableWalker::processWalkWrapper()
         stats.squashedBefore++;
 
         DPRINTF(TLB, "Squashing table walk for address %#x\n",
-                      currState->vaddr_tainted);
+                currState->vaddr_tainted);
 
         if (currState->transState->squashed()) {
             // finish the translation which will delete the translation object
@@ -552,8 +519,8 @@ TableWalker::processWalkWrapper()
             // translate the request now that we know it will work
             stats.walkServiceTime.sample(curTick() - currState->startTime);
             mmu->translateTiming(currState->req, currState->tc,
-                currState->transState, currState->mode,
-                currState->tranType, isStage2);
+                                 currState->transState, currState->mode,
+                                 currState->tranType, isStage2);
         }
 
         // delete the current request
@@ -563,8 +530,8 @@ TableWalker::processWalkWrapper()
         if (pendingQueue.size()) {
             currState = pendingQueue.front();
             te = mmu->lookup(currState->vaddr, currState->asid,
-                currState->vmid, currState->isHyp, currState->isSecure, true,
-                false, currState->el, false, isStage2, currState->mode);
+                             currState->vmid, currState->isHyp, currState->isSecure, true,
+                             false, currState->el, false, isStage2, currState->mode);
         } else {
             // Terminate the loop, nothing more to do
             currState = NULL;
@@ -577,9 +544,7 @@ TableWalker::processWalkWrapper()
     currState = NULL;
 }
 
-Fault
-TableWalker::processWalk()
-{
+Fault TableWalker::processWalk() {
     Addr ttbr = 0;
 
     // For short descriptors, translation configs are held in
@@ -597,8 +562,7 @@ TableWalker::processWalk()
     const bool have_security = release->has(ArmExtension::SECURITY);
 
     DPRINTF(TLB, "Beginning table walk for address %#x, TTBCR: %#x, bits:%#x\n",
-            currState->vaddr_tainted, currState->ttbcr, mbits(currState->vaddr, 31,
-                                                      32 - currState->ttbcr.n));
+            currState->vaddr_tainted, currState->ttbcr, mbits(currState->vaddr, 31, 32 - currState->ttbcr.n));
 
     stats.walkWaitTime.sample(curTick() - currState->startTime);
 
@@ -646,7 +610,7 @@ TableWalker::processWalk()
     }
 
     Addr l1desc_addr = mbits(ttbr, 31, 14 - currState->ttbcr.n) |
-        (bits(currState->vaddr, 31 - currState->ttbcr.n, 20) << 2);
+                       (bits(currState->vaddr, 31 - currState->ttbcr.n, 20) << 2);
     DPRINTF(TLB, " - Descriptor at address %#x (%s)\n", l1desc_addr,
             currState->isSecure ? "s" : "ns");
 
@@ -677,20 +641,18 @@ TableWalker::processWalk()
     }
 
     bool delayed;
-    delayed = fetchDescriptor(l1desc_addr, (uint8_t*)&currState->l1Desc.data,
+    delayed = fetchDescriptor(l1desc_addr, (uint8_t *)&currState->l1Desc.data,
                               sizeof(uint32_t), flag, LookupLevel::L1,
                               &doL1DescEvent,
                               &TableWalker::doL1Descriptor);
     if (!delayed) {
-       f = currState->fault;
+        f = currState->fault;
     }
 
     return f;
 }
 
-Fault
-TableWalker::processWalkLPAE()
-{
+Fault TableWalker::processWalkLPAE() {
     Addr ttbr, ttbr0_max, ttbr1_min, desc_addr;
     int tsz, n;
     LookupLevel start_lookup_level = LookupLevel::L1;
@@ -709,14 +671,13 @@ TableWalker::processWalkLPAE()
     if (isStage2) {
         DPRINTF(TLB, " - Selecting VTTBR (long-desc.)\n");
         ttbr = currState->tc->readMiscReg(MISCREG_VTTBR);
-        tsz  = sext<4>(currState->vtcr.t0sz);
-        start_lookup_level = currState->vtcr.sl0 ?
-            LookupLevel::L1 : LookupLevel::L2;
+        tsz = sext<4>(currState->vtcr.t0sz);
+        start_lookup_level = currState->vtcr.sl0 ? LookupLevel::L1 : LookupLevel::L2;
         currState->isUncacheable = currState->vtcr.irgn0 == 0;
     } else if (currState->isHyp) {
         DPRINTF(TLB, " - Selecting HTTBR (long-desc.)\n");
         ttbr = currState->tc->readMiscReg(MISCREG_HTTBR);
-        tsz  = currState->htcr.t0sz;
+        tsz = currState->htcr.t0sz;
         currState->isUncacheable = currState->htcr.irgn0 == 0;
     } else {
         assert(longDescFormatInUse(currState->tc));
@@ -726,7 +687,7 @@ TableWalker::processWalkLPAE()
             ttbr0_max = (1ULL << (32 - currState->ttbcr.t0sz)) - 1;
         else if (currState->ttbcr.t1sz)
             ttbr0_max = (1ULL << 32) -
-                (1ULL << (32 - currState->ttbcr.t1sz)) - 1;
+                        (1ULL << (32 - currState->ttbcr.t1sz)) - 1;
         else
             ttbr0_max = (1ULL << 32) - 1;
         if (currState->ttbcr.t1sz)
@@ -763,7 +724,7 @@ TableWalker::processWalkLPAE()
                 MISCREG_TTBR0, currState->tc, !currState->isSecure));
             tsz = currState->ttbcr.t0sz;
             currState->isUncacheable = currState->ttbcr.irgn0 == 0;
-            if (ttbr0_max < (1ULL << 30))  // Upper limit < 1 GiB
+            if (ttbr0_max < (1ULL << 30)) // Upper limit < 1 GiB
                 start_lookup_level = LookupLevel::L2;
         } else if (currState->vaddr >= ttbr1_min) {
             DPRINTF(TLB, " - Selecting TTBR1 (long-desc.)\n");
@@ -807,21 +768,20 @@ TableWalker::processWalkLPAE()
                     ArmFault::TranslationLL + LookupLevel::L1,
                     isStage2, ArmFault::LpaeTran);
         }
-
     }
 
     // Perform lookup (ARM ARM issue C B3.6.6)
     if (start_lookup_level == LookupLevel::L1) {
         n = 5 - tsz;
         desc_addr = mbits(ttbr, 39, n) |
-            (bits(currState->vaddr, n + 26, 30) << 3);
+                    (bits(currState->vaddr, n + 26, 30) << 3);
         DPRINTF(TLB, " - Descriptor at address %#x (%s) (long-desc.)\n",
                 desc_addr, currState->isSecure ? "s" : "ns");
     } else {
         // Skip first-level lookup
         n = (tsz >= 2 ? 14 - tsz : 12);
         desc_addr = mbits(ttbr, 39, n) |
-            (bits(currState->vaddr, n + 17, 21) << 3);
+                    (bits(currState->vaddr, n + 17, 21) << 3);
         DPRINTF(TLB, " - Descriptor at address %#x (%s) (long-desc.)\n",
                 desc_addr, currState->isSecure ? "s" : "ns");
     }
@@ -851,7 +811,7 @@ TableWalker::processWalkLPAE()
     currState->longDesc.aarch64 = false;
     currState->longDesc.grainSize = Grain4KB;
 
-    bool delayed = fetchDescriptor(desc_addr, (uint8_t*)&currState->longDesc.data,
+    bool delayed = fetchDescriptor(desc_addr, (uint8_t *)&currState->longDesc.data,
                                    sizeof(uint64_t), flag, start_lookup_level,
                                    LongDescEventByLevel[start_lookup_level],
                                    &TableWalker::doLongDescriptor);
@@ -862,10 +822,8 @@ TableWalker::processWalkLPAE()
     return f;
 }
 
-bool
-TableWalker::checkVAddrSizeFaultAArch64(Addr addr, int top_bit,
-    GrainSize tg, int tsz, bool low_range)
-{
+bool TableWalker::checkVAddrSizeFaultAArch64(Addr addr, int top_bit,
+                                             GrainSize tg, int tsz, bool low_range) {
     // The effective maximum input size is 48 if ARMv8.2-LVA is not
     // supported or if the translation granule that is in use is 4KB or
     // 16KB in size. When ARMv8.2-LVA is supported, for the 64KB
@@ -875,21 +833,15 @@ TableWalker::checkVAddrSizeFaultAArch64(Addr addr, int top_bit,
     int in_max = (have_lva && tg == Grain64KB) ? 52 : 48;
     int in_min = 64 - (tg == Grain64KB ? 47 : 48);
 
-    return tsz > in_max || tsz < in_min || (low_range ?
-        bits(currState->vaddr, top_bit, tsz) != 0x0 :
-        bits(currState->vaddr, top_bit, tsz) != mask(top_bit - tsz + 1));
+    return tsz > in_max || tsz < in_min || (low_range ? bits(currState->vaddr, top_bit, tsz) != 0x0 : bits(currState->vaddr, top_bit, tsz) != mask(top_bit - tsz + 1));
 }
 
-bool
-TableWalker::checkAddrSizeFaultAArch64(Addr addr, int pa_range)
-{
+bool TableWalker::checkAddrSizeFaultAArch64(Addr addr, int pa_range) {
     return (pa_range != _physAddrRange &&
             bits(addr, _physAddrRange - 1, pa_range));
 }
 
-Fault
-TableWalker::processWalkAArch64()
-{
+Fault TableWalker::processWalkAArch64() {
     assert(currState->aarch64);
 
     DPRINTF(TLB, "Beginning table walk for address %#llx, TCR: %#llx\n",
@@ -904,61 +856,59 @@ TableWalker::processWalkAArch64()
     bool fault = false;
 
     int top_bit = computeAddrTop(currState->tc,
-        bits(currState->vaddr, 55),
-        currState->mode==BaseMMU::Execute,
-        currState->tcr,
-        currState->el);
+                                 bits(currState->vaddr, 55),
+                                 currState->mode == BaseMMU::Execute,
+                                 currState->tcr,
+                                 currState->el);
 
     bool vaddr_fault = false;
     switch (currState->el) {
-      case EL0:
-        {
-            Addr ttbr0;
-            Addr ttbr1;
-            if (HaveExt(currState->tc, ArmExtension::FEAT_VHE) &&
-                    currState->hcr.tge==1 && currState->hcr.e2h == 1) {
-                // VHE code for EL2&0 regime
-                ttbr0 = currState->tc->readMiscReg(MISCREG_TTBR0_EL2);
-                ttbr1 = currState->tc->readMiscReg(MISCREG_TTBR1_EL2);
-            } else {
-                ttbr0 = currState->tc->readMiscReg(MISCREG_TTBR0_EL1);
-                ttbr1 = currState->tc->readMiscReg(MISCREG_TTBR1_EL1);
-            }
-            switch (bits(currState->vaddr, 63,48)) {
-              case 0:
-                DPRINTF(TLB, " - Selecting TTBR0 (AArch64)\n");
-                ttbr = ttbr0;
-                tsz = 64 - currState->tcr.t0sz;
-                tg = GrainMap_tg0[currState->tcr.tg0];
-                currState->hpd = currState->tcr.hpd0;
-                currState->isUncacheable = currState->tcr.irgn0 == 0;
-                vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                    top_bit, tg, tsz, true);
-
-                if (vaddr_fault || currState->tcr.epd0)
-                    fault = true;
-                break;
-              case 0xffff:
-                DPRINTF(TLB, " - Selecting TTBR1 (AArch64)\n");
-                ttbr = ttbr1;
-                tsz = 64 - currState->tcr.t1sz;
-                tg = GrainMap_tg1[currState->tcr.tg1];
-                currState->hpd = currState->tcr.hpd1;
-                currState->isUncacheable = currState->tcr.irgn1 == 0;
-                vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                    top_bit, tg, tsz, false);
-
-                if (vaddr_fault || currState->tcr.epd1)
-                    fault = true;
-                break;
-              default:
-                // top two bytes must be all 0s or all 1s, else invalid addr
-                fault = true;
-            }
-            ps = currState->tcr.ips;
+    case EL0: {
+        Addr ttbr0;
+        Addr ttbr1;
+        if (HaveExt(currState->tc, ArmExtension::FEAT_VHE) &&
+            currState->hcr.tge == 1 && currState->hcr.e2h == 1) {
+            // VHE code for EL2&0 regime
+            ttbr0 = currState->tc->readMiscReg(MISCREG_TTBR0_EL2);
+            ttbr1 = currState->tc->readMiscReg(MISCREG_TTBR1_EL2);
+        } else {
+            ttbr0 = currState->tc->readMiscReg(MISCREG_TTBR0_EL1);
+            ttbr1 = currState->tc->readMiscReg(MISCREG_TTBR1_EL1);
         }
-        break;
-      case EL1:
+        switch (bits(currState->vaddr, 63, 48)) {
+        case 0:
+            DPRINTF(TLB, " - Selecting TTBR0 (AArch64)\n");
+            ttbr = ttbr0;
+            tsz = 64 - currState->tcr.t0sz;
+            tg = GrainMap_tg0[currState->tcr.tg0];
+            currState->hpd = currState->tcr.hpd0;
+            currState->isUncacheable = currState->tcr.irgn0 == 0;
+            vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
+                                                     top_bit, tg, tsz, true);
+
+            if (vaddr_fault || currState->tcr.epd0)
+                fault = true;
+            break;
+        case 0xffff:
+            DPRINTF(TLB, " - Selecting TTBR1 (AArch64)\n");
+            ttbr = ttbr1;
+            tsz = 64 - currState->tcr.t1sz;
+            tg = GrainMap_tg1[currState->tcr.tg1];
+            currState->hpd = currState->tcr.hpd1;
+            currState->isUncacheable = currState->tcr.irgn1 == 0;
+            vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
+                                                     top_bit, tg, tsz, false);
+
+            if (vaddr_fault || currState->tcr.epd1)
+                fault = true;
+            break;
+        default:
+            // top two bytes must be all 0s or all 1s, else invalid addr
+            fault = true;
+        }
+        ps = currState->tcr.ips;
+    } break;
+    case EL1:
         if (isStage2) {
             if (currState->secureLookup) {
                 DPRINTF(TLB, " - Selecting VSTTBR_EL2 (AArch64 stage 2)\n");
@@ -974,7 +924,7 @@ TableWalker::processWalkAArch64()
             currState->isUncacheable = currState->vtcr.irgn0 == 0;
         } else {
             switch (bits(currState->vaddr, top_bit)) {
-              case 0:
+            case 0:
                 DPRINTF(TLB, " - Selecting TTBR0_EL1 (AArch64)\n");
                 ttbr = currState->tc->readMiscReg(MISCREG_TTBR0_EL1);
                 tsz = 64 - currState->tcr.t0sz;
@@ -982,12 +932,12 @@ TableWalker::processWalkAArch64()
                 currState->hpd = currState->tcr.hpd0;
                 currState->isUncacheable = currState->tcr.irgn0 == 0;
                 vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                    top_bit, tg, tsz, true);
+                                                         top_bit, tg, tsz, true);
 
                 if (vaddr_fault || currState->tcr.epd0)
                     fault = true;
                 break;
-              case 0x1:
+            case 0x1:
                 DPRINTF(TLB, " - Selecting TTBR1_EL1 (AArch64)\n");
                 ttbr = currState->tc->readMiscReg(MISCREG_TTBR1_EL1);
                 tsz = 64 - currState->tcr.t1sz;
@@ -995,36 +945,35 @@ TableWalker::processWalkAArch64()
                 currState->hpd = currState->tcr.hpd1;
                 currState->isUncacheable = currState->tcr.irgn1 == 0;
                 vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                    top_bit, tg, tsz, false);
+                                                         top_bit, tg, tsz, false);
 
                 if (vaddr_fault || currState->tcr.epd1)
                     fault = true;
                 break;
-              default:
+            default:
                 // top two bytes must be all 0s or all 1s, else invalid addr
                 fault = true;
             }
             ps = currState->tcr.ips;
         }
         break;
-      case EL2:
-        switch(bits(currState->vaddr, top_bit)) {
-          case 0:
+    case EL2:
+        switch (bits(currState->vaddr, top_bit)) {
+        case 0:
             DPRINTF(TLB, " - Selecting TTBR0_EL2 (AArch64)\n");
             ttbr = currState->tc->readMiscReg(MISCREG_TTBR0_EL2);
             tsz = 64 - currState->tcr.t0sz;
             tg = GrainMap_tg0[currState->tcr.tg0];
-            currState->hpd = currState->hcr.e2h ?
-                currState->tcr.hpd0 : currState->tcr.hpd;
+            currState->hpd = currState->hcr.e2h ? currState->tcr.hpd0 : currState->tcr.hpd;
             currState->isUncacheable = currState->tcr.irgn0 == 0;
             vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                top_bit, tg, tsz, true);
+                                                     top_bit, tg, tsz, true);
 
             if (vaddr_fault || (currState->hcr.e2h && currState->tcr.epd0))
                 fault = true;
             break;
 
-          case 0x1:
+        case 0x1:
             DPRINTF(TLB, " - Selecting TTBR1_EL2 (AArch64)\n");
             ttbr = currState->tc->readMiscReg(MISCREG_TTBR1_EL2);
             tsz = 64 - currState->tcr.t1sz;
@@ -1032,21 +981,21 @@ TableWalker::processWalkAArch64()
             currState->hpd = currState->tcr.hpd1;
             currState->isUncacheable = currState->tcr.irgn1 == 0;
             vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                top_bit, tg, tsz, false);
+                                                     top_bit, tg, tsz, false);
 
             if (vaddr_fault || !currState->hcr.e2h || currState->tcr.epd1)
                 fault = true;
             break;
 
-           default:
-              // invalid addr if top two bytes are not all 0s
-              fault = true;
+        default:
+            // invalid addr if top two bytes are not all 0s
+            fault = true;
         }
-        ps = currState->hcr.e2h ? currState->tcr.ips: currState->tcr.ps;
+        ps = currState->hcr.e2h ? currState->tcr.ips : currState->tcr.ps;
         break;
-      case EL3:
-        switch(bits(currState->vaddr, top_bit)) {
-          case 0:
+    case EL3:
+        switch (bits(currState->vaddr, top_bit)) {
+        case 0:
             DPRINTF(TLB, " - Selecting TTBR0_EL3 (AArch64)\n");
             ttbr = currState->tc->readMiscReg(MISCREG_TTBR0_EL3);
             tsz = 64 - currState->tcr.t0sz;
@@ -1054,12 +1003,12 @@ TableWalker::processWalkAArch64()
             currState->hpd = currState->tcr.hpd;
             currState->isUncacheable = currState->tcr.irgn0 == 0;
             vaddr_fault = checkVAddrSizeFaultAArch64(currState->vaddr,
-                top_bit, tg, tsz, true);
+                                                     top_bit, tg, tsz, true);
 
             if (vaddr_fault)
                 fault = true;
             break;
-          default:
+        default:
             // invalid addr if top two bytes are not all 0s
             fault = true;
         }
@@ -1072,7 +1021,7 @@ TableWalker::processWalkAArch64()
     if (fault) {
         Fault f;
         if (currState->isFetch)
-            f =  std::make_shared<PrefetchAbort>(
+            f = std::make_shared<PrefetchAbort>(
                 currState->vaddr_tainted,
                 ArmFault::TranslationLL + LookupLevel::L0, isStage2,
                 ArmFault::LpaeTran);
@@ -1093,7 +1042,6 @@ TableWalker::processWalkAArch64()
             currState->req = NULL;
         }
         return f;
-
     }
 
     if (tg == ReservedGrain) {
@@ -1133,7 +1081,6 @@ TableWalker::processWalkAArch64()
                 isStage2,
                 ArmFault::LpaeTran);
 
-
         if (currState->timing) {
             pending = false;
             nextWalk(currState->tc);
@@ -1143,7 +1090,6 @@ TableWalker::processWalkAArch64()
             currState->req = NULL;
         }
         return f;
-
     }
 
     // Trickbox address check
@@ -1177,11 +1123,11 @@ TableWalker::processWalkAArch64()
     currState->longDesc.physAddrRange = _physAddrRange;
 
     if (currState->timing) {
-        fetchDescriptor(desc_addr, (uint8_t*) &currState->longDesc.data,
+        fetchDescriptor(desc_addr, (uint8_t *)&currState->longDesc.data,
                         sizeof(uint64_t), flag, start_lookup_level,
                         LongDescEventByLevel[start_lookup_level], NULL);
     } else {
-        fetchDescriptor(desc_addr, (uint8_t*)&currState->longDesc.data,
+        fetchDescriptor(desc_addr, (uint8_t *)&currState->longDesc.data,
                         sizeof(uint64_t), flag, -1, NULL,
                         &TableWalker::doLongDescriptor);
         f = currState->fault;
@@ -1191,9 +1137,8 @@ TableWalker::processWalkAArch64()
 }
 
 std::tuple<Addr, Addr, TableWalker::LookupLevel>
-TableWalker::walkAddresses(Addr ttbr, GrainSize tg, int tsz, int pa_range)
-{
-    const auto* ptops = getPageTableOps(tg);
+TableWalker::walkAddresses(Addr ttbr, GrainSize tg, int tsz, int pa_range) {
+    const auto *ptops = getPageTableOps(tg);
 
     LookupLevel first_level = LookupLevel::Num_ArmLookupLevel;
     Addr table_addr = 0;
@@ -1201,7 +1146,7 @@ TableWalker::walkAddresses(Addr ttbr, GrainSize tg, int tsz, int pa_range)
 
     if (currState->walkEntry.valid) {
         // WalkCache hit
-        TlbEntry* entry = &currState->walkEntry;
+        TlbEntry *entry = &currState->walkEntry;
         DPRINTF(PageTableWalker,
                 "Walk Cache hit: va=%#x, level=%d, table address=%#x\n",
                 currState->vaddr, entry->lookupLevel, entry->pfn);
@@ -1215,9 +1160,7 @@ TableWalker::walkAddresses(Addr ttbr, GrainSize tg, int tsz, int pa_range)
         first_level = (LookupLevel)(entry->lookupLevel + 1);
     } else {
         // WalkCache miss
-        first_level = isStage2 ?
-            ptops->firstS2Level(currState->vtcr.sl0) :
-            ptops->firstLevel(64 - tsz);
+        first_level = isStage2 ? ptops->firstS2Level(currState->vtcr.sl0) : ptops->firstLevel(64 - tsz);
         panic_if(first_level == LookupLevel::Num_ArmLookupLevel,
                  "Table walker couldn't find lookup level\n");
 
@@ -1238,10 +1181,8 @@ TableWalker::walkAddresses(Addr ttbr, GrainSize tg, int tsz, int pa_range)
     return std::make_tuple(table_addr, desc_addr, first_level);
 }
 
-void
-TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
-                      uint8_t texcb, bool s)
-{
+void TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
+                           uint8_t texcb, bool s) {
     // Note: tc and sctlr local variables are hiding tc and sctrl class
     // variables
     DPRINTF(TLBVerbose, "memAttrs texcb:%d s:%d\n", texcb, s);
@@ -1249,121 +1190,121 @@ TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
     te.nonCacheable = false;
     te.outerShareable = false;
     if (sctlr.tre == 0 || ((sctlr.tre == 1) && (sctlr.m == 0))) {
-        switch(texcb) {
-          case 0: // Stongly-ordered
+        switch (texcb) {
+        case 0: // Stongly-ordered
             te.nonCacheable = true;
             te.mtype = TlbEntry::MemoryType::StronglyOrdered;
             te.shareable = true;
             te.innerAttrs = 1;
             te.outerAttrs = 0;
             break;
-          case 1: // Shareable Device
+        case 1: // Shareable Device
             te.nonCacheable = true;
             te.mtype = TlbEntry::MemoryType::Device;
             te.shareable = true;
             te.innerAttrs = 3;
             te.outerAttrs = 0;
             break;
-          case 2: // Outer and Inner Write-Through, no Write-Allocate
+        case 2: // Outer and Inner Write-Through, no Write-Allocate
             te.mtype = TlbEntry::MemoryType::Normal;
             te.shareable = s;
             te.innerAttrs = 6;
             te.outerAttrs = bits(texcb, 1, 0);
             break;
-          case 3: // Outer and Inner Write-Back, no Write-Allocate
+        case 3: // Outer and Inner Write-Back, no Write-Allocate
             te.mtype = TlbEntry::MemoryType::Normal;
             te.shareable = s;
             te.innerAttrs = 7;
             te.outerAttrs = bits(texcb, 1, 0);
             break;
-          case 4: // Outer and Inner Non-cacheable
+        case 4: // Outer and Inner Non-cacheable
             te.nonCacheable = true;
             te.mtype = TlbEntry::MemoryType::Normal;
             te.shareable = s;
             te.innerAttrs = 0;
             te.outerAttrs = bits(texcb, 1, 0);
             break;
-          case 5: // Reserved
+        case 5: // Reserved
             panic("Reserved texcb value!\n");
             break;
-          case 6: // Implementation Defined
+        case 6: // Implementation Defined
             panic("Implementation-defined texcb value!\n");
             break;
-          case 7: // Outer and Inner Write-Back, Write-Allocate
+        case 7: // Outer and Inner Write-Back, Write-Allocate
             te.mtype = TlbEntry::MemoryType::Normal;
             te.shareable = s;
             te.innerAttrs = 5;
             te.outerAttrs = 1;
             break;
-          case 8: // Non-shareable Device
+        case 8: // Non-shareable Device
             te.nonCacheable = true;
             te.mtype = TlbEntry::MemoryType::Device;
             te.shareable = false;
             te.innerAttrs = 3;
             te.outerAttrs = 0;
             break;
-          case 9 ... 15:  // Reserved
+        case 9 ... 15: // Reserved
             panic("Reserved texcb value!\n");
             break;
-          case 16 ... 31: // Cacheable Memory
+        case 16 ... 31: // Cacheable Memory
             te.mtype = TlbEntry::MemoryType::Normal;
             te.shareable = s;
-            if (bits(texcb, 1,0) == 0 || bits(texcb, 3,2) == 0)
+            if (bits(texcb, 1, 0) == 0 || bits(texcb, 3, 2) == 0)
                 te.nonCacheable = true;
             te.innerAttrs = bits(texcb, 1, 0);
             te.outerAttrs = bits(texcb, 3, 2);
             break;
-          default:
+        default:
             panic("More than 32 states for 5 bits?\n");
         }
     } else {
         assert(tc);
         PRRR prrr = tc->readMiscReg(snsBankedIndex(MISCREG_PRRR,
-                                    currState->tc, !currState->isSecure));
+                                                   currState->tc, !currState->isSecure));
         NMRR nmrr = tc->readMiscReg(snsBankedIndex(MISCREG_NMRR,
-                                    currState->tc, !currState->isSecure));
+                                                   currState->tc, !currState->isSecure));
         DPRINTF(TLBVerbose, "memAttrs PRRR:%08x NMRR:%08x\n", prrr, nmrr);
         uint8_t curr_tr = 0, curr_ir = 0, curr_or = 0;
-        switch(bits(texcb, 2,0)) {
-          case 0:
+        switch (bits(texcb, 2, 0)) {
+        case 0:
             curr_tr = prrr.tr0;
             curr_ir = nmrr.ir0;
             curr_or = nmrr.or0;
             te.outerShareable = (prrr.nos0 == 0);
             break;
-          case 1:
+        case 1:
             curr_tr = prrr.tr1;
             curr_ir = nmrr.ir1;
             curr_or = nmrr.or1;
             te.outerShareable = (prrr.nos1 == 0);
             break;
-          case 2:
+        case 2:
             curr_tr = prrr.tr2;
             curr_ir = nmrr.ir2;
             curr_or = nmrr.or2;
             te.outerShareable = (prrr.nos2 == 0);
             break;
-          case 3:
+        case 3:
             curr_tr = prrr.tr3;
             curr_ir = nmrr.ir3;
             curr_or = nmrr.or3;
             te.outerShareable = (prrr.nos3 == 0);
             break;
-          case 4:
+        case 4:
             curr_tr = prrr.tr4;
             curr_ir = nmrr.ir4;
             curr_or = nmrr.or4;
             te.outerShareable = (prrr.nos4 == 0);
             break;
-          case 5:
+        case 5:
             curr_tr = prrr.tr5;
             curr_ir = nmrr.ir5;
             curr_or = nmrr.or5;
             te.outerShareable = (prrr.nos5 == 0);
             break;
-          case 6:
+        case 6:
             panic("Imp defined type\n");
-          case 7:
+        case 7:
             curr_tr = prrr.tr7;
             curr_ir = nmrr.ir7;
             curr_or = nmrr.or7;
@@ -1371,8 +1312,8 @@ TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
             break;
         }
 
-        switch(curr_tr) {
-          case 0:
+        switch (curr_tr) {
+        case 0:
             DPRINTF(TLBVerbose, "StronglyOrdered\n");
             te.mtype = TlbEntry::MemoryType::StronglyOrdered;
             te.nonCacheable = true;
@@ -1380,7 +1321,7 @@ TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
             te.outerAttrs = 0;
             te.shareable = true;
             break;
-          case 1:
+        case 1:
             DPRINTF(TLBVerbose, "Device ds1:%d ds0:%d s:%d\n",
                     prrr.ds1, prrr.ds0, s);
             te.mtype = TlbEntry::MemoryType::Device;
@@ -1392,7 +1333,7 @@ TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
             if (prrr.ds0 && !s)
                 te.shareable = true;
             break;
-          case 2:
+        case 2:
             DPRINTF(TLBVerbose, "Normal ns1:%d ns0:%d s:%d\n",
                     prrr.ns1, prrr.ns0, s);
             te.mtype = TlbEntry::MemoryType::Normal;
@@ -1401,54 +1342,52 @@ TableWalker::memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
             if (prrr.ns0 && !s)
                 te.shareable = true;
             break;
-          case 3:
+        case 3:
             panic("Reserved type");
         }
 
-        if (te.mtype == TlbEntry::MemoryType::Normal){
-            switch(curr_ir) {
-              case 0:
+        if (te.mtype == TlbEntry::MemoryType::Normal) {
+            switch (curr_ir) {
+            case 0:
                 te.nonCacheable = true;
                 te.innerAttrs = 0;
                 break;
-              case 1:
+            case 1:
                 te.innerAttrs = 5;
                 break;
-              case 2:
+            case 2:
                 te.innerAttrs = 6;
                 break;
-              case 3:
+            case 3:
                 te.innerAttrs = 7;
                 break;
             }
 
-            switch(curr_or) {
-              case 0:
+            switch (curr_or) {
+            case 0:
                 te.nonCacheable = true;
                 te.outerAttrs = 0;
                 break;
-              case 1:
+            case 1:
                 te.outerAttrs = 1;
                 break;
-              case 2:
+            case 2:
                 te.outerAttrs = 2;
                 break;
-              case 3:
+            case 3:
                 te.outerAttrs = 3;
                 break;
             }
         }
     }
     DPRINTF(TLBVerbose, "memAttrs: shareable: %d, innerAttrs: %d, "
-            "outerAttrs: %d\n",
+                        "outerAttrs: %d\n",
             te.shareable, te.innerAttrs, te.outerAttrs);
     te.setAttributes(false);
 }
 
-void
-TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
-    LongDescriptor &l_descriptor)
-{
+void TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
+                               LongDescriptor &l_descriptor) {
     assert(release->has(ArmExtension::LPAE));
 
     uint8_t attr;
@@ -1458,22 +1397,22 @@ TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
     if (isStage2) {
         attr = l_descriptor.memAttr();
         uint8_t attr_3_2 = (attr >> 2) & 0x3;
-        uint8_t attr_1_0 =  attr       & 0x3;
+        uint8_t attr_1_0 = attr & 0x3;
 
         DPRINTF(TLBVerbose, "memAttrsLPAE MemAttr:%#x sh:%#x\n", attr, sh);
 
         if (attr_3_2 == 0) {
-            te.mtype        = attr_1_0 == 0 ? TlbEntry::MemoryType::StronglyOrdered
-                                            : TlbEntry::MemoryType::Device;
-            te.outerAttrs   = 0;
-            te.innerAttrs   = attr_1_0 == 0 ? 1 : 3;
+            te.mtype = attr_1_0 == 0 ? TlbEntry::MemoryType::StronglyOrdered
+                                     : TlbEntry::MemoryType::Device;
+            te.outerAttrs = 0;
+            te.innerAttrs = attr_1_0 == 0 ? 1 : 3;
             te.nonCacheable = true;
         } else {
-            te.mtype        = TlbEntry::MemoryType::Normal;
-            te.outerAttrs   = attr_3_2 == 1 ? 0 :
-                              attr_3_2 == 2 ? 2 : 1;
-            te.innerAttrs   = attr_1_0 == 1 ? 0 :
-                              attr_1_0 == 2 ? 6 : 5;
+            te.mtype = TlbEntry::MemoryType::Normal;
+            te.outerAttrs = attr_3_2 == 1 ? 0 : attr_3_2 == 2 ? 2
+                                                              : 1;
+            te.innerAttrs = attr_1_0 == 1 ? 0 : attr_1_0 == 2 ? 6
+                                                              : 5;
             te.nonCacheable = (attr_3_2 == 1) || (attr_1_0 == 1);
         }
     } else {
@@ -1496,7 +1435,7 @@ TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
         te.nonCacheable = false;
 
         switch (attr_7_4) {
-          case 0x0:
+        case 0x0:
             // Strongly-ordered or Device memory
             if (attr_3_0 == 0x0)
                 te.mtype = TlbEntry::MemoryType::StronglyOrdered;
@@ -1505,9 +1444,9 @@ TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
             else
                 panic("Unpredictable behavior\n");
             te.nonCacheable = true;
-            te.outerAttrs   = 0;
+            te.outerAttrs = 0;
             break;
-          case 0x4:
+        case 0x4:
             // Normal memory, Outer Non-cacheable
             te.mtype = TlbEntry::MemoryType::Normal;
             te.outerAttrs = 0;
@@ -1517,14 +1456,14 @@ TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
             else if (attr_3_0 < 0x8)
                 panic("Unpredictable behavior\n");
             break;
-          case 0x8:
-          case 0x9:
-          case 0xa:
-          case 0xb:
-          case 0xc:
-          case 0xd:
-          case 0xe:
-          case 0xf:
+        case 0x8:
+        case 0x9:
+        case 0xa:
+        case 0xb:
+        case 0xc:
+        case 0xd:
+        case 0xe:
+        case 0xf:
             if (attr_7_4 & 0x4) {
                 te.outerAttrs = (attr_7_4 & 1) ? 1 : 3;
             } else {
@@ -1535,46 +1474,44 @@ TableWalker::memAttrsLPAE(ThreadContext *tc, TlbEntry &te,
             if (attr_3_0 != 0x4 && attr_3_0 < 0x8)
                 panic("Unpredictable behavior\n");
             break;
-          default:
+        default:
             panic("Unpredictable behavior\n");
             break;
         }
 
         switch (attr_3_0) {
-          case 0x0:
+        case 0x0:
             te.innerAttrs = 0x1;
             break;
-          case 0x4:
+        case 0x4:
             te.innerAttrs = attr_7_4 == 0 ? 0x3 : 0;
             break;
-          case 0x8:
-          case 0x9:
-          case 0xA:
-          case 0xB:
+        case 0x8:
+        case 0x9:
+        case 0xA:
+        case 0xB:
             te.innerAttrs = 6;
             break;
-          case 0xC:
-          case 0xD:
-          case 0xE:
-          case 0xF:
+        case 0xC:
+        case 0xD:
+        case 0xE:
+        case 0xF:
             te.innerAttrs = attr_3_0 & 1 ? 0x5 : 0x7;
             break;
-          default:
+        default:
             panic("Unpredictable behavior\n");
             break;
         }
     }
 
     te.outerShareable = sh == 2;
-    te.shareable       = (sh & 0x2) ? true : false;
+    te.shareable = (sh & 0x2) ? true : false;
     te.setAttributes(true);
-    te.attributes |= (uint64_t) attr << 56;
+    te.attributes |= (uint64_t)attr << 56;
 }
 
-void
-TableWalker::memAttrsAArch64(ThreadContext *tc, TlbEntry &te,
-                             LongDescriptor &l_descriptor)
-{
+void TableWalker::memAttrsAArch64(ThreadContext *tc, TlbEntry &te,
+                                  LongDescriptor &l_descriptor) {
     uint8_t attr;
     uint8_t attr_hi;
     uint8_t attr_lo;
@@ -1583,47 +1520,47 @@ TableWalker::memAttrsAArch64(ThreadContext *tc, TlbEntry &te,
     if (isStage2) {
         attr = l_descriptor.memAttr();
         uint8_t attr_hi = (attr >> 2) & 0x3;
-        uint8_t attr_lo =  attr       & 0x3;
+        uint8_t attr_lo = attr & 0x3;
 
         DPRINTF(TLBVerbose, "memAttrsAArch64 MemAttr:%#x sh:%#x\n", attr, sh);
 
         if (attr_hi == 0) {
-            te.mtype        = attr_lo == 0 ? TlbEntry::MemoryType::StronglyOrdered
-                                            : TlbEntry::MemoryType::Device;
-            te.outerAttrs   = 0;
-            te.innerAttrs   = attr_lo == 0 ? 1 : 3;
+            te.mtype = attr_lo == 0 ? TlbEntry::MemoryType::StronglyOrdered
+                                    : TlbEntry::MemoryType::Device;
+            te.outerAttrs = 0;
+            te.innerAttrs = attr_lo == 0 ? 1 : 3;
             te.nonCacheable = true;
         } else {
-            te.mtype        = TlbEntry::MemoryType::Normal;
-            te.outerAttrs   = attr_hi == 1 ? 0 :
-                              attr_hi == 2 ? 2 : 1;
-            te.innerAttrs   = attr_lo == 1 ? 0 :
-                              attr_lo == 2 ? 6 : 5;
+            te.mtype = TlbEntry::MemoryType::Normal;
+            te.outerAttrs = attr_hi == 1 ? 0 : attr_hi == 2 ? 2
+                                                            : 1;
+            te.innerAttrs = attr_lo == 1 ? 0 : attr_lo == 2 ? 6
+                                                            : 5;
             // Treat write-through memory as uncacheable, this is safe
             // but for performance reasons not optimal.
             te.nonCacheable = (attr_hi == 1) || (attr_hi == 2) ||
-                (attr_lo == 1) || (attr_lo == 2);
+                              (attr_lo == 1) || (attr_lo == 2);
         }
     } else {
         uint8_t attrIndx = l_descriptor.attrIndx();
 
         DPRINTF(TLBVerbose, "memAttrsAArch64 AttrIndx:%#x sh:%#x\n", attrIndx, sh);
-        ExceptionLevel regime =  s1TranslationRegime(tc, currState->el);
+        ExceptionLevel regime = s1TranslationRegime(tc, currState->el);
 
         // Select MAIR
         uint64_t mair;
         switch (regime) {
-          case EL0:
-          case EL1:
+        case EL0:
+        case EL1:
             mair = tc->readMiscReg(MISCREG_MAIR_EL1);
             break;
-          case EL2:
+        case EL2:
             mair = tc->readMiscReg(MISCREG_MAIR_EL2);
             break;
-          case EL3:
+        case EL3:
             mair = tc->readMiscReg(MISCREG_MAIR_EL3);
             break;
-          default:
+        default:
             panic("Invalid exception level");
             break;
         }
@@ -1638,42 +1575,40 @@ TableWalker::memAttrsAArch64(ThreadContext *tc, TlbEntry &te,
 
         // Cacheability
         te.nonCacheable = false;
-        if (te.mtype == TlbEntry::MemoryType::Device) {  // Device memory
+        if (te.mtype == TlbEntry::MemoryType::Device) { // Device memory
             te.nonCacheable = true;
         }
         // Treat write-through memory as uncacheable, this is safe
         // but for performance reasons not optimal.
         switch (attr_hi) {
-          case 0x1 ... 0x3: // Normal Memory, Outer Write-through transient
-          case 0x4:         // Normal memory, Outer Non-cacheable
-          case 0x8 ... 0xb: // Normal Memory, Outer Write-through non-transient
+        case 0x1 ... 0x3: // Normal Memory, Outer Write-through transient
+        case 0x4:         // Normal memory, Outer Non-cacheable
+        case 0x8 ... 0xb: // Normal Memory, Outer Write-through non-transient
             te.nonCacheable = true;
         }
         switch (attr_lo) {
-          case 0x1 ... 0x3: // Normal Memory, Inner Write-through transient
-          case 0x9 ... 0xb: // Normal Memory, Inner Write-through non-transient
+        case 0x1 ... 0x3: // Normal Memory, Inner Write-through transient
+        case 0x9 ... 0xb: // Normal Memory, Inner Write-through non-transient
             warn_if(!attr_hi, "Unpredictable behavior");
             [[fallthrough]];
-          case 0x4:         // Device-nGnRE memory or
-                            // Normal memory, Inner Non-cacheable
-          case 0x8:         // Device-nGRE memory or
-                            // Normal memory, Inner Write-through non-transient
+        case 0x4: // Device-nGnRE memory or
+                  // Normal memory, Inner Non-cacheable
+        case 0x8: // Device-nGRE memory or
+                  // Normal memory, Inner Write-through non-transient
             te.nonCacheable = true;
         }
 
-        te.shareable       = sh == 2;
+        te.shareable = sh == 2;
         te.outerShareable = (sh & 0x2) ? true : false;
         // Attributes formatted according to the 64-bit PAR
-        te.attributes = ((uint64_t) attr << 56) |
-            (1 << 11) |     // LPAE bit
-            (te.ns << 9) |  // NS bit
-            (sh << 7);
+        te.attributes = ((uint64_t)attr << 56) |
+                        (1 << 11) |    // LPAE bit
+                        (te.ns << 9) | // NS bit
+                        (sh << 7);
     }
 }
 
-void
-TableWalker::doL1Descriptor()
-{
+void TableWalker::doL1Descriptor() {
     if (currState->fault != NoFault) {
         return;
     }
@@ -1688,8 +1623,8 @@ TableWalker::doL1Descriptor()
     const bool is_atomic = currState->req->isAtomic();
 
     switch (currState->l1Desc.type()) {
-      case L1Descriptor::Ignore:
-      case L1Descriptor::Reserved:
+    case L1Descriptor::Ignore:
+    case L1Descriptor::Reserved:
         if (!currState->timing) {
             currState->tc = NULL;
             currState->req = NULL;
@@ -1711,7 +1646,7 @@ TableWalker::doL1Descriptor()
                     ArmFault::TranslationLL + LookupLevel::L1, isStage2,
                     ArmFault::VmsaTran);
         return;
-      case L1Descriptor::Section:
+    case L1Descriptor::Section:
         if (currState->sctlr.afe && bits(currState->l1Desc.ap(), 0) == 0) {
             /** @todo: check sctlr.ha (bit[17]) if Hardware Access Flag is
               * enabled if set, do l1.Desc.setAp0() instead of generating
@@ -1731,55 +1666,52 @@ TableWalker::doL1Descriptor()
         }
         insertTableEntry(currState->l1Desc, false);
         return;
-      case L1Descriptor::PageTable:
-        {
-            Addr l2desc_addr;
-            l2desc_addr = currState->l1Desc.l2Addr() |
-                (bits(currState->vaddr, 19, 12) << 2);
-            DPRINTF(TLB, "L1 descriptor points to page table at: %#x (%s)\n",
-                    l2desc_addr, currState->isSecure ? "s" : "ns");
+    case L1Descriptor::PageTable: {
+        Addr l2desc_addr;
+        l2desc_addr = currState->l1Desc.l2Addr() |
+                      (bits(currState->vaddr, 19, 12) << 2);
+        DPRINTF(TLB, "L1 descriptor points to page table at: %#x (%s)\n",
+                l2desc_addr, currState->isSecure ? "s" : "ns");
 
-            // Trickbox address check
-            currState->fault = testWalk(l2desc_addr, sizeof(uint32_t),
-                                        currState->l1Desc.domain(),
-                                        LookupLevel::L2, isStage2);
+        // Trickbox address check
+        currState->fault = testWalk(l2desc_addr, sizeof(uint32_t),
+                                    currState->l1Desc.domain(),
+                                    LookupLevel::L2, isStage2);
 
-            if (currState->fault) {
-                if (!currState->timing) {
-                    currState->tc = NULL;
-                    currState->req = NULL;
-                }
-                return;
+        if (currState->fault) {
+            if (!currState->timing) {
+                currState->tc = NULL;
+                currState->req = NULL;
             }
-
-            Request::Flags flag = Request::PT_WALK;
-
-            if (currState->sctlr.c == 0 || currState->isUncacheable) {
-                flag.set(Request::UNCACHEABLE);
-            }
-
-            if (currState->isSecure)
-                flag.set(Request::SECURE);
-
-            bool delayed;
-            delayed = fetchDescriptor(l2desc_addr,
-                                      (uint8_t*)&currState->l2Desc.data,
-                                      sizeof(uint32_t), flag, -1, &doL2DescEvent,
-                                      &TableWalker::doL2Descriptor);
-            if (delayed) {
-                currState->delayed = true;
-            }
-
             return;
         }
-      default:
+
+        Request::Flags flag = Request::PT_WALK;
+
+        if (currState->sctlr.c == 0 || currState->isUncacheable) {
+            flag.set(Request::UNCACHEABLE);
+        }
+
+        if (currState->isSecure)
+            flag.set(Request::SECURE);
+
+        bool delayed;
+        delayed = fetchDescriptor(l2desc_addr,
+                                  (uint8_t *)&currState->l2Desc.data,
+                                  sizeof(uint32_t), flag, -1, &doL2DescEvent,
+                                  &TableWalker::doL2Descriptor);
+        if (delayed) {
+            currState->delayed = true;
+        }
+
+        return;
+    }
+    default:
         panic("A new type in a 2 bit field?\n");
     }
 }
 
-Fault
-TableWalker::generateLongDescFault(ArmFault::FaultSource src)
-{
+Fault TableWalker::generateLongDescFault(ArmFault::FaultSource src) {
     if (currState->isFetch) {
         return std::make_shared<PrefetchAbort>(
             currState->vaddr_tainted,
@@ -1797,9 +1729,7 @@ TableWalker::generateLongDescFault(ArmFault::FaultSource src)
     }
 }
 
-void
-TableWalker::doLongDescriptor()
-{
+void TableWalker::doLongDescriptor() {
     if (currState->fault != NoFault) {
         return;
     }
@@ -1815,7 +1745,7 @@ TableWalker::doLongDescriptor()
     if ((currState->longDesc.type() == LongDescriptor::Block) ||
         (currState->longDesc.type() == LongDescriptor::Page)) {
         DPRINTF(PageTableWalker, "Analyzing L%d descriptor: %#llx, pxn: %d, "
-                "xn: %d, ap: %d, af: %d, type: %d\n",
+                                 "xn: %d, ap: %d, af: %d, type: %d\n",
                 currState->longDesc.lookupLevel,
                 currState->longDesc.data,
                 currState->longDesc.pxn(),
@@ -1833,7 +1763,7 @@ TableWalker::doLongDescriptor()
     TlbEntry te;
 
     switch (currState->longDesc.type()) {
-      case LongDescriptor::Invalid:
+    case LongDescriptor::Invalid:
         DPRINTF(TLB, "L%d descriptor Invalid, causing fault type %d\n",
                 currState->longDesc.lookupLevel,
                 ArmFault::TranslationLL + currState->longDesc.lookupLevel);
@@ -1845,126 +1775,121 @@ TableWalker::doLongDescriptor()
         }
         return;
 
-      case LongDescriptor::Block:
-      case LongDescriptor::Page:
-        {
-            auto fault_source = ArmFault::FaultSourceInvalid;
-            // Check for address size fault
-            if (checkAddrSizeFaultAArch64(currState->longDesc.paddr(),
-                currState->physAddrRange)) {
+    case LongDescriptor::Block:
+    case LongDescriptor::Page: {
+        auto fault_source = ArmFault::FaultSourceInvalid;
+        // Check for address size fault
+        if (checkAddrSizeFaultAArch64(currState->longDesc.paddr(),
+                                      currState->physAddrRange)) {
 
-                DPRINTF(TLB, "L%d descriptor causing Address Size Fault\n",
-                        currState->longDesc.lookupLevel);
-                fault_source = ArmFault::AddressSizeLL;
+            DPRINTF(TLB, "L%d descriptor causing Address Size Fault\n",
+                    currState->longDesc.lookupLevel);
+            fault_source = ArmFault::AddressSizeLL;
 
             // Check for access fault
-            } else if (currState->longDesc.af() == 0) {
+        } else if (currState->longDesc.af() == 0) {
 
-                DPRINTF(TLB, "L%d descriptor causing Access Fault\n",
-                        currState->longDesc.lookupLevel);
-                fault_source = ArmFault::AccessFlagLL;
-            }
-
-            if (fault_source != ArmFault::FaultSourceInvalid) {
-                currState->fault = generateLongDescFault(fault_source);
-            } else {
-                insertTableEntry(currState->longDesc, true);
-            }
+            DPRINTF(TLB, "L%d descriptor causing Access Fault\n",
+                    currState->longDesc.lookupLevel);
+            fault_source = ArmFault::AccessFlagLL;
         }
-        return;
-      case LongDescriptor::Table:
-        {
-            // Set hierarchical permission flags
-            currState->secureLookup = currState->secureLookup &&
-                currState->longDesc.secureTable();
-            currState->rwTable = currState->rwTable &&
-                (currState->longDesc.rwTable() || currState->hpd);
-            currState->userTable = currState->userTable &&
-                (currState->longDesc.userTable() || currState->hpd);
-            currState->xnTable = currState->xnTable ||
-                (currState->longDesc.xnTable() && !currState->hpd);
-            currState->pxnTable = currState->pxnTable ||
-                (currState->longDesc.pxnTable() && !currState->hpd);
 
-            // Set up next level lookup
-            Addr next_desc_addr = currState->longDesc.nextDescAddr(
-                currState->vaddr);
-
-            DPRINTF(TLB, "L%d descriptor points to L%d descriptor at: %#x (%s)\n",
-                    currState->longDesc.lookupLevel,
-                    currState->longDesc.lookupLevel + 1,
-                    next_desc_addr,
-                    currState->secureLookup ? "s" : "ns");
-
-            // Check for address size fault
-            if (currState->aarch64 && checkAddrSizeFaultAArch64(
-                    next_desc_addr, currState->physAddrRange)) {
-                DPRINTF(TLB, "L%d descriptor causing Address Size Fault\n",
-                        currState->longDesc.lookupLevel);
-
-                currState->fault = generateLongDescFault(
-                    ArmFault::AddressSizeLL);
-                return;
-            }
-
-            // Trickbox address check
-            currState->fault = testWalk(
-                next_desc_addr, sizeof(uint64_t), TlbEntry::DomainType::Client,
-                toLookupLevel(currState->longDesc.lookupLevel +1), isStage2);
-
-            if (currState->fault) {
-                if (!currState->timing) {
-                    currState->tc = NULL;
-                    currState->req = NULL;
-                }
-                return;
-            }
-
-            if (mmu->hasWalkCache()) {
-                insertPartialTableEntry(currState->longDesc);
-            }
-
-
-            Request::Flags flag = Request::PT_WALK;
-            if (currState->secureLookup)
-                flag.set(Request::SECURE);
-
-            if (currState->sctlr.c == 0 || currState->isUncacheable) {
-                flag.set(Request::UNCACHEABLE);
-            }
-
-            LookupLevel L = currState->longDesc.lookupLevel =
-                (LookupLevel) (currState->longDesc.lookupLevel + 1);
-            Event *event = NULL;
-            switch (L) {
-              case LookupLevel::L1:
-                assert(currState->aarch64);
-              case LookupLevel::L2:
-              case LookupLevel::L3:
-                event = LongDescEventByLevel[L];
-                break;
-              default:
-                panic("Wrong lookup level in table walk\n");
-                break;
-            }
-
-            bool delayed;
-            delayed = fetchDescriptor(next_desc_addr, (uint8_t*)&currState->longDesc.data,
-                                      sizeof(uint64_t), flag, -1, event,
-                                      &TableWalker::doLongDescriptor);
-            if (delayed) {
-                 currState->delayed = true;
-            }
+        if (fault_source != ArmFault::FaultSourceInvalid) {
+            currState->fault = generateLongDescFault(fault_source);
+        } else {
+            insertTableEntry(currState->longDesc, true);
         }
+    }
         return;
-      default:
+    case LongDescriptor::Table: {
+        // Set hierarchical permission flags
+        currState->secureLookup = currState->secureLookup &&
+                                  currState->longDesc.secureTable();
+        currState->rwTable = currState->rwTable &&
+                             (currState->longDesc.rwTable() || currState->hpd);
+        currState->userTable = currState->userTable &&
+                               (currState->longDesc.userTable() || currState->hpd);
+        currState->xnTable = currState->xnTable ||
+                             (currState->longDesc.xnTable() && !currState->hpd);
+        currState->pxnTable = currState->pxnTable ||
+                              (currState->longDesc.pxnTable() && !currState->hpd);
+
+        // Set up next level lookup
+        Addr next_desc_addr = currState->longDesc.nextDescAddr(
+            currState->vaddr);
+
+        DPRINTF(TLB, "L%d descriptor points to L%d descriptor at: %#x (%s)\n",
+                currState->longDesc.lookupLevel,
+                currState->longDesc.lookupLevel + 1,
+                next_desc_addr,
+                currState->secureLookup ? "s" : "ns");
+
+        // Check for address size fault
+        if (currState->aarch64 && checkAddrSizeFaultAArch64(
+                                      next_desc_addr, currState->physAddrRange)) {
+            DPRINTF(TLB, "L%d descriptor causing Address Size Fault\n",
+                    currState->longDesc.lookupLevel);
+
+            currState->fault = generateLongDescFault(
+                ArmFault::AddressSizeLL);
+            return;
+        }
+
+        // Trickbox address check
+        currState->fault = testWalk(
+            next_desc_addr, sizeof(uint64_t), TlbEntry::DomainType::Client,
+            toLookupLevel(currState->longDesc.lookupLevel + 1), isStage2);
+
+        if (currState->fault) {
+            if (!currState->timing) {
+                currState->tc = NULL;
+                currState->req = NULL;
+            }
+            return;
+        }
+
+        if (mmu->hasWalkCache()) {
+            insertPartialTableEntry(currState->longDesc);
+        }
+
+        Request::Flags flag = Request::PT_WALK;
+        if (currState->secureLookup)
+            flag.set(Request::SECURE);
+
+        if (currState->sctlr.c == 0 || currState->isUncacheable) {
+            flag.set(Request::UNCACHEABLE);
+        }
+
+        LookupLevel L = currState->longDesc.lookupLevel =
+            (LookupLevel)(currState->longDesc.lookupLevel + 1);
+        Event *event = NULL;
+        switch (L) {
+        case LookupLevel::L1:
+            assert(currState->aarch64);
+        case LookupLevel::L2:
+        case LookupLevel::L3:
+            event = LongDescEventByLevel[L];
+            break;
+        default:
+            panic("Wrong lookup level in table walk\n");
+            break;
+        }
+
+        bool delayed;
+        delayed = fetchDescriptor(next_desc_addr, (uint8_t *)&currState->longDesc.data,
+                                  sizeof(uint64_t), flag, -1, event,
+                                  &TableWalker::doLongDescriptor);
+        if (delayed) {
+            currState->delayed = true;
+        }
+    }
+        return;
+    default:
         panic("A new type in a 2 bit field?\n");
     }
 }
 
-void
-TableWalker::doL2Descriptor()
-{
+void TableWalker::doL2Descriptor() {
     if (currState->fault != NoFault) {
         return;
     }
@@ -1986,10 +1911,10 @@ TableWalker::doL2Descriptor()
         }
         if (currState->isFetch)
             currState->fault = std::make_shared<PrefetchAbort>(
-                    currState->vaddr_tainted,
-                    ArmFault::TranslationLL + LookupLevel::L2,
-                    isStage2,
-                    ArmFault::VmsaTran);
+                currState->vaddr_tainted,
+                ArmFault::TranslationLL + LookupLevel::L2,
+                isStage2,
+                ArmFault::VmsaTran);
         else
             currState->fault = std::make_shared<DataAbort>(
                 currState->vaddr_tainted, currState->l1Desc.domain(),
@@ -2004,8 +1929,8 @@ TableWalker::doL2Descriptor()
         /** @todo: check sctlr.ha (bit[17]) if Hardware Access Flag is enabled
           * if set, do l2.Desc.setAp0() instead of generating AccessFlag0
           */
-         DPRINTF(TLB, "Generating access fault at L2, afe: %d, ap: %d\n",
-                 currState->sctlr.afe, currState->l2Desc.ap());
+        DPRINTF(TLB, "Generating access fault at L2, afe: %d, ap: %d\n",
+                currState->sctlr.afe, currState->l2Desc.ap());
 
         currState->fault = std::make_shared<DataAbort>(
             currState->vaddr_tainted,
@@ -2018,9 +1943,7 @@ TableWalker::doL2Descriptor()
     insertTableEntry(currState->l2Desc, false);
 }
 
-void
-TableWalker::doL1DescriptorWrapper()
-{
+void TableWalker::doL1DescriptorWrapper() {
     currState = stateQueues[LookupLevel::L1].front();
     currState->delayed = false;
     // if there's a stage2 translation object we don't need it any more
@@ -2028,7 +1951,6 @@ TableWalker::doL1DescriptorWrapper()
         delete currState->stage2Tran;
         currState->stage2Tran = NULL;
     }
-
 
     DPRINTF(PageTableWalker, "L1 Desc object host addr: %p\n",
             &currState->l1Desc.data);
@@ -2053,16 +1975,15 @@ TableWalker::doL1DescriptorWrapper()
         currState->tc = NULL;
         currState->delayed = false;
         delete currState;
-    }
-    else if (!currState->delayed) {
+    } else if (!currState->delayed) {
         // delay is not set so there is no L2 to do
         // Don't finish the translation if a stage 2 look up is underway
         stats.walkServiceTime.sample(curTick() - currState->startTime);
         DPRINTF(PageTableWalker, "calling translateTiming again\n");
 
         mmu->translateTiming(currState->req, currState->tc,
-            currState->transState, currState->mode,
-            currState->tranType, isStage2);
+                             currState->transState, currState->mode,
+                             currState->tranType, isStage2);
 
         stats.walksShortTerminatedAtLevel[0]++;
 
@@ -2080,9 +2001,7 @@ TableWalker::doL1DescriptorWrapper()
     currState = NULL;
 }
 
-void
-TableWalker::doL2DescriptorWrapper()
-{
+void TableWalker::doL2DescriptorWrapper() {
     currState = stateQueues[LookupLevel::L2].front();
     assert(currState->delayed);
     // if there's a stage2 translation object we don't need it any more
@@ -2105,12 +2024,11 @@ TableWalker::doL2DescriptorWrapper()
         DPRINTF(PageTableWalker, "calling translateTiming again\n");
 
         mmu->translateTiming(currState->req, currState->tc,
-            currState->transState, currState->mode,
-            currState->tranType, isStage2);
+                             currState->transState, currState->mode,
+                             currState->tranType, isStage2);
 
         stats.walksShortTerminatedAtLevel[1]++;
     }
-
 
     stateQueues[LookupLevel::L2].pop_front();
     pending = false;
@@ -2124,33 +2042,23 @@ TableWalker::doL2DescriptorWrapper()
     currState = NULL;
 }
 
-void
-TableWalker::doL0LongDescriptorWrapper()
-{
+void TableWalker::doL0LongDescriptorWrapper() {
     doLongDescriptorWrapper(LookupLevel::L0);
 }
 
-void
-TableWalker::doL1LongDescriptorWrapper()
-{
+void TableWalker::doL1LongDescriptorWrapper() {
     doLongDescriptorWrapper(LookupLevel::L1);
 }
 
-void
-TableWalker::doL2LongDescriptorWrapper()
-{
+void TableWalker::doL2LongDescriptorWrapper() {
     doLongDescriptorWrapper(LookupLevel::L2);
 }
 
-void
-TableWalker::doL3LongDescriptorWrapper()
-{
+void TableWalker::doL3LongDescriptorWrapper() {
     doLongDescriptorWrapper(LookupLevel::L3);
 }
 
-void
-TableWalker::doLongDescriptorWrapper(LookupLevel curr_lookup_level)
-{
+void TableWalker::doLongDescriptorWrapper(LookupLevel curr_lookup_level) {
     currState = stateQueues[curr_lookup_level].front();
     assert(curr_lookup_level == currState->longDesc.lookupLevel);
     currState->delayed = false;
@@ -2185,10 +2093,10 @@ TableWalker::doLongDescriptorWrapper(LookupLevel curr_lookup_level)
         stats.walkServiceTime.sample(curTick() - currState->startTime);
 
         mmu->translateTiming(currState->req, currState->tc,
-            currState->transState, currState->mode,
-            currState->tranType, isStage2);
+                             currState->transState, currState->mode,
+                             currState->tranType, isStage2);
 
-        stats.walksLongTerminatedAtLevel[(unsigned) curr_lookup_level]++;
+        stats.walksLongTerminatedAtLevel[(unsigned)curr_lookup_level]++;
 
         pending = false;
         nextWalk(currState->tc);
@@ -2206,21 +2114,16 @@ TableWalker::doLongDescriptorWrapper(LookupLevel curr_lookup_level)
     currState = NULL;
 }
 
-
-void
-TableWalker::nextWalk(ThreadContext *tc)
-{
+void TableWalker::nextWalk(ThreadContext *tc) {
     if (pendingQueue.size())
         schedule(doProcessEvent, clockEdge(Cycles(1)));
     else
         completeDrain();
 }
 
-bool
-TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
-    Request::Flags flags, int queueIndex, Event *event,
-    void (TableWalker::*doDescriptor)())
-{
+bool TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
+                                  Request::Flags flags, int queueIndex, Event *event,
+                                  void (TableWalker::*doDescriptor)()) {
     bool isTiming = currState->timing;
 
     DPRINTF(PageTableWalker,
@@ -2234,18 +2137,17 @@ TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
         Fault fault;
 
         if (isTiming) {
-            auto *tran = new
-                Stage2Walk(*this, data, event, currState->vaddr,
-                    currState->mode, currState->tranType);
+            auto *tran = new Stage2Walk(*this, data, event, currState->vaddr,
+                                        currState->mode, currState->tranType);
             currState->stage2Tran = tran;
             readDataTimed(currState->tc, descAddr, tran, numBytes, flags);
             fault = tran->fault;
         } else {
             fault = readDataUntimed(currState->tc,
-                currState->vaddr, descAddr, data, numBytes, flags,
-                currState->mode,
-                currState->tranType,
-                currState->functional);
+                                    currState->vaddr, descAddr, data, numBytes, flags,
+                                    currState->mode,
+                                    currState->tranType,
+                                    currState->functional);
         }
 
         if (fault != NoFault) {
@@ -2254,7 +2156,7 @@ TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
         if (isTiming) {
             if (queueIndex >= 0) {
                 DPRINTF(PageTableWalker, "Adding to walker fifo: "
-                        "queue size before adding: %d\n",
+                                         "queue size before adding: %d\n",
                         stateQueues[queueIndex].size());
                 stateQueues[queueIndex].push_back(currState);
                 currState = NULL;
@@ -2265,18 +2167,18 @@ TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
     } else {
         if (isTiming) {
             port->sendTimingReq(descAddr, numBytes, data, flags,
-                currState->tc->getCpuPtr()->clockPeriod(), event);
+                                currState->tc->getCpuPtr()->clockPeriod(), event);
 
             if (queueIndex >= 0) {
                 DPRINTF(PageTableWalker, "Adding to walker fifo: "
-                        "queue size before adding: %d\n",
+                                         "queue size before adding: %d\n",
                         stateQueues[queueIndex].size());
                 stateQueues[queueIndex].push_back(currState);
                 currState = NULL;
             }
         } else if (!currState->functional) {
             port->sendAtomicReq(descAddr, numBytes, data, flags,
-                currState->tc->getCpuPtr()->clockPeriod());
+                                currState->tc->getCpuPtr()->clockPeriod());
 
             (this->*doDescriptor)();
         } else {
@@ -2287,38 +2189,36 @@ TableWalker::fetchDescriptor(Addr descAddr, uint8_t *data, int numBytes,
     return (isTiming);
 }
 
-void
-TableWalker::insertPartialTableEntry(LongDescriptor &descriptor)
-{
+void TableWalker::insertPartialTableEntry(LongDescriptor &descriptor) {
     const bool have_security = release->has(ArmExtension::SECURITY);
     TlbEntry te;
 
     // Create and fill a new page table entry
-    te.valid          = true;
+    te.valid = true;
     te.longDescFormat = true;
-    te.partial        = true;
+    te.partial = true;
     // The entry is global if there is no address space identifier
     // to differentiate translation contexts
-    te.global         = !mmu->hasUnprivRegime(
+    te.global = !mmu->hasUnprivRegime(
         currState->el, currState->hcr.e2h);
-    te.isHyp          = currState->isHyp;
-    te.asid           = currState->asid;
-    te.vmid           = currState->vmid;
-    te.N              = descriptor.offsetBits();
-    te.tg             = descriptor.grainSize;
-    te.vpn            = currState->vaddr >> te.N;
-    te.size           = (1ULL << te.N) - 1;
-    te.pfn            = descriptor.nextTableAddr();
-    te.domain         = descriptor.domain();
-    te.lookupLevel    = descriptor.lookupLevel;
-    te.ns             = !descriptor.secure(have_security, currState);
-    te.nstid          = !currState->isSecure;
-    te.type           = TypeTLB::unified;
+    te.isHyp = currState->isHyp;
+    te.asid = currState->asid;
+    te.vmid = currState->vmid;
+    te.N = descriptor.offsetBits();
+    te.tg = descriptor.grainSize;
+    te.vpn = currState->vaddr >> te.N;
+    te.size = (1ULL << te.N) - 1;
+    te.pfn = descriptor.nextTableAddr();
+    te.domain = descriptor.domain();
+    te.lookupLevel = descriptor.lookupLevel;
+    te.ns = !descriptor.secure(have_security, currState);
+    te.nstid = !currState->isSecure;
+    te.type = TypeTLB::unified;
 
     if (currState->aarch64)
-        te.el         = currState->el;
+        te.el = currState->el;
     else
-        te.el         = EL1;
+        te.el = EL1;
 
     te.xn = currState->xnTable;
     te.pxn = currState->pxnTable;
@@ -2329,7 +2229,8 @@ TableWalker::insertPartialTableEntry(LongDescriptor &descriptor)
     DPRINTF(TLB, " - N:%d pfn:%#x size:%#x global:%d valid:%d\n",
             te.N, te.pfn, te.size, te.global, te.valid);
     DPRINTF(TLB, " - vpn:%#x xn:%d pxn:%d ap:%d domain:%d asid:%d "
-            "vmid:%d hyp:%d nc:%d ns:%d\n", te.vpn, te.xn, te.pxn,
+                 "vmid:%d hyp:%d nc:%d ns:%d\n",
+            te.vpn, te.xn, te.pxn,
             te.ap, static_cast<uint8_t>(te.domain), te.asid, te.vmid, te.isHyp,
             te.nonCacheable, te.ns);
     DPRINTF(TLB, " - domain from L%d desc:%d data:%#x\n",
@@ -2340,41 +2241,38 @@ TableWalker::insertPartialTableEntry(LongDescriptor &descriptor)
     tlb->multiInsert(te);
 }
 
-void
-TableWalker::insertTableEntry(DescriptorBase &descriptor, bool long_descriptor)
-{
+void TableWalker::insertTableEntry(DescriptorBase &descriptor, bool long_descriptor) {
     const bool have_security = release->has(ArmExtension::SECURITY);
     TlbEntry te;
 
     // Create and fill a new page table entry
-    te.valid          = true;
+    te.valid = true;
     te.longDescFormat = long_descriptor;
-    te.isHyp          = currState->isHyp;
-    te.asid           = currState->asid;
-    te.vmid           = currState->vmid;
-    te.N              = descriptor.offsetBits();
-    te.vpn            = currState->vaddr >> te.N;
-    te.size           = (1<<te.N) - 1;
-    te.pfn            = descriptor.pfn();
-    te.domain         = descriptor.domain();
-    te.lookupLevel    = descriptor.lookupLevel;
-    te.ns             = !descriptor.secure(have_security, currState);
-    te.nstid          = !currState->isSecure;
-    te.xn             = descriptor.xn();
-    te.type           = currState->mode == BaseMMU::Execute ?
-        TypeTLB::instruction : TypeTLB::data;
+    te.isHyp = currState->isHyp;
+    te.asid = currState->asid;
+    te.vmid = currState->vmid;
+    te.N = descriptor.offsetBits();
+    te.vpn = currState->vaddr >> te.N;
+    te.size = (1 << te.N) - 1;
+    te.pfn = descriptor.pfn();
+    te.domain = descriptor.domain();
+    te.lookupLevel = descriptor.lookupLevel;
+    te.ns = !descriptor.secure(have_security, currState);
+    te.nstid = !currState->isSecure;
+    te.xn = descriptor.xn();
+    te.type = currState->mode == BaseMMU::Execute ? TypeTLB::instruction : TypeTLB::data;
 
     if (currState->aarch64)
-        te.el         = currState->el;
+        te.el = currState->el;
     else
-        te.el         = EL1;
+        te.el = EL1;
 
     stats.pageSizes[pageSizeNtoStatBin(te.N)]++;
     stats.requestOrigin[COMPLETED][currState->isFetch]++;
 
     // ASID has no meaning for stage 2 TLB entries, so mark all stage 2 entries
     // as global
-    te.global         = descriptor.global(currState) || isStage2;
+    te.global = descriptor.global(currState) || isStage2;
     if (long_descriptor) {
         LongDescriptor l_descriptor =
             dynamic_cast<LongDescriptor &>(descriptor);
@@ -2387,8 +2285,8 @@ TableWalker::insertTableEntry(DescriptorBase &descriptor, bool long_descriptor)
             // possitions as the AP field in a stage 1 translation.
             te.hap = l_descriptor.ap();
         } else {
-           te.ap = ((!currState->rwTable || descriptor.ap() >> 1) << 1) |
-               (currState->userTable && (descriptor.ap() & 0x1));
+            te.ap = ((!currState->rwTable || descriptor.ap() >> 1) << 1) |
+                    (currState->userTable && (descriptor.ap() & 0x1));
         }
         if (currState->aarch64)
             memAttrsAArch64(currState->tc, te, l_descriptor);
@@ -2405,7 +2303,8 @@ TableWalker::insertTableEntry(DescriptorBase &descriptor, bool long_descriptor)
     DPRINTF(TLB, " - N:%d pfn:%#x size:%#x global:%d valid:%d\n",
             te.N, te.pfn, te.size, te.global, te.valid);
     DPRINTF(TLB, " - vpn:%#x xn:%d pxn:%d ap:%d domain:%d asid:%d "
-            "vmid:%d hyp:%d nc:%d ns:%d\n", te.vpn, te.xn, te.pxn,
+                 "vmid:%d hyp:%d nc:%d ns:%d\n",
+            te.vpn, te.xn, te.pxn,
             te.ap, static_cast<uint8_t>(te.domain), te.asid, te.vmid, te.isHyp,
             te.nonCacheable, te.ns);
     DPRINTF(TLB, " - domain from L%d desc:%d data:%#x\n",
@@ -2415,31 +2314,28 @@ TableWalker::insertTableEntry(DescriptorBase &descriptor, bool long_descriptor)
     // Insert the entry into the TLBs
     tlb->multiInsert(te);
     if (!currState->timing) {
-        currState->tc  = NULL;
+        currState->tc = NULL;
         currState->req = NULL;
     }
 }
 
 TableWalker::LookupLevel
-TableWalker::toLookupLevel(uint8_t lookup_level_as_int)
-{
+TableWalker::toLookupLevel(uint8_t lookup_level_as_int) {
     switch (lookup_level_as_int) {
-      case LookupLevel::L1:
+    case LookupLevel::L1:
         return LookupLevel::L1;
-      case LookupLevel::L2:
+    case LookupLevel::L2:
         return LookupLevel::L2;
-      case LookupLevel::L3:
+    case LookupLevel::L3:
         return LookupLevel::L3;
-      default:
+    default:
         panic("Invalid lookup level conversion");
     }
 }
 
 /* this method keeps track of the table walker queue's residency, so
  * needs to be called whenever requests start and complete. */
-void
-TableWalker::pendingChange()
-{
+void TableWalker::pendingChange() {
     unsigned n = pendingQueue.size();
     if ((currState != NULL) && (currState != pendingQueue.front())) {
         ++n;
@@ -2453,54 +2349,57 @@ TableWalker::pendingChange()
     }
 }
 
-Fault
-TableWalker::testWalk(Addr pa, Addr size, TlbEntry::DomainType domain,
-                      LookupLevel lookup_level, bool stage2)
-{
+Fault TableWalker::testWalk(Addr pa, Addr size, TlbEntry::DomainType domain,
+                            LookupLevel lookup_level, bool stage2) {
     return mmu->testWalk(pa, size, currState->vaddr, currState->isSecure,
                          currState->mode, domain, lookup_level, stage2);
 }
 
-
 uint8_t
-TableWalker::pageSizeNtoStatBin(uint8_t N)
-{
+TableWalker::pageSizeNtoStatBin(uint8_t N) {
     /* for stats.pageSizes */
-    switch(N) {
-        case 12: return 0; // 4K
-        case 14: return 1; // 16K (using 16K granule in v8-64)
-        case 16: return 2; // 64K
-        case 20: return 3; // 1M
-        case 21: return 4; // 2M-LPAE
-        case 24: return 5; // 16M
-        case 25: return 6; // 32M (using 16K granule in v8-64)
-        case 29: return 7; // 512M (using 64K granule in v8-64)
-        case 30: return 8; // 1G-LPAE
-        case 42: return 9; // 1G-LPAE
-        default:
-            panic("unknown page size");
-            return 255;
+    switch (N) {
+    case 12:
+        return 0; // 4K
+    case 14:
+        return 1; // 16K (using 16K granule in v8-64)
+    case 16:
+        return 2; // 64K
+    case 20:
+        return 3; // 1M
+    case 21:
+        return 4; // 2M-LPAE
+    case 24:
+        return 5; // 16M
+    case 25:
+        return 6; // 32M (using 16K granule in v8-64)
+    case 29:
+        return 7; // 512M (using 64K granule in v8-64)
+    case 30:
+        return 8; // 1G-LPAE
+    case 42:
+        return 9; // 1G-LPAE
+    default:
+        panic("unknown page size");
+        return 255;
     }
 }
 
-Fault
-TableWalker::readDataUntimed(ThreadContext *tc, Addr vaddr, Addr desc_addr,
-    uint8_t *data, int num_bytes, Request::Flags flags, BaseMMU::Mode mode,
-    MMU::ArmTranslationType tran_type, bool functional)
-{
+Fault TableWalker::readDataUntimed(ThreadContext *tc, Addr vaddr, Addr desc_addr,
+                                   uint8_t *data, int num_bytes, Request::Flags flags, BaseMMU::Mode mode,
+                                   MMU::ArmTranslationType tran_type, bool functional) {
     Fault fault;
 
     // translate to physical address using the second stage MMU
     auto req = std::make_shared<Request>();
-    req->setVirt(desc_addr, num_bytes, flags | Request::PT_WALK,
-                requestorId, 0);
+    req->setVirt(desc_addr, num_bytes, flags | Request::PT_WALK, requestorId, 0);
 
     if (functional) {
         fault = mmu->translateFunctional(req, tc, BaseMMU::Read,
-            tran_type, true);
+                                         tran_type, true);
     } else {
         fault = mmu->translateAtomic(req, tc, BaseMMU::Read,
-            tran_type, true);
+                                     tran_type, true);
     }
 
     // Now do the access.
@@ -2525,31 +2424,26 @@ TableWalker::readDataUntimed(ThreadContext *tc, Addr vaddr, Addr desc_addr,
     return fault;
 }
 
-void
-TableWalker::readDataTimed(ThreadContext *tc, Addr desc_addr,
-                           Stage2Walk *translation, int num_bytes,
-                           Request::Flags flags)
-{
+void TableWalker::readDataTimed(ThreadContext *tc, Addr desc_addr,
+                                Stage2Walk *translation, int num_bytes,
+                                Request::Flags flags) {
     // translate to physical address using the second stage MMU
     translation->setVirt(
-            desc_addr, num_bytes, flags | Request::PT_WALK, requestorId);
+        desc_addr, num_bytes, flags | Request::PT_WALK, requestorId);
     translation->translateTiming(tc);
 }
 
 TableWalker::Stage2Walk::Stage2Walk(TableWalker &_parent,
-        uint8_t *_data, Event *_event, Addr vaddr, BaseMMU::Mode _mode,
-        MMU::ArmTranslationType tran_type)
+                                    uint8_t *_data, Event *_event, Addr vaddr, BaseMMU::Mode _mode,
+                                    MMU::ArmTranslationType tran_type)
     : data(_data), numBytes(0), event(_event), parent(_parent),
-      oVAddr(vaddr), mode(_mode), tranType(tran_type), fault(NoFault)
-{
+      oVAddr(vaddr), mode(_mode), tranType(tran_type), fault(NoFault) {
     req = std::make_shared<Request>();
 }
 
-void
-TableWalker::Stage2Walk::finish(const Fault &_fault,
-                                const RequestPtr &req,
-                                ThreadContext *tc, BaseMMU::Mode mode)
-{
+void TableWalker::Stage2Walk::finish(const Fault &_fault,
+                                     const RequestPtr &req,
+                                     ThreadContext *tc, BaseMMU::Mode mode) {
     fault = _fault;
 
     // If there was a fault annotate it with the flag saying the foult occured
@@ -2571,41 +2465,38 @@ TableWalker::Stage2Walk::finish(const Fault &_fault,
     }
 }
 
-void
-TableWalker::Stage2Walk::translateTiming(ThreadContext *tc)
-{
+void TableWalker::Stage2Walk::translateTiming(ThreadContext *tc) {
     parent.mmu->translateTiming(req, tc, this, mode, tranType, true);
 }
 
 TableWalker::TableWalkerStats::TableWalkerStats(statistics::Group *parent)
     : statistics::Group(parent),
-    ADD_STAT(walks, statistics::units::Count::get(),
-             "Table walker walks requested"),
-    ADD_STAT(walksShortDescriptor, statistics::units::Count::get(),
-             "Table walker walks initiated with short descriptors"),
-    ADD_STAT(walksLongDescriptor, statistics::units::Count::get(),
-             "Table walker walks initiated with long descriptors"),
-    ADD_STAT(walksShortTerminatedAtLevel, statistics::units::Count::get(),
-             "Level at which table walker walks with short descriptors "
-             "terminate"),
-    ADD_STAT(walksLongTerminatedAtLevel, statistics::units::Count::get(),
-             "Level at which table walker walks with long descriptors "
-             "terminate"),
-    ADD_STAT(squashedBefore, statistics::units::Count::get(),
-             "Table walks squashed before starting"),
-    ADD_STAT(squashedAfter, statistics::units::Count::get(),
-             "Table walks squashed after completion"),
-    ADD_STAT(walkWaitTime, statistics::units::Tick::get(),
-             "Table walker wait (enqueue to first request) latency"),
-    ADD_STAT(walkServiceTime, statistics::units::Tick::get(),
-             "Table walker service (enqueue to completion) latency"),
-    ADD_STAT(pendingWalks, statistics::units::Tick::get(),
-             "Table walker pending requests distribution"),
-    ADD_STAT(pageSizes, statistics::units::Count::get(),
-             "Table walker page sizes translated"),
-    ADD_STAT(requestOrigin, statistics::units::Count::get(),
-             "Table walker requests started/completed, data/inst")
-{
+      ADD_STAT(walks, statistics::units::Count::get(),
+               "Table walker walks requested"),
+      ADD_STAT(walksShortDescriptor, statistics::units::Count::get(),
+               "Table walker walks initiated with short descriptors"),
+      ADD_STAT(walksLongDescriptor, statistics::units::Count::get(),
+               "Table walker walks initiated with long descriptors"),
+      ADD_STAT(walksShortTerminatedAtLevel, statistics::units::Count::get(),
+               "Level at which table walker walks with short descriptors "
+               "terminate"),
+      ADD_STAT(walksLongTerminatedAtLevel, statistics::units::Count::get(),
+               "Level at which table walker walks with long descriptors "
+               "terminate"),
+      ADD_STAT(squashedBefore, statistics::units::Count::get(),
+               "Table walks squashed before starting"),
+      ADD_STAT(squashedAfter, statistics::units::Count::get(),
+               "Table walks squashed after completion"),
+      ADD_STAT(walkWaitTime, statistics::units::Tick::get(),
+               "Table walker wait (enqueue to first request) latency"),
+      ADD_STAT(walkServiceTime, statistics::units::Tick::get(),
+               "Table walker service (enqueue to completion) latency"),
+      ADD_STAT(pendingWalks, statistics::units::Tick::get(),
+               "Table walker pending requests distribution"),
+      ADD_STAT(pageSizes, statistics::units::Count::get(),
+               "Table walker page sizes translated"),
+      ADD_STAT(requestOrigin, statistics::units::Count::get(),
+               "Table walker requests started/completed, data/inst") {
     walksShortDescriptor
         .flags(statistics::nozero);
 
@@ -2644,12 +2535,12 @@ TableWalker::TableWalkerStats::TableWalkerStats(statistics::Group *parent)
     pendingWalks
         .init(16)
         .flags(statistics::pdf | statistics::dist | statistics::nozero |
-            statistics::nonan);
+               statistics::nonan);
 
     pageSizes // see DDI 0487A D4-1661
         .init(10)
         .flags(statistics::total | statistics::pdf | statistics::dist |
-            statistics::nozero);
+               statistics::nozero);
     pageSizes.subname(0, "4KiB");
     pageSizes.subname(1, "16KiB");
     pageSizes.subname(2, "64KiB");
@@ -2662,12 +2553,12 @@ TableWalker::TableWalkerStats::TableWalkerStats(statistics::Group *parent)
     pageSizes.subname(9, "4TiB");
 
     requestOrigin
-        .init(2,2) // Instruction/Data, requests/completed
+        .init(2, 2) // Instruction/Data, requests/completed
         .flags(statistics::total);
-    requestOrigin.subname(0,"Requested");
-    requestOrigin.subname(1,"Completed");
-    requestOrigin.ysubname(0,"Data");
-    requestOrigin.ysubname(1,"Inst");
+    requestOrigin.subname(0, "Requested");
+    requestOrigin.subname(1, "Completed");
+    requestOrigin.ysubname(0, "Data");
+    requestOrigin.ysubname(1, "Inst");
 }
 
 } // namespace gem5

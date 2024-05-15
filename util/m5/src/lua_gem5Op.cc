@@ -25,7 +25,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
@@ -38,71 +37,62 @@
 #include "m5_mmap.h"
 
 static int
-do_arm(lua_State *L)
-{
+do_arm(lua_State *L) {
     uint64_t address = lua_tointeger(L, 1);
     m5_arm(address);
     return 0;
 }
 
 static int
-do_quiesce(lua_State *L)
-{
+do_quiesce(lua_State *L) {
     m5_quiesce();
     return 0;
 }
 
 static int
-do_quiesce_ns(lua_State *L)
-{
+do_quiesce_ns(lua_State *L) {
     uint64_t ns = lua_tointeger(L, 1);
     m5_quiesce_ns(ns);
     return 0;
 }
 
 static int
-do_quiesce_cycle(lua_State *L)
-{
+do_quiesce_cycle(lua_State *L) {
     uint64_t cycles = lua_tointeger(L, 1);
     m5_quiesce_cycle(cycles);
     return 0;
 }
 
 static int
-do_quiesce_time(lua_State *L)
-{
+do_quiesce_time(lua_State *L) {
     uint64_t ns = m5_quiesce_time();
     lua_pushinteger(L, ns);
     return 1;
 }
 
 static int
-do_rpns(lua_State *L)
-{
+do_rpns(lua_State *L) {
     uint64_t ns = m5_rpns();
     lua_pushinteger(L, ns);
     return 1;
 }
 
 static int
-do_wake_cpu(lua_State *L)
-{
+do_wake_cpu(lua_State *L) {
     uint64_t cpuid = lua_tointeger(L, 1);
     m5_wake_cpu(cpuid);
     return 0;
 }
 
 static int
-do_exit(lua_State *L)
-{
+do_exit(lua_State *L) {
     uint64_t ns_delay = lua_tointeger(L, 1);
     m5_exit(ns_delay);
     return 0;
 }
 
 static int
-do_sum(lua_State *L)
-{
+do_sum(lua_State *L) {
     uint64_t a = lua_tointeger(L, 1);
     uint64_t b = lua_tointeger(L, 2);
     uint64_t c = lua_tointeger(L, 3);
@@ -114,9 +104,19 @@ do_sum(lua_State *L)
     return 1;
 }
 
+// static int
+// do_MAA_load(lua_State *L) {
+//     int *a = (int)lua_topointer(L, 1);
+//     int *b = (int)lua_topointer(L, 2);
+//     int min = lua_tointeger(L, 3);
+//     int max = lua_tointeger(L, 4);
+//     int *P_a = m5_sum(a, b, min, max);
+//     lua_pushinteger(L, P_a);
+//     return 1;
+// }
+
 static int
-do_fail(lua_State *L)
-{
+do_fail(lua_State *L) {
     uint64_t ns_delay = lua_tointeger(L, 1);
     uint64_t code = lua_tointeger(L, 2);
     m5_fail(ns_delay, code);
@@ -124,8 +124,7 @@ do_fail(lua_State *L)
 }
 
 static int
-do_init_param(lua_State *L)
-{
+do_init_param(lua_State *L) {
     uint64_t key_str1 = lua_tointeger(L, 1);
     uint64_t key_str2 = lua_tointeger(L, 2);
     lua_pushinteger(L, m5_init_param(key_str1, key_str2));
@@ -133,8 +132,7 @@ do_init_param(lua_State *L)
 }
 
 static int
-do_checkpoint(lua_State *L)
-{
+do_checkpoint(lua_State *L) {
     uint64_t delay = lua_tointeger(L, 1);
     uint64_t period = lua_tointeger(L, 2);
     m5_checkpoint(delay, period);
@@ -142,8 +140,7 @@ do_checkpoint(lua_State *L)
 }
 
 static int
-do_reset_stats(lua_State *L)
-{
+do_reset_stats(lua_State *L) {
     uint64_t ns_delay = lua_tointeger(L, 1);
     uint64_t ns_period = lua_tointeger(L, 2);
     m5_reset_stats(ns_delay, ns_period);
@@ -151,8 +148,7 @@ do_reset_stats(lua_State *L)
 }
 
 static int
-do_dump_stats(lua_State *L)
-{
+do_dump_stats(lua_State *L) {
     uint64_t delay = lua_tointeger(L, 1);
     uint64_t period = lua_tointeger(L, 2);
     m5_dump_stats(delay, period);
@@ -160,8 +156,7 @@ do_dump_stats(lua_State *L)
 }
 
 static int
-do_dump_reset_stats(lua_State *L)
-{
+do_dump_reset_stats(lua_State *L) {
     uint64_t delay = lua_tointeger(L, 1);
     uint64_t period = lua_tointeger(L, 2);
     m5_dump_reset_stats(delay, period);
@@ -169,8 +164,7 @@ do_dump_reset_stats(lua_State *L)
 }
 
 static int
-do_read_file(lua_State *L)
-{
+do_read_file(lua_State *L) {
     uint64_t len = lua_tointeger(L, 1);
     uint64_t offset = lua_tointeger(L, 2);
     char *buf = (char *)malloc(len);
@@ -180,9 +174,8 @@ do_read_file(lua_State *L)
 }
 
 static int
-do_write_file(lua_State *L)
-{
-    const char* buf = lua_tostring(L, 1);
+do_write_file(lua_State *L) {
+    const char *buf = lua_tostring(L, 1);
     uint64_t len = lua_tointeger(L, 2);
     assert(len <= lua_strlen(L, 1));
     uint64_t offset = lua_tointeger(L, 3);
@@ -193,52 +186,45 @@ do_write_file(lua_State *L)
 }
 
 static int
-do_debug_break(lua_State *L)
-{
+do_debug_break(lua_State *L) {
     m5_debug_break();
     return 0;
 }
 
 static int
-do_switch_cpu(lua_State *L)
-{
+do_switch_cpu(lua_State *L) {
     m5_switch_cpu();
     return 0;
 }
 
 static int
-do_dist_toggle_sync(lua_State *L)
-{
+do_dist_toggle_sync(lua_State *L) {
     m5_dist_toggle_sync();
     return 0;
 }
 
 static int
-do_add_symbol(lua_State *L)
-{
+do_add_symbol(lua_State *L) {
     uint64_t addr = lua_tointeger(L, 1);
-    char *string = (char*) lua_tostring(L, 2);
+    char *string = (char *)lua_tostring(L, 2);
     m5_add_symbol(addr, string);
     return 0;
 }
 
 static int
-do_loadsymbol(lua_State *L)
-{
+do_loadsymbol(lua_State *L) {
     m5_load_symbol();
     return 0;
 }
 
 static int
-do_panic(lua_State *L)
-{
+do_panic(lua_State *L) {
     m5_panic();
     return 0;
 }
 
 static int
-do_work_begin(lua_State *L)
-{
+do_work_begin(lua_State *L) {
     uint64_t workid = lua_tointeger(L, 1);
     uint64_t threadid = lua_tointeger(L, 2);
     m5_work_begin(workid, threadid);
@@ -246,29 +232,25 @@ do_work_begin(lua_State *L)
 }
 
 static int
-do_work_end(lua_State *L)
-{
+do_work_end(lua_State *L) {
     uint64_t workid = lua_tointeger(L, 1);
     uint64_t threadid = lua_tointeger(L, 2);
     m5_work_end(workid, threadid);
     return 0;
 }
 
-extern "C"
-{
+extern "C" {
 
 int luaopen_gem5OpLua(lua_State *);
-
 }
 
-int
-luaopen_gem5OpLua(lua_State *L)
-{
+int luaopen_gem5OpLua(lua_State *L) {
     map_m5_mem();
-#define ADD_FUNC(fname) do{                         \
-        lua_pushcfunction(L, fname);                \
-        lua_setfield(L, -2, #fname);                \
-    }while (0)
+#define ADD_FUNC(fname)              \
+    do {                             \
+        lua_pushcfunction(L, fname); \
+        lua_setfield(L, -2, #fname); \
+    } while (0)
 
     lua_newtable(L);
     ADD_FUNC(do_arm);

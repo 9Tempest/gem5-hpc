@@ -30,23 +30,22 @@
 #define __CACHE_TAGGED_ENTRY_HH__
 
 #include <cassert>
+#include <cstdint>
 
 #include "base/cprintf.hh"
 #include "base/types.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 /**
  * A tagged entry is an entry containing a tag. Each tag is accompanied by a
  * secure bit, which informs whether it belongs to a secure address space.
  * A tagged entry's contents are only relevant if it is marked as valid.
  */
-class TaggedEntry : public ReplaceableEntry
-{
-  public:
-    TaggedEntry() : _valid(false), _secure(false), _tag(MaxAddr) {}
+class TaggedEntry : public ReplaceableEntry {
+public:
+    TaggedEntry() : _valid(false), _secure(false), _tag(MaxAddr), _region(-1) {}
     ~TaggedEntry() = default;
 
     /**
@@ -70,6 +69,8 @@ class TaggedEntry : public ReplaceableEntry
      */
     virtual Addr getTag() const { return _tag; }
 
+    int8_t getRegion() const { return _region; }
+
     /**
      * Checks if the given tag information corresponds to this entry's.
      *
@@ -78,8 +79,7 @@ class TaggedEntry : public ReplaceableEntry
      * @return True if the tag information match this entry's.
      */
     virtual bool
-    matchTag(Addr tag, bool is_secure) const
-    {
+    matchTag(Addr tag, bool is_secure) const {
         return isValid() && (getTag() == tag) && (isSecure() == is_secure);
     }
 
@@ -90,8 +90,7 @@ class TaggedEntry : public ReplaceableEntry
      * @param tag The tag value.
      */
     virtual void
-    insert(const Addr tag, const bool is_secure)
-    {
+    insert(const Addr tag, const bool is_secure) {
         setValid();
         setTag(tag);
         if (is_secure) {
@@ -100,21 +99,22 @@ class TaggedEntry : public ReplaceableEntry
     }
 
     /** Invalidate the block. Its contents are no longer valid. */
-    virtual void invalidate()
-    {
+    virtual void invalidate() {
         _valid = false;
         setTag(MaxAddr);
+        setRegion(-1);
         clearSecure();
     }
 
     std::string
-    print() const override
-    {
+    print() const override {
         return csprintf("tag: %#x secure: %d valid: %d | %s", getTag(),
-            isSecure(), isValid(), ReplaceableEntry::print());
+                        isSecure(), isValid(), ReplaceableEntry::print());
     }
 
-  protected:
+    void setRegion(int8_t region) { _region = region; }
+
+protected:
     /**
      * Set tag associated to this block.
      *
@@ -127,13 +127,12 @@ class TaggedEntry : public ReplaceableEntry
 
     /** Set valid bit. The block must be invalid beforehand. */
     virtual void
-    setValid()
-    {
+    setValid() {
         assert(!isValid());
         _valid = true;
     }
 
-  private:
+private:
     /**
      * Valid bit. The contents of this entry are only valid if this bit is set.
      * @sa invalidate()
@@ -150,10 +149,12 @@ class TaggedEntry : public ReplaceableEntry
     /** The entry's tag. */
     Addr _tag;
 
+    int8_t _region;
+
     /** Clear secure bit. Should be only used by the invalidation function. */
     void clearSecure() { _secure = false; }
 };
 
 } // namespace gem5
 
-#endif//__CACHE_TAGGED_ENTRY_HH__
+#endif //__CACHE_TAGGED_ENTRY_HH__

@@ -44,7 +44,6 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
 
 // #define TIMER_ENABLED
 #ifdef _OPENMP
@@ -54,14 +53,6 @@
 #define GEM5
 #ifdef GEM5
 #include <gem5/m5ops.h>
-#define LOOP1_WORK_BUFF     0
-#define LOOP1_KEY_ARRAY     1
-#define LOOP2_KEY_ARRAY     2
-#define LOOP2_KEY_BUFF2     3
-#define LOOP2_BUCKET_PTRS   4
-#define LOOP3_BUCKET_PTRS   5
-#define LOOP3_KEY_BUFF_PTR  6
-#define LOOP3_KEY_BUFF_PTR2 7
 #endif
 
 #ifdef TIMER_ENABLED
@@ -95,8 +86,8 @@
 /*  CLASS S  */
 /*************/
 #if CLASS == 'S'
-#define TOTAL_KEYS_LOG_2  16
-#define MAX_KEY_LOG_2     11
+#define TOTAL_KEYS_LOG_2 16
+#define MAX_KEY_LOG_2 11
 #define NUM_BUCKETS_LOG_2 9
 #endif
 
@@ -104,8 +95,8 @@
 /*  CLASS W  */
 /*************/
 #if CLASS == 'W'
-#define TOTAL_KEYS_LOG_2  20
-#define MAX_KEY_LOG_2     16
+#define TOTAL_KEYS_LOG_2 20
+#define MAX_KEY_LOG_2 16
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
@@ -113,8 +104,8 @@
 /*  CLASS A  */
 /*************/
 #if CLASS == 'A'
-#define TOTAL_KEYS_LOG_2  23
-#define MAX_KEY_LOG_2     19
+#define TOTAL_KEYS_LOG_2 23
+#define MAX_KEY_LOG_2 19
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
@@ -122,8 +113,8 @@
 /*  CLASS B  */
 /*************/
 #if CLASS == 'B'
-#define TOTAL_KEYS_LOG_2  25
-#define MAX_KEY_LOG_2     21
+#define TOTAL_KEYS_LOG_2 25
+#define MAX_KEY_LOG_2 21
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
@@ -131,8 +122,8 @@
 /*  CLASS C  */
 /*************/
 #if CLASS == 'C'
-#define TOTAL_KEYS_LOG_2  27
-#define MAX_KEY_LOG_2     23
+#define TOTAL_KEYS_LOG_2 27
+#define MAX_KEY_LOG_2 23
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
@@ -140,8 +131,8 @@
 /*  CLASS D  */
 /*************/
 #if CLASS == 'D'
-#define TOTAL_KEYS_LOG_2  31
-#define MAX_KEY_LOG_2     27
+#define TOTAL_KEYS_LOG_2 31
+#define MAX_KEY_LOG_2 27
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
@@ -149,24 +140,24 @@
 /*  CLASS E  */
 /*************/
 #if CLASS == 'E'
-#define TOTAL_KEYS_LOG_2  35
-#define MAX_KEY_LOG_2     31
+#define TOTAL_KEYS_LOG_2 35
+#define MAX_KEY_LOG_2 31
 #define NUM_BUCKETS_LOG_2 10
 #endif
 
 #if (CLASS == 'D' || CLASS == 'E')
 #define TOTAL_KEYS (1L << TOTAL_KEYS_LOG_2)
-#define TOTAL_KS1  (1 << (TOTAL_KEYS_LOG_2 - 8))
-#define TOTAL_KS2  (1 << 8)
-#define MAX_KEY    (1L << MAX_KEY_LOG_2)
+#define TOTAL_KS1 (1 << (TOTAL_KEYS_LOG_2 - 8))
+#define TOTAL_KS2 (1 << 8)
+#define MAX_KEY (1L << MAX_KEY_LOG_2)
 #else
 #define TOTAL_KEYS (1 << TOTAL_KEYS_LOG_2)
-#define TOTAL_KS1  TOTAL_KEYS
-#define TOTAL_KS2  1
-#define MAX_KEY    (1 << MAX_KEY_LOG_2)
+#define TOTAL_KS1 TOTAL_KEYS
+#define TOTAL_KS2 1
+#define MAX_KEY (1 << MAX_KEY_LOG_2)
 #endif
-#define NUM_BUCKETS     (1 << NUM_BUCKETS_LOG_2)
-#define NUM_KEYS        TOTAL_KEYS
+#define NUM_BUCKETS (1 << NUM_BUCKETS_LOG_2)
+#define NUM_KEYS TOTAL_KEYS
 #define SIZE_OF_BUFFERS NUM_KEYS
 
 // Changed configuration
@@ -200,22 +191,16 @@ int passed_verification;
 /* These are the three main arrays. */
 /* See SIZE_OF_BUFFERS def above    */
 /************************************/
-// Total 38MB
-// 16MB
-INT_TYPE key_array[SIZE_OF_BUFFERS];
-// 2MB
-INT_TYPE key_buff1[MAX_KEY];
-// 16MB
-INT_TYPE key_buff2[SIZE_OF_BUFFERS];
-// 16KB
-INT_TYPE **bucket_size;
-// 4KB
-INT_TYPE bucket_ptrs[NUM_BUCKETS];
+INT_TYPE key_array[SIZE_OF_BUFFERS], key_buff1[MAX_KEY],
+    key_buff2[SIZE_OF_BUFFERS], **key_buff1_aptr = NULL;
+#ifdef DO_VERIFY
+INT_TYPE partial_verify_vals[TEST_ARRAY_SIZE];
+#endif
+
+INT_TYPE **bucket_size, bucket_ptrs[NUM_BUCKETS];
 #pragma omp threadprivate(bucket_ptrs)
 
 #ifdef DO_VERIFY
-INT_TYPE partial_verify_vals[TEST_ARRAY_SIZE];
-
 /**********************/
 /* Partial verif info */
 /**********************/
@@ -518,7 +503,7 @@ void full_verify(void) {
             j++;
 
     if (j != 0)
-        std::cout << "Full_verify: number of keys out of sort: " << j << std::endl;
+        std::cout << "Full_verify: number of keys out of sort: %ld\n", (long)j);
     else
         passed_verification++;
 }
@@ -570,18 +555,10 @@ void rank(int iteration) {
             work_buff[i] = 0;
 
             /*  Determine the number of keys in each bucket */
-// LOOP 1
-#ifdef GEM5
-        m5_clear_mem_region();
-        m5_add_mem_region(work_buff, &work_buff[NUM_BUCKETS], LOOP1_WORK_BUFF);
-        m5_add_mem_region(key_array, &key_array[NUM_KEYS], LOOP1_KEY_ARRAY);
-#endif
+            // LOOP 1
 #pragma omp for schedule(static)
         for (i = 0; i < NUM_KEYS; i++)
             work_buff[key_array[i] >> shift]++;
-#ifdef GEM5
-        m5_clear_mem_region();
-#endif
 
         /*  Accumulative bucket sizes are the bucket pointers.
         These are global sizes accumulated upon to each bucket */
@@ -599,21 +576,11 @@ void rank(int iteration) {
 
         /*  Sort into appropriate bucket */
         // LOOP 2
-
-#ifdef GEM5
-        m5_clear_mem_region();
-        m5_add_mem_region(key_array, &key_array[NUM_KEYS], LOOP2_KEY_ARRAY);
-        m5_add_mem_region(key_buff2, &key_buff2[SIZE_OF_BUFFERS], LOOP2_KEY_BUFF2);
-        m5_add_mem_region(bucket_ptrs, &bucket_ptrs[NUM_BUCKETS], LOOP2_BUCKET_PTRS);
-#endif
 #pragma omp for schedule(static)
         for (i = 0; i < NUM_KEYS; i++) {
             k = key_array[i];
             key_buff2[bucket_ptrs[k >> shift]++] = k;
         }
-#ifdef GEM5
-        m5_clear_mem_region();
-#endif
 
         /*  The bucket pointers now point to the final accumulated sizes */
         if (myid < num_threads - 1) {
@@ -633,49 +600,27 @@ void rank(int iteration) {
 #pragma omp for schedule(dynamic)
 #endif
         for (i = 0; i < NUM_BUCKETS; i++) {
+
             /*  Clear the work array section associated with each bucket */
             k1 = i * num_bucket_keys;
             k2 = k1 + num_bucket_keys;
             for (k = k1; k < k2; k++)
                 key_buff_ptr[k] = 0;
-        }
 
-        // LOOP 3
-#ifdef GEM5
-        m5_clear_mem_region();
-        m5_add_mem_region(bucket_ptrs, &bucket_ptrs[NUM_BUCKETS], LOOP3_BUCKET_PTRS);
-        m5_add_mem_region(key_buff_ptr, &key_buff_ptr[MAX_KEY], LOOP3_KEY_BUFF_PTR);
-        m5_add_mem_region(key_buff_ptr2, &key_buff_ptr2[SIZE_OF_BUFFERS], LOOP3_KEY_BUFF_PTR2);
-#endif
-#ifdef SCHED_CYCLIC
-#pragma omp for schedule(static, 1)
-#else
-#pragma omp for schedule(dynamic)
-#endif
-        for (i = 0; i < NUM_BUCKETS; i++) {
+            /*  Ranking of all keys occurs in this section:                 */
+
             /*  In this section, the keys themselves are used as their
             own indexes to determine how many of each there are: their
             individual population                                       */
             m = (i > 0) ? bucket_ptrs[i - 1] : 0;
+            // LOOP3
             for (k = m; k < bucket_ptrs[i]; k++)
-                key_buff_ptr[key_buff_ptr2[k]]++; /* Now they have individual key population */
-        }
-#ifdef GEM5
-        m5_clear_mem_region();
-#endif
+                key_buff_ptr[key_buff_ptr2[k]]++; /* Now they have individual key   */
+                                                  /* population                     */
 
-#ifdef SCHED_CYCLIC
-#pragma omp for schedule(static, 1)
-#else
-#pragma omp for schedule(dynamic)
-#endif
-        for (i = 0; i < NUM_BUCKETS; i++) {
             /*  To obtain ranks of each key, successively add the individual key
             population, not forgetting to add m, the total of lesser keys,
             to the first key population */
-            k1 = i * num_bucket_keys;
-            k2 = k1 + num_bucket_keys;
-            m = (i > 0) ? bucket_ptrs[i - 1] : 0;
             key_buff_ptr[k1] += m;
             for (k = k1 + 1; k < k2; k++)
                 key_buff_ptr[k] += key_buff_ptr[k - 1];
@@ -841,11 +786,7 @@ int main(int argc, char **argv) {
 
 /*  This is the main iteration */
 #ifdef GEM5
-#pragma omp parallel
-    {
-#pragma omp master
-        std::cout << "ROI started: " << omp_get_num_threads() << " threads" << std::endl;
-    }
+    std::cout << "ROI Begin!!!" << std::endl;
     m5_work_begin(0, 0);
     m5_reset_stats(0, 0);
 #endif
