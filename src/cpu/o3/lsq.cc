@@ -124,7 +124,7 @@ void LSQ::addAddrRegion(Addr start, Addr end, int8_t id) {
     assert(end != 0);
     maxRegionID = -1;
     for (int i = 0; i < MAX_CMD_REGIONS; i++) {
-        if (start <= addrRegions[i].first && addrRegions[i].first <= end) {
+        if (start <= addrRegions[i].first && addrRegions[i].first < end) {
             DPRINTF(PseudoInst, "Region[%d]:[0x%x-0x%x] overlaps with new Region[%d]:[0x%x-0x%x], removing it\n", i, addrRegions[i].first, addrRegions[i].second, id, start, end);
             addrRegions[i] = {0, 0};
         } else {
@@ -731,7 +731,7 @@ Fault LSQ::pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
         for (int reg_idx = 0; reg_idx <= maxRegionID; reg_idx++) {
             if (addrRegions[reg_idx].first == 0 && addrRegions[reg_idx].second == 0) {
                 continue;
-            } else if (addrRegions[reg_idx].first <= addr && addr <= addrRegions[reg_idx].second) {
+            } else if (addrRegions[reg_idx].first <= addr && addr < addrRegions[reg_idx].second) {
                 reg = reg_idx;
                 DPRINTF(LSQ, "addr region[%d] [%x-%x] detected for addr[%x]\n", reg_idx, addrRegions[reg_idx].first, addrRegions[reg_idx].second, addr);
                 break;

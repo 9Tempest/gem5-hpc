@@ -552,7 +552,7 @@ def run(options, root, testsys, cpu_class):
 
                 switch_cpus[i].LQEntries = 72
                 switch_cpus[i].SQEntries = 56
-                switch_cpus[i].numIQEntries = 50
+                switch_cpus[i].numIQEntries = 128
                 switch_cpus[i].numROBEntries = 224
                 switch_cpus[i].numPhysIntRegs = 180
                 switch_cpus[i].numPhysFloatRegs = 168

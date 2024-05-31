@@ -1,5 +1,4 @@
-# Copyright (c) 2012 ARM Limited
-# Copyright (c) 2020 Barkhausen Institut
+# Copyright (c) 2012-2013, 2015, 2018, 2023 ARM Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -11,7 +10,7 @@
 # unmodified and in its entirety in all distributions of the software,
 # modified or unmodified, in source code or in binary form.
 #
-# Copyright (c) 2006-2007 The Regents of The University of Michigan
+# Copyright (c) 2005-2007 The Regents of The University of Michigan
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,78 +36,28 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from m5.defines import buildEnv
-from m5.objects import *
-
-from gem5.isas import ISA
-
-# Base implementations of L1, L2, IO and TLB-walker caches. There are
-# used in the regressions and also as base components in the
-# system-configuration scripts. The values are meant to serve as a
-# starting point, and specific parameters can be overridden in the
-# specific instantiations.
+from m5.objects.ClockedObject import ClockedObject
+from m5.params import *
+from m5.proxy import *
+from m5.SimObject import SimObject
 
 
-class L1Cache(Cache):
-    assoc = 2
-    tag_latency = 1
-    data_latency = 1
-    response_latency = 1
-    mshrs = 16
-    tgts_per_mshr = 20
-    sequential_access = False
+class MAA(ClockedObject):
+    type = "MAA"
+    abstract = True
+    cxx_header = "mem/cache/base.hh"
+    cxx_class = "gem5::MAA"
 
+    size = Param.MemorySize("Capacity")
 
-class L1_ICache(L1Cache):
-    is_read_only = True
-    # Writeback clean lines as well
-    writeback_clean = True
-    tag_latency = 2
-    data_latency = 2
+    num_stream_access = Param.Unsigned("Number of MSHRs (max outstanding requests)")
+    num_indirect_access = Param.Unsigned(1, "MSHRs reserved for demand access")
 
+    cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
+    mem_side = RequestPort("Downstream port closer to memory")
 
-class L1_DCache(L1Cache):
-    tag_latency = 4
-    data_latency = 4
+    addr_ranges = VectorParam.AddrRange(
+        [AllMemory], "Address range for the CPU-side port (to allow striping)"
+    )
 
-
-class L2Cache(Cache):
-    assoc = 8
-    tag_latency = 12
-    data_latency = 12
-    response_latency = 12
-    mshrs = 32
-    tgts_per_mshr = 12
-    write_buffers = 8
-    sequential_access = False
-
-# a starting point for an L3 cache
-class L3Cache(Cache):
-    assoc = 64
-    tag_latency = 42
-    data_latency = 42
-    sequential_access = False
-    response_latency = 42
-    mshrs = 256
-    tgts_per_mshr = 8
-    write_buffers = 32
-
-class IOCache(Cache):
-    assoc = 8
-    tag_latency = 50
-    data_latency = 50
-    response_latency = 50
-    mshrs = 20
-    size = "1kB"
-    tgts_per_mshr = 12
-
-
-class PageTableWalkerCache(Cache):
-    assoc = 2
-    tag_latency = 2
-    data_latency = 2
-    response_latency = 2
-    mshrs = 10
-    size = "1kB"
-    tgts_per_mshr = 12
-    is_read_only = False
+    system = Param.System(Parent.any, "System we belong to")

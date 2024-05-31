@@ -56,11 +56,9 @@
 #include "mem/request.hh"
 #include "debug/MinorExecute.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace minor
-{
+namespace minor {
 
 /* Forward declaration of Execute */
 class Execute;
@@ -69,9 +67,8 @@ class Execute;
  *  separates that interface from other classes such as Pipeline, MinorCPU
  *  and DynMinorInst and makes it easier to see what state is accessed by it.
  */
-class ExecContext : public gem5::ExecContext
-{
-  public:
+class ExecContext : public gem5::ExecContext {
+public:
     MinorCPU &cpu;
 
     /** ThreadState object, provides all the architectural state. */
@@ -83,23 +80,20 @@ class ExecContext : public gem5::ExecContext
     /** Instruction for the benefit of memory operations and for PC */
     MinorDynInstPtr inst;
 
-    ExecContext (
+    ExecContext(
         MinorCPU &cpu_,
         SimpleThread &thread_, Execute &execute_,
-        MinorDynInstPtr inst_) :
-        cpu(cpu_),
-        thread(thread_),
-        execute(execute_),
-        inst(inst_)
-    {
+        MinorDynInstPtr inst_) : cpu(cpu_),
+                                 thread(thread_),
+                                 execute(execute_),
+                                 inst(inst_) {
         DPRINTF(MinorExecute, "ExecContext setting PC: %s\n", *inst->pc);
         pcState(*inst->pc);
         setPredicate(inst->readPredicate());
         setMemAccPredicate(inst->readMemAccPredicate());
     }
 
-    ~ExecContext()
-    {
+    ~ExecContext() {
         inst->setPredicate(readPredicate());
         inst->setMemAccPredicate(readMemAccPredicate());
     }
@@ -107,16 +101,14 @@ class ExecContext : public gem5::ExecContext
     Fault
     initiateMemRead(Addr addr, unsigned int size,
                     Request::Flags flags,
-                    const std::vector<bool>& byte_enable) override
-    {
+                    const std::vector<bool> &byte_enable) override {
         assert(byte_enable.size() == size);
         return execute.getLSQ().pushRequest(inst, true /* load */, nullptr,
-            size, addr, flags, nullptr, nullptr, byte_enable);
+                                            size, addr, flags, nullptr, nullptr, byte_enable);
     }
 
     Fault
-    initiateMemMgmtCmd(Request::Flags flags) override
-    {
+    initiateMemMgmtCmd(Request::Flags flags) override {
         panic("ExecContext::initiateMemMgmtCmd() not implemented "
               " on MinorCPU\n");
         return NoFault;
@@ -125,27 +117,24 @@ class ExecContext : public gem5::ExecContext
     Fault
     writeMem(uint8_t *data, unsigned int size, Addr addr,
              Request::Flags flags, uint64_t *res,
-             const std::vector<bool>& byte_enable)
-        override
-    {
+             const std::vector<bool> &byte_enable)
+        override {
         assert(byte_enable.size() == size);
         return execute.getLSQ().pushRequest(inst, false /* store */, data,
-            size, addr, flags, res, nullptr, byte_enable);
+                                            size, addr, flags, res, nullptr, byte_enable);
     }
 
     Fault
     initiateMemAMO(Addr addr, unsigned int size, Request::Flags flags,
-                   AtomicOpFunctorPtr amo_op) override
-    {
+                   AtomicOpFunctorPtr amo_op) override {
         // AMO requests are pushed through the store path
         return execute.getLSQ().pushRequest(inst, false /* amo */, nullptr,
-            size, addr, flags, nullptr, std::move(amo_op),
-            std::vector<bool>(size, true));
+                                            size, addr, flags, nullptr, std::move(amo_op),
+                                            std::vector<bool>(size, true));
     }
 
     RegVal
-    getRegOperand(const StaticInst *si, int idx) override
-    {
+    getRegOperand(const StaticInst *si, int idx) override {
         const RegId &reg = si->srcRegIdx(idx);
         if (reg.is(InvalidRegClass))
             return 0;
@@ -153,20 +142,17 @@ class ExecContext : public gem5::ExecContext
     }
 
     void
-    getRegOperand(const StaticInst *si, int idx, void *val) override
-    {
+    getRegOperand(const StaticInst *si, int idx, void *val) override {
         thread.getReg(si->srcRegIdx(idx), val);
     }
 
     void *
-    getWritableRegOperand(const StaticInst *si, int idx) override
-    {
+    getWritableRegOperand(const StaticInst *si, int idx) override {
         return thread.getWritableReg(si->destRegIdx(idx));
     }
 
     void
-    setRegOperand(const StaticInst *si, int idx, RegVal val) override
-    {
+    setRegOperand(const StaticInst *si, int idx, RegVal val) override {
         const RegId &reg = si->destRegIdx(idx);
         if (reg.is(InvalidRegClass))
             return;
@@ -174,110 +160,94 @@ class ExecContext : public gem5::ExecContext
     }
 
     void
-    setRegOperand(const StaticInst *si, int idx, const void *val) override
-    {
+    setRegOperand(const StaticInst *si, int idx, const void *val) override {
         thread.setReg(si->destRegIdx(idx), val);
     }
 
     bool
-    readPredicate() const override
-    {
+    readPredicate() const override {
         return thread.readPredicate();
     }
 
     void
-    setPredicate(bool val) override
-    {
+    setPredicate(bool val) override {
         thread.setPredicate(val);
     }
 
     bool
-    readMemAccPredicate() const override
-    {
+    readMemAccPredicate() const override {
         return thread.readMemAccPredicate();
     }
 
     void
-    setMemAccPredicate(bool val) override
-    {
+    setMemAccPredicate(bool val) override {
         thread.setMemAccPredicate(val);
     }
 
     // hardware transactional memory
     uint64_t
-    getHtmTransactionUid() const override
-    {
+    getHtmTransactionUid() const override {
         panic("ExecContext::getHtmTransactionUid() not"
               "implemented on MinorCPU\n");
         return 0;
     }
 
     uint64_t
-    newHtmTransactionUid() const override
-    {
+    newHtmTransactionUid() const override {
         panic("ExecContext::newHtmTransactionUid() not"
               "implemented on MinorCPU\n");
         return 0;
     }
 
     bool
-    inHtmTransactionalState() const override
-    {
+    inHtmTransactionalState() const override {
         // ExecContext::inHtmTransactionalState() not
         // implemented on MinorCPU
         return false;
     }
 
     uint64_t
-    getHtmTransactionalDepth() const override
-    {
+    getHtmTransactionalDepth() const override {
         panic("ExecContext::getHtmTransactionalDepth() not"
               "implemented on MinorCPU\n");
         return 0;
     }
 
     const PCStateBase &
-    pcState() const override
-    {
+    pcState() const override {
         return thread.pcState();
     }
 
     void
-    pcState(const PCStateBase &val) override
-    {
+    pcState(const PCStateBase &val) override {
         thread.pcState(val);
     }
 
     RegVal
-    readMiscRegNoEffect(int misc_reg) const
-    {
+    readMiscRegNoEffect(int misc_reg) const {
         return thread.readMiscRegNoEffect(misc_reg);
     }
 
     RegVal
-    readMiscReg(int misc_reg) override
-    {
+    readMiscReg(int misc_reg) override {
         return thread.readMiscReg(misc_reg);
     }
 
     void
-    setMiscReg(int misc_reg, RegVal val) override
-    {
+    setMiscReg(int misc_reg, RegVal val) override {
         thread.setMiscReg(misc_reg, val);
     }
 
     RegVal
-    readMiscRegOperand(const StaticInst *si, int idx) override
-    {
-        const RegId& reg = si->srcRegIdx(idx);
+    readMiscRegOperand(const StaticInst *si, int idx) override {
+        const RegId &reg = si->srcRegIdx(idx);
         assert(reg.is(MiscRegClass));
         return thread.readMiscReg(reg.index());
     }
 
     void
-    setMiscRegOperand(const StaticInst *si, int idx, RegVal val) override
-    {
-        const RegId& reg = si->destRegIdx(idx);
+    setMiscRegOperand(const StaticInst *si, int idx, RegVal val) override {
+        const RegId &reg = si->destRegIdx(idx);
         assert(reg.is(MiscRegClass));
         return thread.setMiscReg(reg.index(), val);
     }
@@ -293,36 +263,31 @@ class ExecContext : public gem5::ExecContext
 
     /* X86: TLB twiddling */
     void
-    demapPage(Addr vaddr, uint64_t asn) override
-    {
+    demapPage(Addr vaddr, uint64_t asn) override {
         thread.getMMUPtr()->demapPage(vaddr, asn);
     }
 
     BaseCPU *getCpuPtr() { return &cpu; }
 
-  public:
+public:
     // monitor/mwait funtions
     void
-    armMonitor(Addr address) override
-    {
+    armMonitor(Addr address) override {
         getCpuPtr()->armMonitor(inst->id.threadId, address);
     }
 
     bool
-    mwait(PacketPtr pkt) override
-    {
+    mwait(PacketPtr pkt) override {
         return getCpuPtr()->mwait(inst->id.threadId, pkt);
     }
 
     void
-    mwaitAtomic(ThreadContext *tc) override
-    {
+    mwaitAtomic(ThreadContext *tc) override {
         return getCpuPtr()->mwaitAtomic(inst->id.threadId, tc, thread.mmu);
     }
 
     AddressMonitor *
-    getAddrMonitor() override
-    {
+    getAddrMonitor() override {
         return getCpuPtr()->getCpuAddrMonitor(inst->id.threadId);
     }
 };

@@ -110,65 +110,112 @@ def merge_stats(stats):
             merged_stats[key] = merge_stats(stats[key])
     return merged_stats
 
+def extraxt_mem(file_path, interests):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+
+    data = {}
+    for line in lines:
+        for interest in interests:
+            if f"{interest}:" in line:
+                words = line.split(" ")
+                while "" in words:
+                    words.remove("")
+                data[interest] = int(words[7])
+    return data
+
 # Example usage
 # input = '/data3/gem5/tests/test-progs/spmmv/m5out/stats.txt'
 # output = '/data3/gem5/tests/test-progs/spmmv/m5out/stats.json'
 if __name__ == '__main__':
     #Take arguments for the file path and output
     parser = argparse.ArgumentParser(description='Convert stats.txt to JSON and filter based on interests.')
-    parser.add_argument('--input', type=str, help='Path to the input stats.txt file.')
+    parser.add_argument('--input_stats', type=str, help='Path to the input stats.txt file.')
+    parser.add_argument('--input_logs', type=str, help='Path to the input stats.txt file.')
     parser.add_argument('--output', type=str, help='Path to the output JSON file.')
 
     args = parser.parse_args()
 
-    interest_list = ["cpi",
-                     "loadToUse::mean"]
+    interest_list = ["cpi"]
+    tmp = []
+    
+    regions = []
+    for idx in range(0, 32):
+        regions.append(str(idx))
+    regions.append("T")
 
-    tmp = ["demandHits::switch_cpus",
-          "demandMisses::switch_cpus",
-          "demandAccesses::switch_cpus",
-          "demandMissRate::switch_cpus",
-          "demandAvgMissLatency::switch_cpus",
-          "demandMshrHits::switch_cpus",
-          "demandMshrMisses::switch_cpus",
-          "demandMshrAccesses::switch_cpus",
-          "demandMshrMissRate::switch_cpus",
-          "demandAvgMshrMissLatency::switch_cpus"]
+    for idx in regions:
+        interest_list.append(f"loadToUse_{idx}::mean")
+        tmp.append(f"demandHits_{idx}::switch_cpus")
+        tmp.append(f"demandMisses_{idx}::switch_cpus")
+        tmp.append(f"demandAccesses_{idx}::switch_cpus")
+        tmp.append(f"demandMissRate_{idx}::switch_cpus")
+        tmp.append(f"demandAvgMissLatency_{idx}::switch_cpus")
+        tmp.append(f"demandMshrHits_{idx}::switch_cpus")
+        tmp.append(f"demandMshrMisses_{idx}::switch_cpus")
+        tmp.append(f"demandMshrAccesses_{idx}::switch_cpus")
+        tmp.append(f"demandMshrMissRate_{idx}::switch_cpus")
+        tmp.append(f"demandAvgMshrMissLatency_{idx}::switch_cpus")
     
     for core in range(0, 4):
         for item in tmp:
             interest_list.append(f"{item}{core}")
+    
+    interest_list_mem = []
+    for idx in regions:
+        for channel in [0,1]:
+            interest_list_mem.append(f"CH{channel}_num_WR_commands_{idx}")
+            interest_list_mem.append(f"CH{channel}_num_RD_commands_{idx}")
+            interest_list_mem.append(f"CH{channel}_num_PRE_commands_{idx}")
 
-    json_data = convert_to_json(args.input, args.output)
+    json_data = convert_to_json(args.input_stats, args.output)
     json_data = filter_stats(json_data, interest_list)
     merged_json_data = merge_stats(json_data)
+    json_data_mem = extraxt_mem(args.input_logs, interest_list_mem)
 
     # Write the JSON data to the specified output file
     with open(args.output, 'w') as output_file:
         json.dump(json_data, output_file, indent=2)
         json.dump(merged_json_data, output_file, indent=2)
+
+    def accessor(comp, mod, metr):
+        if comp == None:
+            if metr in merged_json_data['system'][mod]:
+                return merged_json_data['system'][mod][metr]['data']
+            else:
+                return {'val': 0, 'count': 1}
+        else:
+            if metr in merged_json_data['system'][comp][mod]:
+                return merged_json_data['system'][comp][mod][metr]['data']
+            else:
+                return {'val': 0, 'count': 1}
     
-    latency = merged_json_data['system']['switch_cpus']['lsq0']['loadToUse::mean']
-    print(f"{latency['val'] / latency['count']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['dcache']['demandAccesses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['dcache']['demandHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['dcache']['demandMisses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['dcache']['demandMshrHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['dcache']['demandMshrMisses::switch_cpus']['data']['val']}", end=',')
-    latency = merged_json_data['system']['cpu']['dcache']['demandAvgMissLatency::switch_cpus']['data']
-    print(f"{latency['val'] / latency['count'] / 333.0000}", end=',')
-    print(f"{merged_json_data['system']['cpu']['l2cache']['demandAccesses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['l2cache']['demandHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['l2cache']['demandMisses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['l2cache']['demandMshrHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['cpu']['l2cache']['demandMshrMisses::switch_cpus']['data']['val']}", end=',')
-    latency = merged_json_data['system']['cpu']['l2cache']['demandAvgMshrMissLatency::switch_cpus']['data']
-    print(f"{latency['val'] / latency['count'] / 333.0000}", end=',')
-    print(f"{merged_json_data['system']['l3']['demandAccesses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['l3']['demandHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['l3']['demandMisses::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['l3']['demandMshrHits::switch_cpus']['data']['val']}", end=',')
-    print(f"{merged_json_data['system']['l3']['demandMshrMisses::switch_cpus']['data']['val']}", end=',')
-    latency = merged_json_data['system']['l3']['demandAvgMshrMissLatency::switch_cpus']['data']
-    print(f"{latency['val'] / latency['count'] / 333.0000}", end=',')
-    print()
+    for idx in regions:
+        print(f"{idx}", end=',')
+        latency = merged_json_data['system']['switch_cpus']['lsq0'][f"loadToUse_{idx}::mean"] if f"loadToUse_{idx}::mean" in merged_json_data['system']['switch_cpus']['lsq0'] else {'val': 0, 'count': 1}
+        print(f"{float(latency['val']) / latency['count']}", end=',')
+        print(f"{accessor('cpu', 'dcache', f'demandAccesses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'dcache', f'demandHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'dcache', f'demandMisses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'dcache', f'demandMshrHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'dcache', f'demandMshrMisses_{idx}::switch_cpus')['val']}", end=',')
+        latency = accessor('cpu', 'dcache', f'demandAvgMissLatency_{idx}::switch_cpus')
+        print(f"{float(latency['val']) / latency['count'] / 333.0000}", end=',')
+        print(f"{accessor('cpu', 'l2cache', f'demandAccesses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'l2cache', f'demandHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'l2cache', f'demandMisses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'l2cache', f'demandMshrHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor('cpu', 'l2cache', f'demandMshrMisses_{idx}::switch_cpus')['val']}", end=',')
+        latency = accessor('cpu', 'l2cache', f'demandAvgMshrMissLatency_{idx}::switch_cpus')
+        print(f"{float(latency['val']) / latency['count'] / 333.0000}", end=',')
+        print(f"{accessor(None, 'l3', f'demandAccesses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor(None, 'l3', f'demandHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor(None, 'l3', f'demandMisses_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor(None, 'l3', f'demandMshrHits_{idx}::switch_cpus')['val']}", end=',')
+        print(f"{accessor(None, 'l3', f'demandMshrMisses_{idx}::switch_cpus')['val']}", end=',')
+        latency = accessor(None, 'l3', f'demandAvgMshrMissLatency_{idx}::switch_cpus')
+        print(f"{float(latency['val']) / latency['count'] / 333.0000}", end=',')
+        print(f"{json_data_mem[f'CH0_num_WR_commands_{idx}'] + json_data_mem[f'CH1_num_WR_commands_{idx}']}", end=',')
+        print(f"{json_data_mem[f'CH0_num_RD_commands_{idx}'] + json_data_mem[f'CH1_num_RD_commands_{idx}']}", end=',')
+        print(f"{json_data_mem[f'CH0_num_PRE_commands_{idx}'] + json_data_mem[f'CH1_num_PRE_commands_{idx}']}", end=',')
+        print()

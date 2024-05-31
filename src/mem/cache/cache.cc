@@ -374,7 +374,7 @@ void Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
         if (!mshr) {
             // copy the request and create a new SoftPFReq packet
-            RequestPtr req = std::make_shared<Request>(pkt->req->getPaddr(),
+            RequestPtr req = std::` (pkt->req->getPaddr(),
                                                        pkt->req->getSize(),
                                                        pkt->req->getFlags(),
                                                        pkt->req->requestorId());

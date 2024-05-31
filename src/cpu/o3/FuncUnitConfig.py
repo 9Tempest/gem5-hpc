@@ -44,7 +44,7 @@ from m5.SimObject import SimObject
 
 class IntALU(FUDesc):
     opList = [OpDesc(opClass="IntAlu")]
-    count = 6
+    count = 4
 
 
 class IntMultDiv(FUDesc):
@@ -52,7 +52,6 @@ class IntMultDiv(FUDesc):
         OpDesc(opClass="IntMult", opLat=3),
         OpDesc(opClass="IntDiv", opLat=20, pipelined=False),
     ]
-
     count = 2
 
 
@@ -62,7 +61,7 @@ class FP_ALU(FUDesc):
         OpDesc(opClass="FloatCmp", opLat=2),
         OpDesc(opClass="FloatCvt", opLat=2),
     ]
-    count = 4
+    count = 2
 
 
 class FP_MultDiv(FUDesc):

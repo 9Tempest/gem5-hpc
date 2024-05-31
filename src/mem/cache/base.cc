@@ -274,10 +274,10 @@ void BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_ti
         // lat, neglecting responseLatency, modelling hit latency
         // just as the value of lat overriden by access(), which calls
         // the calculateAccessLatency() function.
+        DPRINTF(Cache, "%s for %s in %llu ticks\n", __func__, pkt->print(), request_time);
         cpuSidePort.schedTimingResp(pkt, request_time);
     } else {
-        DPRINTF(Cache, "%s satisfied %s, no response needed\n", __func__,
-                pkt->print());
+        DPRINTF(Cache, "%s satisfied %s, no response needed\n", __func__, pkt->print());
 
         // queue the packet for deletion, as the sending cache is
         // still relying on it; if the block is found in access(),
@@ -478,12 +478,10 @@ void BaseCache::recvTimingResp(PacketPtr pkt) {
     const bool is_error = pkt->isError();
 
     if (is_error) {
-        DPRINTF(Cache, "%s: Cache received %s with error\n", __func__,
-                pkt->print());
+        DPRINTF(Cache, "%s: Cache received %s with error\n", __func__, pkt->print());
     }
 
-    DPRINTF(Cache, "%s: Handling response %s\n", __func__,
-            pkt->print());
+    DPRINTF(Cache, "%s: Handling response %s\n", __func__, pkt->print());
 
     // if this is a write, we should be looking at an uncacheable
     // write
@@ -532,8 +530,7 @@ void BaseCache::recvTimingResp(PacketPtr pkt) {
     CacheBlk *blk = tags->findBlock(pkt->getAddr(), pkt->isSecure());
 
     if (is_fill && !is_error) {
-        DPRINTF(Cache, "Block for addr %#llx being updated in Cache\n",
-                pkt->getAddr());
+        DPRINTF(Cache, "Block for addr %#llx being updated in Cache\n", pkt->getAddr());
 
         const bool allocate = (writeAllocator && mshr->wasWholeLineWrite) ? writeAllocator->allocate() : mshr->allocOnFill();
         blk = handleFill(pkt, blk, writebacks, allocate);

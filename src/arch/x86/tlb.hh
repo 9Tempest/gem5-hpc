@@ -48,104 +48,95 @@
 #include "params/X86TLB.hh"
 #include "sim/stats.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 class ThreadContext;
 
-namespace X86ISA
-{
-    class Walker;
+namespace X86ISA {
+class Walker;
 
-    class TLB : public BaseTLB
-    {
-      protected:
-        friend class Walker;
+class TLB : public BaseTLB {
+protected:
+    friend class Walker;
 
-        typedef std::list<TlbEntry *> EntryList;
+    typedef std::list<TlbEntry *> EntryList;
 
-        uint32_t configAddress;
+    uint32_t configAddress;
 
-      public:
+public:
+    typedef X86TLBParams Params;
+    TLB(const Params &p);
 
-        typedef X86TLBParams Params;
-        TLB(const Params &p);
+    void takeOverFrom(BaseTLB *otlb) override {}
 
-        void takeOverFrom(BaseTLB *otlb) override {}
+    TlbEntry *lookup(Addr va, bool update_lru = true);
 
-        TlbEntry *lookup(Addr va, bool update_lru = true);
+    void setConfigAddress(uint32_t addr);
+    //concatenate Page Addr and pcid
+    inline Addr concAddrPcid(Addr vpn, uint64_t pcid) {
+        return (vpn | pcid);
+    }
 
-        void setConfigAddress(uint32_t addr);
-        //concatenate Page Addr and pcid
-        inline Addr concAddrPcid(Addr vpn, uint64_t pcid)
-        {
-          return (vpn | pcid);
-        }
+protected:
+    EntryList::iterator lookupIt(Addr va, bool update_lru = true);
 
-      protected:
+    Walker *walker;
 
-        EntryList::iterator lookupIt(Addr va, bool update_lru = true);
+public:
+    Walker *getWalker();
 
-        Walker * walker;
+    void flushAll() override;
 
-      public:
-        Walker *getWalker();
+    void flushNonGlobal();
 
-        void flushAll() override;
+    void demapPage(Addr va, uint64_t asn) override;
 
-        void flushNonGlobal();
+protected:
+    uint32_t size;
 
-        void demapPage(Addr va, uint64_t asn) override;
+    std::vector<TlbEntry> tlb;
 
-      protected:
-        uint32_t size;
+    EntryList freeList;
 
-        std::vector<TlbEntry> tlb;
+    TlbEntryTrie trie;
+    uint64_t lruSeq;
 
-        EntryList freeList;
+    AddrRange m5opRange;
 
-        TlbEntryTrie trie;
-        uint64_t lruSeq;
+    struct TlbStats : public statistics::Group {
+        TlbStats(statistics::Group *parent);
 
-        AddrRange m5opRange;
+        statistics::Scalar rdAccesses;
+        statistics::Scalar wrAccesses;
+        statistics::Scalar rdMisses;
+        statistics::Scalar wrMisses;
+    } stats;
 
-        struct TlbStats : public statistics::Group
-        {
-            TlbStats(statistics::Group *parent);
+    Fault translateInt(bool read, RequestPtr req, ThreadContext *tc);
 
-            statistics::Scalar rdAccesses;
-            statistics::Scalar wrAccesses;
-            statistics::Scalar rdMisses;
-            statistics::Scalar wrMisses;
-        } stats;
+    Fault translate(const RequestPtr &req, ThreadContext *tc,
+                    BaseMMU::Translation *translation, BaseMMU::Mode mode,
+                    bool &delayedResponse, bool timing);
 
-        Fault translateInt(bool read, RequestPtr req, ThreadContext *tc);
+public:
+    void evictLRU();
 
-        Fault translate(const RequestPtr &req, ThreadContext *tc,
-                BaseMMU::Translation *translation, BaseMMU::Mode mode,
-                bool &delayedResponse, bool timing);
+    uint64_t
+    nextSeq() {
+        return ++lruSeq;
+    }
 
-      public:
+    Fault translateAtomic(
+        const RequestPtr &req, ThreadContext *tc,
+        BaseMMU::Mode mode) override;
+    Fault translateFunctional(
+        const RequestPtr &req, ThreadContext *tc,
+        BaseMMU::Mode mode) override;
+    void translateTiming(
+        const RequestPtr &req, ThreadContext *tc,
+        BaseMMU::Translation *translation, BaseMMU::Mode mode) override;
 
-        void evictLRU();
-
-        uint64_t
-        nextSeq()
-        {
-            return ++lruSeq;
-        }
-
-        Fault translateAtomic(
-            const RequestPtr &req, ThreadContext *tc,
-            BaseMMU::Mode mode) override;
-        Fault translateFunctional(
-            const RequestPtr &req, ThreadContext *tc,
-            BaseMMU::Mode mode) override;
-        void translateTiming(
-            const RequestPtr &req, ThreadContext *tc,
-            BaseMMU::Translation *translation, BaseMMU::Mode mode) override;
-
-        /**
+    /**
          * Do post-translation physical address finalization.
          *
          * Some addresses, for example requests going to the APIC,
@@ -158,16 +149,16 @@ namespace X86ISA
          * @param mode Request type (read/write/execute).
          * @return A fault on failure, NoFault otherwise.
          */
-        Fault finalizePhysical(const RequestPtr &req, ThreadContext *tc,
-                               BaseMMU::Mode mode) const override;
+    Fault finalizePhysical(const RequestPtr &req, ThreadContext *tc,
+                           BaseMMU::Mode mode) const override;
 
-        TlbEntry *insert(Addr vpn, const TlbEntry &entry, uint64_t pcid);
+    TlbEntry *insert(Addr vpn, const TlbEntry &entry, uint64_t pcid);
 
-        // Checkpointing
-        void serialize(CheckpointOut &cp) const override;
-        void unserialize(CheckpointIn &cp) override;
+    // Checkpointing
+    void serialize(CheckpointOut &cp) const override;
+    void unserialize(CheckpointIn &cp) override;
 
-        /**
+    /**
          * Get the table walker port. This is used for
          * migrating port connections during a CPU takeOverFrom()
          * call. For architectures that do not have a table walker,
@@ -177,8 +168,8 @@ namespace X86ISA
          *
          * @return A pointer to the walker port
          */
-        Port *getTableWalkerPort() override;
-    };
+    Port *getTableWalkerPort() override;
+};
 
 } // namespace X86ISA
 } // namespace gem5

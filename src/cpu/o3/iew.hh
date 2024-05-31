@@ -55,13 +55,11 @@
 #include "debug/IEW.hh"
 #include "sim/probe/probe.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 struct BaseO3CPUParams;
 
-namespace o3
-{
+namespace o3 {
 
 class FUPool;
 
@@ -84,21 +82,18 @@ class FUPool;
  * up any dependents, and marking the register ready on the
  * scoreboard.
  */
-class IEW
-{
-  public:
+class IEW {
+public:
     /** Overall IEW stage status. Used to determine if the CPU can
      * deschedule itself due to a lack of activity.
      */
-    enum Status
-    {
+    enum Status {
         Active,
         Inactive
     };
 
     /** Status for Issue, Execute, and Writeback stages. */
-    enum StageStatus
-    {
+    enum StageStatus {
         Running,
         Blocked,
         Idle,
@@ -107,7 +102,7 @@ class IEW
         Unblocking
     };
 
-  private:
+private:
     /** Overall stage status. */
     Status _status;
     /** Dispatch status. */
@@ -125,7 +120,7 @@ class IEW
     /** To probe when instruction execution is complete. */
     ProbePointArg<DynInstPtr> *ppToCommit;
 
-  public:
+public:
     /** Constructs a IEW with the given parameters. */
     IEW(CPU *_cpu, const BaseO3CPUParams &params);
 
@@ -231,12 +226,11 @@ class IEW
     // htmUid that has been committed (architecturally, not transactionally)
     // to ensure that the core and the memory subsystem are observing
     // correct ordering constraints.
-    void setLastRetiredHtmUid(ThreadID tid, uint64_t htmUid)
-    {
+    void setLastRetiredHtmUid(ThreadID tid, uint64_t htmUid) {
         ldstQueue.setLastRetiredHtmUid(tid, htmUid);
     }
 
-  private:
+private:
     /** Sends commit proper information for a squash due to a branch
      * mispredict.
      */
@@ -286,13 +280,13 @@ class IEW
     /** Sorts instructions coming from rename into lists separated by thread. */
     void sortInsts();
 
-  public:
+public:
     /** Ticks IEW stage, causing Dispatch, the IQ, the LSQ, Execute, and
      * Writeback to run for one cycle.
      */
     void tick();
 
-  private:
+private:
     /** Updates execution stats based on the instruction. */
     void updateExeInstStats(const DynInstPtr &inst);
 
@@ -336,9 +330,9 @@ class IEW
     std::queue<DynInstPtr> skidBuffer[MaxThreads];
 
     /** Scoreboard pointer. */
-    Scoreboard* scoreboard;
+    Scoreboard *scoreboard;
 
-  private:
+private:
     /** CPU pointer. */
     CPU *cpu;
 
@@ -350,7 +344,7 @@ class IEW
     /** Debug function to print instructions that are issued this cycle. */
     void printAvailableInsts();
 
-  public:
+public:
     /** Instruction queue. */
     InstructionQueue instQueue;
 
@@ -364,7 +358,7 @@ class IEW
      */
     bool updateLSQNextCycle;
 
-  private:
+private:
     /** Records if there is a fetch redirect on this cycle for each thread. */
     bool fetchRedirect[MaxThreads];
 
@@ -414,9 +408,7 @@ class IEW
     /** Maximum size of the skid buffer. */
     unsigned skidBufferMax;
 
-
-    struct IEWStats : public statistics::Group
-    {
+    struct IEWStats : public statistics::Group {
         IEWStats(CPU *cpu);
 
         /** Stat for total number of idle cycles. */
@@ -451,8 +443,7 @@ class IEW
          *  execute. */
         statistics::Formula branchMispredicts;
 
-        struct ExecutedInstStats : public statistics::Group
-        {
+        struct ExecutedInstStats : public statistics::Group {
             ExecutedInstStats(CPU *cpu);
 
             /** Stat for total number of squashed instructions skipped at
