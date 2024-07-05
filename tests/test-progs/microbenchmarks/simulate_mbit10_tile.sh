@@ -1,0 +1,2 @@
+cd tile
+~/gem5-hpc/build/X86/gem5.fast ~/gem5-hpc/configs/deprecated/example/se.py --cpu-type O3CPU --mem-size '16GB' --cmd ./../gather_tile   --caches  --cacheline_size=64 --l1d_size=32kB --l1d_assoc=4 --l1i_size=32kB --l1i_assoc=4 --l2cache --l2_size=1MB --l2_assoc=16 --l3cache --l3_size=32MB

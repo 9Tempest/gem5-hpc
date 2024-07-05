@@ -1,0 +1,41 @@
+Wed Jul  3 22:59:24 EDT 2024 warn: The se.py script is deprecated. It will be removed in future releases of  gem5.
+Wed Jul  3 22:59:24 EDT 2024 Global frequency set at 1000000000000 ticks per second
+Wed Jul  3 22:59:24 EDT 2024 warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+Wed Jul  3 22:59:24 EDT 2024 src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+Wed Jul  3 22:59:24 EDT 2024 system.remote_gdb: Listening for connections on port 7001
+Wed Jul  3 22:59:25 EDT 2024 gem5 Simulator System.  https://www.gem5.org
+Wed Jul  3 22:59:25 EDT 2024 gem5 is copyrighted software; use the --copyright option for details.
+Wed Jul  3 22:59:25 EDT 2024 
+Wed Jul  3 22:59:25 EDT 2024 gem5 version 23.1.0.0
+Wed Jul  3 22:59:25 EDT 2024 gem5 compiled Jun 30 2024 19:29:06
+Wed Jul  3 22:59:25 EDT 2024 gem5 started Jul  3 2024 22:59:24
+Wed Jul  3 22:59:25 EDT 2024 gem5 executing on mbit9, pid 335836
+Wed Jul  3 22:59:25 EDT 2024 command line: /home/lukezhuz/gem5-hpc/build/X86/gem5.fast --outdir=new/CPU-X86O3CPU/BUFFER-1/REGISTER-1/WIDTH-1 /home/lukezhuz/gem5-hpc/configs/deprecated/example/se.py --cpu-type X86O3CPU -n 1 --cpu-buffer-enlarge-factor=1 --cpu-register-enlarge-factor=1 --cpu-width-enlarge-factor=1 --mem-size 16GB --sys-clock 3.2GHz --caches --l1d_size=32kB --l1d_assoc=8 --l1d-hwp-type=StridePrefetcher --l1d_mshrs=16 --l1i_size=32kB --l1i_assoc=8 --l1i-hwp-type=StridePrefetcher --l1i_mshrs=16 --l2cache --l2_size=256kB --l2_assoc=4 --l2-hwp-type=StridePrefetcher --l2_mshrs=32 --l3cache --l3_size=8MB --l3_assoc=16 --l3_mshrs=256 --cacheline_size=64 --mem-type Ramulator2 --mem-channels 1 --cmd ./gather_contention --options 0 --prog-interval=1000 --work-end-exit-count=1
+Wed Jul  3 22:59:25 EDT 2024 
+Wed Jul  3 22:59:25 EDT 2024 Creating memory controllers for [<m5.params.AddrRange object at 0x7945778a9150>] memory ranges and 1 memory channels
+Wed Jul  3 22:59:25 EDT 2024 **** REAL SIMULATION ****
+Wed Jul  3 22:59:25 EDT 2024 Ramulator2 enlarged buffer size by 1 from 32 to 32
+Wed Jul  3 22:59:25 EDT 2024 Ramulator2::Queue size: 32
+Wed Jul  3 22:59:25 EDT 2024 Ramulator2::Queue size: 32
+Wed Jul  3 22:59:25 EDT 2024 Resetting ramulator's stats
+Wed Jul  3 22:59:25 EDT 2024 Resetting generic DRAM system stats
+Wed Jul  3 22:59:25 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 22:59:25 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 22:59:25 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 0.  Starting simulation...
+Wed Jul  3 22:59:25 EDT 2024 src/sim/mem_state.cc:448: info: Increasing stack size by one page.
+Wed Jul  3 22:59:25 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:25 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:25 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall set_robust_list(...)
+Wed Jul  3 22:59:25 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall rseq(...)
+Wed Jul  3 22:59:26 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:26 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:26 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:34 EDT 2024 1000000000: system.cpu progress event, total committed:3157113, progress insts committed: 3157113
+Wed Jul  3 22:59:35 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:35 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:35 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 22:59:36 EDT 2024 Fake Checkpoint started
+Wed Jul  3 22:59:36 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247245500.  Starting simulation...
+Wed Jul  3 22:59:36 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247274500.  Starting simulation...
+Wed Jul  3 22:59:36 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247275500.  Starting simulation...
+Wed Jul  3 22:59:36 EDT 2024 src/sim/process.cc:382: warn: Checkpoints for pipes, device drivers and sockets do not work.

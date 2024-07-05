@@ -1,0 +1,910 @@
+Wed Jul  3 23:10:22 EDT 2024 warn: The se.py script is deprecated. It will be removed in future releases of  gem5.
+Wed Jul  3 23:10:22 EDT 2024 Global frequency set at 1000000000000 ticks per second
+Wed Jul  3 23:10:22 EDT 2024 warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+Wed Jul  3 23:10:22 EDT 2024 src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+Wed Jul  3 23:10:22 EDT 2024 src/base/remote_gdb.cc:418: warn: Sockets disabled, not accepting gdb connections
+Wed Jul  3 23:10:23 EDT 2024 gem5 Simulator System.  https://www.gem5.org
+Wed Jul  3 23:10:23 EDT 2024 gem5 is copyrighted software; use the --copyright option for details.
+Wed Jul  3 23:10:23 EDT 2024 
+Wed Jul  3 23:10:23 EDT 2024 gem5 version 23.1.0.0
+Wed Jul  3 23:10:23 EDT 2024 gem5 compiled Jun 30 2024 19:29:06
+Wed Jul  3 23:10:23 EDT 2024 gem5 started Jul  3 2024 23:10:22
+Wed Jul  3 23:10:23 EDT 2024 gem5 executing on mbit9, pid 339267
+Wed Jul  3 23:10:23 EDT 2024 command line: /home/lukezhuz/gem5-hpc/build/X86/gem5.fast --outdir=gather_contention_dir/CPU-X86O3CPU/BUFFER-1/REGISTER-1/WIDTH-1 /home/lukezhuz/gem5-hpc/configs/deprecated/example/se.py --cpu-type X86O3CPU -n 1 --cpu-buffer-enlarge-factor=1 --cpu-register-enlarge-factor=1 --cpu-width-enlarge-factor=1 --mem-size 16GB --sys-clock 3.2GHz --caches --l1d_size=32kB --l1d_assoc=8 --l1d-hwp-type=StridePrefetcher --l1d_mshrs=16 --l1i_size=32kB --l1i_assoc=8 --l1i-hwp-type=StridePrefetcher --l1i_mshrs=16 --l2cache --l2_size=256kB --l2_assoc=4 --l2-hwp-type=StridePrefetcher --l2_mshrs=32 --l3cache --l3_size=8MB --l3_assoc=16 --l3_mshrs=256 --cacheline_size=64 --mem-type Ramulator2 --mem-channels 1 --cmd ./gather_contention --options 0 --prog-interval=1000 --work-end-exit-count=1
+Wed Jul  3 23:10:23 EDT 2024 
+Wed Jul  3 23:10:23 EDT 2024 info: Standard input is not a terminal, disabling listeners.
+Wed Jul  3 23:10:23 EDT 2024 Creating memory controllers for [<m5.params.AddrRange object at 0x795708301060>] memory ranges and 1 memory channels
+Wed Jul  3 23:10:23 EDT 2024 **** REAL SIMULATION ****
+Wed Jul  3 23:10:23 EDT 2024 Ramulator2 enlarged buffer size by 1 from 32 to 32
+Wed Jul  3 23:10:23 EDT 2024 Ramulator2::Queue size: 32
+Wed Jul  3 23:10:23 EDT 2024 Ramulator2::Queue size: 32
+Wed Jul  3 23:10:23 EDT 2024 Resetting ramulator's stats
+Wed Jul  3 23:10:23 EDT 2024 Resetting generic DRAM system stats
+Wed Jul  3 23:10:23 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 23:10:23 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 23:10:23 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 0.  Starting simulation...
+Wed Jul  3 23:10:23 EDT 2024 src/sim/mem_state.cc:448: info: Increasing stack size by one page.
+Wed Jul  3 23:10:23 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:23 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:24 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall set_robust_list(...)
+Wed Jul  3 23:10:24 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall rseq(...)
+Wed Jul  3 23:10:24 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:24 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:24 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:32 EDT 2024 1000000000: system.cpu progress event, total committed:3157113, progress insts committed: 3157113
+Wed Jul  3 23:10:33 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:33 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:33 EDT 2024 src/sim/syscall_emul.cc:74: warn: ignoring syscall mprotect(...)
+Wed Jul  3 23:10:34 EDT 2024 Fake Checkpoint started
+Wed Jul  3 23:10:34 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247245500.  Starting simulation...
+Wed Jul  3 23:10:34 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247274500.  Starting simulation...
+Wed Jul  3 23:10:34 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247275500.  Starting simulation...
+Wed Jul  3 23:10:34 EDT 2024 src/sim/process.cc:382: warn: Checkpoints for pipes, device drivers and sockets do not work.
+Wed Jul  3 23:11:56 EDT 2024 Writing checkpoint
+Wed Jul  3 23:11:56 EDT 2024 src/sim/simulate.cc:199: info: Entering event queue @ 1247277000.  Starting simulation...
+Wed Jul  3 23:11:56 EDT 2024 Fake Checkpoint ended
+Wed Jul  3 23:11:56 EDT 2024 1: Time taken for allocating buffer for i_length = 100 is 2.17e-07 seconds with distance: 100
+Wed Jul  3 23:11:57 EDT 2024 Resetting ramulator's stats
+Wed Jul  3 23:11:57 EDT 2024 Resetting generic DRAM system stats
+Wed Jul  3 23:11:57 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 23:11:57 EDT 2024 Resetting generic DRAM controller stats
+Wed Jul  3 23:11:57 EDT 2024 Frontend:
+Wed Jul  3 23:11:57 EDT 2024   impl: GEM5
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 MemorySystem:
+Wed Jul  3 23:11:57 EDT 2024   impl: GenericDRAM
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_T: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_T: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_T: 337
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_31: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_30: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_29: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_29: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_28: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_28: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_28: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_27: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_27: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_26: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_26: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_30: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_24: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_25: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_24: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_23: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_24: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_23: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_23: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_25: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_22: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_25: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_22: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_30: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_21: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_22: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_20: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_19: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_19: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_29: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_8: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_8: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_7: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_6: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_1: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_15: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_7: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_21: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_6: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_10: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_5: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_11: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_14: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_4: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_9: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_4: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_27: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_7: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_19: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_0: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_5: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_15: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_4: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_31: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_18: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_0: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_3: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_9: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_10: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_0: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_10: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_18: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_14: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_2: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_15: 0
+Wed Jul  3 23:11:57 EDT 2024   memory_system_cycles: 2040149
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_3: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_1: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_20: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_14: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_2: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_31: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_8: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_12: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_6: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_1: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_20: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_9: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_3: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_26: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_11: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_11: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_12: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_16: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_12: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_17: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_13: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_13: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_13: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_5: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_16: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_16: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_2: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_write_requests_17: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_17: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_other_requests_21: 0
+Wed Jul  3 23:11:57 EDT 2024   total_num_read_requests_18: 0
+Wed Jul  3 23:11:57 EDT 2024   DRAM:
+Wed Jul  3 23:11:57 EDT 2024     impl: DDR4
+Wed Jul  3 23:11:57 EDT 2024   AddrMapper:
+Wed Jul  3 23:11:57 EDT 2024     impl: RoBaRaCoCh
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024   Controller:
+Wed Jul  3 23:11:57 EDT 2024     impl: Generic
+Wed Jul  3 23:11:57 EDT 2024     id: Channel 0
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_T: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_T: 0.000446536025  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_T: 3  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_T: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_T: 3  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_T: 18  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_31: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_31: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_31: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_31: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_30: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_30: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_30: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_T: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_30: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_30: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_30: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_30: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_30: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_30: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_30: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_29: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_29: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_29: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_29: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_29: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_29: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_29: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_28: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_28: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_28: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_28: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_28: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_27: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_27: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_27: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_27: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_27: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_27: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_27: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_26: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_26: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_26: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_T: 49  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_26: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_26: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_26: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_25: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_25: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_25: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_25: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_25: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_25: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_25: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_25: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_24: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_24: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_25: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_24: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_24: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_24: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_23: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_23: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_23: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_23: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_23: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_23: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_11: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_24: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_11: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_10: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_10: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_12: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_26: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_18: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_10: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_21: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_29: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_9: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_9: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_T: 175  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_17: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_11: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_9: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_26: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_2: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_9: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_8: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_9: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_29: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_28: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_9: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_1: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_9: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_21: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_2: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_14: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_26: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_8: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_10: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_8: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_12: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_19: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_10: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_31: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_28: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_19: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_8: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_8: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_10: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_7: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_2: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_27: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_7: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_7: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_27: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_24: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_18: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_16: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_7: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_21: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_7: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_4: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_10: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_6: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_6: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_1: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_0: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_4: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_20: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_5: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_11: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_5: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_6: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_22: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_7: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_4: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_24: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_1: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_11: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_1: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_1: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_5: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_16: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_1: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_13: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_2: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_7: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_10: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_4: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_8: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_1: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_8: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_13: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_17: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_1: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_6: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_19: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_0: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_15: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_16: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_9: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_0: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_4: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_2: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_16: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_2: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_2: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_20: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_27: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_7: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_5: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_31: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_12: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_15: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_1: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_31: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_3: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_16: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_29: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_26: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_17: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_0: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_8: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_22: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_6: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_12: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_5: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_0: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_6: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_3: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_24: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_3: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_10: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_16: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_18: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_15: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_27: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_6: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_12: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_2: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_7: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_22: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_2: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_15: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_9: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_12: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_0: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_3: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_T: 3  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_4: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_5: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_25: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_21: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_4: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_13: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_11: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_T: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_31: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_4: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_8: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_15: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_28: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_3: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_3: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_2: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_0: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_22: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_28: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_5: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_4: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_3: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_24: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_21: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_22: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_9: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_17: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_1: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_18: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_0: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_10: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_30: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_19: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_6: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_0: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_3: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_8: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_13: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_5: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_24: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_17: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_28: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_16: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_5: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_3: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_11: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_22: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_11: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_4: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_7: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_0: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_4: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_23: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_20: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_11: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_11: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_13: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_12: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_9: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_12: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_12: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_17: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_21: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_12: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_3: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_13: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_29: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_13: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_19: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_5: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_13: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_19: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_13: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_21: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_14: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_23: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_14: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_14: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_14: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_15: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_14: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_8: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_6: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_14: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_28: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_6: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_14: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_14: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_14: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_15: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_15: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_15: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_15: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_1: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_16: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_16: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_13: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_16: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_12: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_16: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_25: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_18: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_17: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_3: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_17: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_20: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_2: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_17: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_23: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_17: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_17: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_7: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_18: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_20: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_14: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_18: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_18: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_26: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_18: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_20: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_11: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_18: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_10: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_18: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_31: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_5: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_19: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_31: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_19: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_REFab_commands_19: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_avg_queue_occupancy_19: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_20: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_queue_full_19: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_20: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RDA_commands_20: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PRE_commands_22: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_13: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_20: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_21: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_21: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_21: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_15: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_21: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_0: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WR_commands_20: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_ACT_commands_22: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_22: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_6: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_WRA_commands_22: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_22: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_PREA_commands_23: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH0_max_queue_occupancy_31: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH0_num_RD_commands_23: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     Scheduler:
+Wed Jul  3 23:11:57 EDT 2024       impl: FRFCFS
+Wed Jul  3 23:11:57 EDT 2024     RefreshManager:
+Wed Jul  3 23:11:57 EDT 2024       impl: AllBank
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024   Controller:
+Wed Jul  3 23:11:57 EDT 2024     impl: Generic
+Wed Jul  3 23:11:57 EDT 2024     id: Channel 1
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_T: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_T: 0.000790628546  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_T: 4  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_T: 3  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_T: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_T: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_T: 163  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_T: 3  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_T: 40  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_31: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_31: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_31: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_31: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_31: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_31: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_31: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_30: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_30: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_30: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_30: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_30: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_30: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_30: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_29: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_29: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_29: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_29: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_29: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_28: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_28: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_28: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_28: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_28: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_28: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_28: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_27: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_27: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_27: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_27: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_27: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_T: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_27: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_27: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_26: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_26: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_25: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_25: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_25: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_25: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_25: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_25: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_25: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_25: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_25: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_24: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_24: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_26: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_24: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_31: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_24: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_24: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_24: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_23: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_26: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_23: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_23: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_24: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_11: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_27: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_13: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_11: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_28: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_15: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_10: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_10: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_13: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_10: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_24: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_3: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_10: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_10: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_16: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_26: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_10: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_9: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_9: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_9: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_21: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_9: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_7: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_28: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_9: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_9: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_19: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_3: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_30: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_23: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_8: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_8: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_8: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_15: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_8: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_0: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_21: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_22: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_8: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_11: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_19: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_7: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_17: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_10: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_1: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_6: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_7: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_18: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_30: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_29: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_7: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_6: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_6: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_31: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_11: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_24: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_6: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_27: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_7: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_0: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_6: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_26: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_11: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_6: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_6: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_17: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_11: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_12: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_10: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_21: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_7: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_5: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_5: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_5: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_8: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_19: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_2: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_12: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_9: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_2: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_20: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_13: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_6: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_23: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_5: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_14: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_19: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_28: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_7: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_1: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_5: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_1: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_29: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_23: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_9: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_1: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_3: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_22: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_1: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_29: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_5: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_4: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_26: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_16: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_20: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_4: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_3: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_7: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_5: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_23: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_2: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_2: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_2: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_4: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_5: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_25: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_18: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_0: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_5: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_1: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_17: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_6: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_4: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_11: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_5: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_T: 12  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_10: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_1: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_2: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_30: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_21: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_7: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_9: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_3: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_0: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_29: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_27: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_8: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_1: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_4: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_20: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_29: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_25: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_4: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_6: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_20: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_1: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_7: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_16: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_0: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_0: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_23: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_1: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_26: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_19: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_2: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_8: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_15: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_23: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_0: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_4: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_21: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_11: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_3: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_3: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_3: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_23: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_13: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_14: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_2: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_4: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_18: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_29: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_4: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_31: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_10: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_5: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_11: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_16: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_11: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_20: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_8: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_6: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_11: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_24: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_9: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_15: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_0: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_12: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_12: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_12: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_17: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_12: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_20: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_24: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_12: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_12: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_12: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_12: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_26: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_13: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_16: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_12: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_17: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_31: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_21: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_13: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_3: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_17: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_13: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_13: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_13: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_20: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_13: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_14: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_10: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_14: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_14: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_14: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_0: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_14: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_14: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_22: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_14: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_18: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_18: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_3: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_14: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_27: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_13: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_14: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_4: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_15: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_15: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_15: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_4: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_15: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_2: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_22: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_15: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_15: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_17: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_19: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_18: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_30: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_16: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_16: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_16: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_16: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_0: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_16: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_21: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_16: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_17: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_8: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_17: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_15: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_20: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_17: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_21: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_7: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_22: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_20: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_18: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_0: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_18: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_26: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_26: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_1: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_22: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_18: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_18: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RDA_commands_3: 0  # total number of RDA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_18: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_19: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_17: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_19: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PREA_commands_21: 0  # total number of PREA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_9: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_19: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_19: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_queue_full_19: 0  # number of times the instruction receive rejected because queue was full
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_20: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_2: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_20: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_RD_commands_21: 0  # total number of RD commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WR_commands_21: 0  # total number of WR commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_8: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_2: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_22: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_PRE_commands_22: 0  # total number of PRE commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_WRA_commands_22: 0  # total number of WRA commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_REFab_commands_28: 0  # total number of REFab commands
+Wed Jul  3 23:11:57 EDT 2024     CH1_max_queue_occupancy_22: 0  # maximum occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_avg_queue_occupancy_22: 0  # average occupancy of instruction queue
+Wed Jul  3 23:11:57 EDT 2024     CH1_num_ACT_commands_23: 0  # total number of ACT commands
+Wed Jul  3 23:11:57 EDT 2024     Scheduler:
+Wed Jul  3 23:11:57 EDT 2024       impl: FRFCFS
+Wed Jul  3 23:11:57 EDT 2024     RefreshManager:
+Wed Jul  3 23:11:57 EDT 2024       impl: AllBank
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 
+Wed Jul  3 23:11:57 EDT 2024 Exiting @ tick 1275093000 because work items exit count reached
+Wed Jul  3 23:11:57 EDT 2024 92.55user 3.10system 1:35.68elapsed 99%CPU (0avgtext+0avgdata 481320maxresident)k
+Wed Jul  3 23:11:57 EDT 2024 0inputs+35408outputs (9major+4302702minor)pagefaults 0swaps
