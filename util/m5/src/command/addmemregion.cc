@@ -34,8 +34,8 @@
 namespace {
 
 bool do_add_mem_region(const DispatchTable &dt, Args &args) {
-    void *start;
-    void *end;
+    uint64_t*start;
+    uint64_t*end;
     uint64_t id;
     if (!args.pop(start, 0) || !args.pop(end, 0) || !args.pop(id, 0))
         return false;

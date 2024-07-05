@@ -251,7 +251,7 @@ def config_mem(options, system):
                 mem_ctrl = None
                 if issubclass(intf, Ramulator2):
                     mem_ctrl = dram_intf
-                    mem_ctrl.config_path = "/home/arkhadem/gem5-hpc/ext/ramulator2/ramulator2/example_gem5_config.yaml"
+                    mem_ctrl.config_path = "/home/lukezhuz/gem5-hpc/ext/ramulator2/ramulator2/example_gem5_config.yaml"
                     mem_ctrl.enlarge_buffer_factor = options.cpu_buffer_enlarge_factor
                 else:
                     mem_ctrl = dram_intf.controller()

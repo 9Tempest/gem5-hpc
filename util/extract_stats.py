@@ -192,6 +192,7 @@ if __name__ == '__main__':
     
     for idx in regions:
         print(f"{idx}", end=',')
+        # add other related to eviction/replacement
         latency = merged_json_data['system']['switch_cpus']['lsq0'][f"loadToUse_{idx}::mean"] if f"loadToUse_{idx}::mean" in merged_json_data['system']['switch_cpus']['lsq0'] else {'val': 0, 'count': 1}
         print(f"{float(latency['val']) / latency['count']}", end=',')
         print(f"{accessor('cpu', 'dcache', f'demandAccesses_{idx}::switch_cpus')['val']}", end=',')
@@ -215,7 +216,8 @@ if __name__ == '__main__':
         print(f"{accessor(None, 'l3', f'demandMshrMisses_{idx}::switch_cpus')['val']}", end=',')
         latency = accessor(None, 'l3', f'demandAvgMshrMissLatency_{idx}::switch_cpus')
         print(f"{float(latency['val']) / latency['count'] / 333.0000}", end=',')
+        # rowbuf hit rate = (WR + RD - PRE)/(WR + RD)
         print(f"{json_data_mem[f'CH0_num_WR_commands_{idx}'] + json_data_mem[f'CH1_num_WR_commands_{idx}']}", end=',')
         print(f"{json_data_mem[f'CH0_num_RD_commands_{idx}'] + json_data_mem[f'CH1_num_RD_commands_{idx}']}", end=',')
         print(f"{json_data_mem[f'CH0_num_PRE_commands_{idx}'] + json_data_mem[f'CH1_num_PRE_commands_{idx}']}", end=',')
-        print()
+        # print()
