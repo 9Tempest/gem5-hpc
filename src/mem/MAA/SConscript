@@ -1,0 +1,15 @@
+Import('*')
+
+SimObject('MAA.py', sim_objects=['MAA'])
+
+Source('MAA.cc')
+
+DebugFlag('MAA')
+DebugFlag('MAAPort')
+DebugFlag('MAARepl')
+DebugFlag('MAAVerbose')
+
+# MAA Tags is so outrageously verbose, printing the MAA's entire tag
+# array on each timing access, that you should probably have to ask for
+# it explicitly even above and beyond MAAAll.
+CompoundFlag('MAAAll', ['MAA', 'MAAPort', 'MAARepl', 'MAAVerbose'])

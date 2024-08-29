@@ -298,3 +298,5 @@ def config_mem(options, system):
             mem_ctrls[i].port = xbar.mem_side_ports
 
     subsystem.mem_ctrls = mem_ctrls
+    
+    print("Memory controllers created")

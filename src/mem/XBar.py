@@ -216,6 +216,19 @@ class SystemXBar(CoherentXBar):
     # unification.
     point_of_unification = True
 
+# One of the key coherent crossbar instances is the system
+# interconnect, tying together the CPU clusters, GPUs, and any I/O
+# coherent requestors, and DRAM controllers.
+class SystemXBarNC(NoncoherentXBar):
+    # 128-bit crossbar by default
+    width = 16
+
+    # A handful pipeline stages for each portion of the latency
+    # contributions.
+    frontend_latency = 3
+    forward_latency = 4
+    response_latency = 2
+
 
 # In addition to the system interconnect, we typically also have one
 # or more on-chip I/O crossbars. Note that at some point we might want
