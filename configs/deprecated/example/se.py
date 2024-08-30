@@ -59,6 +59,7 @@ from gem5.isas import ISA
 addToPath("../../")
 
 from common import (
+    MAAConfig,
     CacheConfig,
     CpuConfig,
     MemConfig,
@@ -285,12 +286,18 @@ else:
     MemClass = Simulation.setMemClass(args)
     system.membus = SystemXBar()
     system.system_port = system.membus.cpu_side_ports
+    if args.maa:
+        system.membusnc = SystemXBarNC()
+        system.membusnc.cpu_side_ports = system.membus.mem_side_ports
+
     if args.caches and args.l2cache and args.l3cache:
         CacheConfig.config_3L_cache(args, system)
     else:
         CacheConfig.config_cache(args, system)
     MemConfig.config_mem(args, system)
     config_filesystem(system, args)
+    if args.maa:
+        MAAConfig.config_maa(args, system)
 
 system.workload = SEWorkload.init_compatible(mp0_path)
 
@@ -299,4 +306,5 @@ if args.wait_gdb:
 Simulation.setWorkCountOptions(system, args)
 
 root = Root(full_system=False, system=system)
+print("Running simulation from SE python script...")
 Simulation.run(args, root, system, FutureClass)

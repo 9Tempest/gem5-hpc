@@ -186,6 +186,9 @@ class L3XBar(CoherentXBar):
     response_latency = 1
     snoop_response_latency = 1
     snoop_filter = SnoopFilter(lookup_latency = 0)
+    point_of_unification = False
+    point_of_coherency = False
+
 
 # One of the key coherent crossbar instances is the system
 # interconnect, tying together the CPU clusters, GPUs, and any I/O
@@ -225,9 +228,9 @@ class SystemXBarNC(NoncoherentXBar):
 
     # A handful pipeline stages for each portion of the latency
     # contributions.
-    frontend_latency = 3
-    forward_latency = 4
-    response_latency = 2
+    frontend_latency = 0
+    forward_latency = 0
+    response_latency = 0
 
 
 # In addition to the system interconnect, we typically also have one

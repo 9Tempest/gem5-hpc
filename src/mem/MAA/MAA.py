@@ -1,6 +1,7 @@
 from m5.objects.ClockedObject import ClockedObject
 from m5.params import *
 from m5.proxy import *
+from m5.objects.X86MMU import X86MMU
 
 class MAA(ClockedObject):
     type = "MAA"
@@ -18,10 +19,12 @@ class MAA(ClockedObject):
 
     cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
     mem_side = RequestPort("Downstream port closer to DRAM memory")
+
     # llc_side = RequestPort("Downstream port closer to cache memory")
 
     addr_ranges = VectorParam.AddrRange(
         [AllMemory], "Address range for scratchpad data, scratchpad size, scratchpad ready, scalar registers, and instruction file"
     )
+    mmu = Param.BaseMMU(X86MMU(), "CPU memory management unit")
 
     system = Param.System(Parent.any, "System we belong to")

@@ -159,13 +159,16 @@ def config_mem(options, system):
         xbar = system.hmc_dev.xbar
     else:
         subsystem = system
-        xbar = system.membus
+        if options.maa:
+            xbar = system.membusnc
+        else:
+            xbar = system.membus
 
     if opt_tlm_memory:
         system.external_memory = m5.objects.ExternalSlave(
             port_type="tlm_slave",
             port_data=opt_tlm_memory,
-            port=system.membus.mem_side_ports,
+            port=system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports,
             addr_ranges=system.mem_ranges,
         )
         system.workload.addr_check = False

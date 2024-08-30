@@ -33,7 +33,8 @@ MAA::MAA(const MAAParams &p)
       num_indirect_access_units(p.num_indirect_access_units),
       num_range_units(p.num_range_units),
       num_alu_units(p.num_alu_units),
-      system(p.system) {
+      system(p.system),
+      mmu(p.mmu) {
 
     requestorId = p.system->getRequestorId(this);
     spd = new SPD(num_tiles, num_tile_elements);
@@ -168,6 +169,8 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             case 2: {
                 current_instruction.baseAddr = data;
                 current_instruction.state = Instruction::Status::Idle;
+                current_instruction.CID = pkt->req->contextId();
+                current_instruction.PC = pkt->req->getPC();
                 bool ready = true;
                 ready &= current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
                 ready &= current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
@@ -558,6 +561,7 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
                         }
                     }
                     my_last_block_addr = curr_block_addr;
+                    translatePacket();
                 }
                 uint16_t base_byte_id = curr_addr - curr_block_addr;
                 uint16_t word_id = base_byte_id / word_size;
@@ -565,9 +569,9 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
                     assert((byte_id >= 0) && (byte_id < block_size));
                     my_byte_enable[byte_id] = true;
                 }
-                request_table->add_entry(my_idx, curr_block_addr, word_id);
-                DPRINTF(MAA, "RequestTable: entry %d added! my_base_addr = 0x%lx, wid = %d\n",
-                        my_idx, curr_block_addr, word_id);
+                request_table->add_entry(my_idx, my_translated_physical_address, word_id);
+                DPRINTF(MAA, "RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
+                        my_idx, curr_block_addr, my_translated_physical_address, word_id);
             }
         }
         if (my_last_block_addr != 0) {
@@ -595,9 +599,10 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
     }
 }
 void StreamAccessUnit::createMyPacket() {
-    RequestPtr req = std::make_shared<Request>(my_last_block_addr, block_size, flags, maa->requestorId);
-    req->setByteEnable(my_byte_enable);
-    my_pkt = new Packet(req, MemCmd::ReadReq);
+    /**** Packet generation ****/
+    RequestPtr real_req = std::make_shared<Request>(my_translated_physical_address, block_size, flags, maa->requestorId);
+    real_req->setByteEnable(my_byte_enable);
+    my_pkt = new Packet(real_req, MemCmd::ReadReq);
     my_pkt->allocate();
     my_outstanding_pkt = true;
     DPRINTF(MAA, "%s: created %s, be:\n", __func__, my_pkt->print());
@@ -617,6 +622,15 @@ bool StreamAccessUnit::sendOutstandingPacket() {
         my_outstanding_pkt = false;
         return true;
     }
+}
+void StreamAccessUnit::translatePacket() {
+    /**** Address translation ****/
+    RequestPtr translation_req = std::make_shared<Request>(my_last_block_addr, block_size, flags, maa->requestorId, my_instruction->PC, my_instruction->CID);
+    ThreadContext *tc = maa->system->threads[my_instruction->CID];
+    maa->mmu->translateTiming(translation_req, tc, this, BaseMMU::Read);
+    // The above function immediately does the translation and calls the finish function
+    assert(translation_done);
+    translation_done = false;
 }
 void StreamAccessUnit::recvData(const Addr addr,
                                 std::vector<uint32_t> data,
@@ -644,6 +658,13 @@ void StreamAccessUnit::recvData(const Addr addr,
     if (state == Status::Response) {
         execute(my_instruction);
     }
+}
+void StreamAccessUnit::finish(const Fault &fault,
+                              const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
+    assert(fault == NoFault);
+    assert(translation_done == false);
+    translation_done = true;
+    my_translated_physical_address = req->getPaddr();
 }
 
 bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {

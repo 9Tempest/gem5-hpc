@@ -86,10 +86,10 @@ def config_maa(options, system):
     system.maa = SharedMAA(clk_domain=system.cpu_clk_domain, **opts)
 
     # CPU side is derived by the memory side of the memory bus
-    system.maa.cpu_side = system.membus.mem_side_ports
+    system.maa.cpu_side = system.membusnc.mem_side_ports
     # LLC side derives the cpu side of the L3 bus
     # Memory side derives the cpu side of the memory bus
-    system.maa.mem_side = system.membus.cpu_side_ports
+    system.maa.mem_side = system.membusnc.cpu_side_ports
 
     # SPD_data_addr_range = opts["addr_ranges"][0]
     # system.l3.addr_ranges.append(SPD_data_addr_range)

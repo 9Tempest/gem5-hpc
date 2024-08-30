@@ -151,6 +151,11 @@ def config_3L_cache(options, system):
         system.tol3bus = L3XBar(clk_domain=system.cpu_clk_domain)
         system.l3.cpu_side = system.tol3bus.mem_side_ports
         system.l3.mem_side = system.membus.cpu_side_ports
+        # system.froml3bus = L3XBar(clk_domain=system.cpu_clk_domain)
+        # system.tol3bus = L3XBar(clk_domain=system.cpu_clk_domain)
+        # system.l3.cpu_side = system.tol3bus.mem_side_ports
+        # system.l3.mem_side = system.froml3bus.cpu_side_ports
+        # system.froml3bus.mem_side_ports = system.membus.cpu_side_ports
 
     for i in range(options.num_cpus):
         icache = icache_class(**_get_cache_opts("l1i", options))
@@ -189,7 +194,7 @@ def config_3L_cache(options, system):
         system.cpu[i].connectAllPorts(
             system.tol3bus.cpu_side_ports,
             system.membus.cpu_side_ports,
-            system.membus.mem_side_ports,
+            system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports,
         )
 
     return system
@@ -334,11 +339,11 @@ def config_cache(options, system):
             system.cpu[i].connectAllPorts(
                 system.tol2bus.cpu_side_ports,
                 system.membus.cpu_side_ports,
-                system.membus.mem_side_ports,
+                system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports,
             )
         elif options.external_memory_system:
             system.cpu[i].connectUncachedPorts(
-                system.membus.cpu_side_ports, system.membus.mem_side_ports
+                system.membus.cpu_side_ports, system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports
             )
         else:
             system.cpu[i].connectBus(system.membus)

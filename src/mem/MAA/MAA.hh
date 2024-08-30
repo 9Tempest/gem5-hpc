@@ -18,6 +18,7 @@
 #include "mem/request.hh"
 #include "sim/clocked_object.hh"
 #include "sim/system.hh"
+#include "arch/generic/mmu.hh"
 
 #define MAA_SPD_TILE_SIZE 1024
 #define MAA_SPD_TILE_NUM  4
@@ -240,6 +241,8 @@ public:
     Status state;
     // {ALU, STREAM, INDIRECT}
     FuncUnitType funcUnit;
+    ContextID CID;
+    Addr PC;
     Instruction()
         : baseAddr(0),
           src1RegID(-1),
@@ -255,7 +258,10 @@ public:
           opcode(OpcodeType::MAX),
           optype(OPType::MAX),
           datatype(DataType::MAX),
-          state(Status::Idle) {}
+          state(Status::Idle),
+          funcUnit(FuncUnitType::MAX),
+          CID(-1),
+          PC(0) {}
 
     std::string print() const {
         std::ostringstream str;
@@ -454,7 +460,7 @@ protected:
     bool *addresses_valid;
 };
 
-class StreamAccessUnit {
+class StreamAccessUnit : public BaseMMU::Translation {
 public:
     enum class Status : uint8_t {
         Idle = 0,
@@ -492,12 +498,18 @@ public:
         maa = _maa;
         dst_tile_id = -1;
         request_table = new RequestTable();
+        translation_done = false;
     }
     Status getState() const { return state; }
     void execute(Instruction *_instruction = nullptr);
     void recvData(const Addr addr,
                   std::vector<uint32_t> data,
                   std::vector<uint16_t> wids);
+
+    /* Related to BaseMMU::Translation Inheretance */
+    void markDelayed() override {}
+    void finish(const Fault &fault, const RequestPtr &req,
+                ThreadContext *tc, BaseMMU::Mode mode) override;
 
 protected:
     Instruction *my_instruction;
@@ -514,8 +526,12 @@ protected:
     int my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
     int my_received_responses;
 
+    Addr my_translated_physical_address;
+    bool translation_done;
+
     void createMyPacket();
     bool sendOutstandingPacket();
+    void translatePacket();
 };
 
 /**
@@ -730,6 +746,9 @@ public:
 public:
     /** System we are currently operating in. */
     System *system;
+
+    /** Registered mmu for address translations */
+    BaseMMU *mmu;
 
 public:
     MAA(const MAAParams &p);
