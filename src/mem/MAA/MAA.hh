@@ -580,7 +580,7 @@ class MAA : public ClockedObject {
                     const std::string &_label);
     };
 
-    class MAARequestPort : public QueuedRequestPort {
+    class MAAMemRequestPort : public QueuedRequestPort {
     public:
         /**
          * Schedule a send of a request packet (from the MSHR). Note
@@ -591,9 +591,9 @@ class MAA : public ClockedObject {
         }
 
     protected:
-        MAARequestPort(const std::string &_name,
-                       ReqPacketQueue &_reqQueue,
-                       SnoopRespPacketQueue &_snoopRespQueue)
+        MAAMemRequestPort(const std::string &_name,
+                          ReqPacketQueue &_reqQueue,
+                          SnoopRespPacketQueue &_snoopRespQueue)
             : QueuedRequestPort(_name, _reqQueue, _snoopRespQueue) {}
 
         /**
@@ -602,6 +602,30 @@ class MAA : public ClockedObject {
          * @return always false
          */
         bool isSnooping() const { return false; }
+    };
+
+    class MAACacheRequestPort : public QueuedRequestPort {
+    public:
+        /**
+         * Schedule a send of a request packet (from the MSHR). Note
+         * that we could already have a retry outstanding.
+         */
+        void schedSendEvent(Tick time) {
+            reqQueue.schedSendEvent(time);
+        }
+
+    protected:
+        MAACacheRequestPort(const std::string &_name,
+                            ReqPacketQueue &_reqQueue,
+                            SnoopRespPacketQueue &_snoopRespQueue)
+            : QueuedRequestPort(_name, _reqQueue, _snoopRespQueue) {}
+
+        /**
+         * Memory-side port always snoops.
+         *
+         * @return always true
+         */
+        bool isSnooping() const { return true; }
     };
 
     /**
@@ -634,7 +658,7 @@ class MAA : public ClockedObject {
      * The memory-side port extends the base cache request port with
      * access functions for functional, atomic and timing snoops.
      */
-    class MemSidePort : public MAARequestPort {
+    class MemSidePort : public MAAMemRequestPort {
     private:
         /** The maa-specific queue. */
         MAAReqPacketQueue _reqQueue;
@@ -660,9 +684,40 @@ class MAA : public ClockedObject {
                     const std::string &_label);
     };
 
+    /**
+     * The memory-side port extends the base cache request port with
+     * access functions for functional, atomic and timing snoops.
+     */
+    class CacheSidePort : public MAACacheRequestPort {
+    private:
+        /** The maa-specific queue. */
+        MAAReqPacketQueue _reqQueue;
+
+        SnoopRespPacketQueue _snoopRespQueue;
+
+        // a pointer to our specific cache implementation
+        MAA *maa;
+
+    protected:
+        void recvTimingSnoopReq(PacketPtr pkt);
+
+        bool recvTimingResp(PacketPtr pkt);
+
+        Tick recvAtomicSnoop(PacketPtr pkt);
+
+        void recvFunctionalSnoop(PacketPtr pkt);
+
+        void recvReqRetry();
+
+    public:
+        CacheSidePort(const std::string &_name, MAA *_maa,
+                      const std::string &_label);
+    };
+
 public:
     CpuSidePort cpuSidePort;
     MemSidePort memSidePort;
+    CacheSidePort cacheSidePort;
     SPD *spd;
     RF *rf;
     IF *ifile;
@@ -679,7 +734,13 @@ protected:
      * Handles a response (cache line fill/write ack) from the bus.
      * @param pkt The response packet
      */
-    void recvTimingResp(PacketPtr pkt);
+    void recvMemTimingResp(PacketPtr pkt);
+
+    /**
+     * Handles a response (cache line fill/write ack) from the bus.
+     * @param pkt The response packet
+     */
+    void recvCacheTimingResp(PacketPtr pkt);
 
     /**
      * Handle a snoop response.
@@ -700,7 +761,15 @@ protected:
      * @param pkt The memory request to snoop
      * @return The number of ticks required for the snoop.
      */
-    Tick recvAtomicSnoop(PacketPtr pkt);
+    Tick recvMemAtomicSnoop(PacketPtr pkt);
+
+    /**
+     * Snoop for the provided request in the cache and return the estimated
+     * time taken.
+     * @param pkt The memory request to snoop
+     * @return The number of ticks required for the snoop.
+     */
+    Tick recvCacheAtomicSnoop(PacketPtr pkt);
 
     /**
      * Performs the access specified by the request.
@@ -708,7 +777,15 @@ protected:
      * @param pkt The request to perform.
      * @param fromCpuSide from the CPU side port or the memory side port
      */
-    void functionalAccess(PacketPtr pkt, bool from_cpu_side);
+    void memFunctionalAccess(PacketPtr pkt, bool from_cpu_side);
+
+    /**
+     * Performs the access specified by the request.
+     *
+     * @param pkt The request to perform.
+     * @param fromCpuSide from the CPU side port or the memory side port
+     */
+    void cacheFunctionalAccess(PacketPtr pkt, bool from_cpu_side);
 
     /**
      * Determine if an address is in the ranges covered by this
@@ -724,7 +801,13 @@ protected:
      * Snoops bus transactions to maintain coherence.
      * @param pkt The current bus transaction.
      */
-    void recvTimingSnoopReq(PacketPtr pkt);
+    void recvMemTimingSnoopReq(PacketPtr pkt);
+
+    /**
+     * Snoops bus transactions to maintain coherence.
+     * @param pkt The current bus transaction.
+     */
+    void recvCacheTimingSnoopReq(PacketPtr pkt);
 
     /**
      * The address range to which the cache responds on the CPU side.

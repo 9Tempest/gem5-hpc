@@ -24,6 +24,7 @@ MAA::MAA(const MAAParams &p)
     : ClockedObject(p),
       cpuSidePort(p.name + ".cpu_side_port", *this, "CpuSidePort"),
       memSidePort(p.name + ".mem_side_port", this, "MemSidePort"),
+      cacheSidePort(p.name + ".cache_side_port", this, "CacheSidePort"),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       num_tiles(p.num_tiles),
       num_tile_elements(p.num_tile_elements),
@@ -60,6 +61,8 @@ Port &MAA::getPort(const std::string &if_name, PortID idx) {
         return memSidePort;
     } else if (if_name == "cpu_side") {
         return cpuSidePort;
+    } else if (if_name == "cache_side") {
+        return cacheSidePort;
     } else {
         return ClockedObject::getPort(if_name, idx);
     }
@@ -73,6 +76,32 @@ int MAA::inRange(Addr addr) const {
         }
     }
     return r_id;
+}
+
+///////////////
+//
+// CpuSidePort
+//
+///////////////
+void MAA::recvTimingSnoopResp(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+}
+bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
+    assert(pkt->isResponse());
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+    // Express snoop responses from requestor to responder, e.g., from L1 to L2
+    maa.recvTimingSnoopResp(pkt);
+    return true;
+}
+
+bool MAA::CpuSidePort::tryTiming(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    return true;
 }
 
 void MAA::recvTimingReq(PacketPtr pkt) {
@@ -298,8 +327,165 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         assert(false);
     }
 }
+bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
+    assert(pkt->isRequest());
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
 
-void MAA::recvTimingResp(PacketPtr pkt) {
+    if (tryTiming(pkt)) {
+        maa.recvTimingReq(pkt);
+        return true;
+    }
+    return false;
+}
+
+void MAA::CpuSidePort::recvFunctional(PacketPtr pkt) {
+    assert(false);
+}
+
+Tick MAA::recvAtomic(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+    return 0;
+}
+Tick MAA::CpuSidePort::recvAtomic(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+    return maa.recvAtomic(pkt);
+}
+
+AddrRangeList MAA::CpuSidePort::getAddrRanges() const {
+    return maa.getAddrRanges();
+}
+
+MAA::CpuSidePort::CpuSidePort(const std::string &_name, MAA &_maa,
+                              const std::string &_label)
+    : MAAResponsePort(_name, _maa, _label) {
+}
+
+///////////////
+//
+// MemSidePort
+//
+///////////////
+void MAA::recvMemTimingResp(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s, cmd: %s, size: %d\n",
+            __func__,
+            pkt->print(),
+            pkt->cmdString(),
+            pkt->getSize());
+    for (int i = 0; i < pkt->getSize(); i++) {
+        DPRINTF(MAA, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+    }
+    switch (pkt->cmd.toInt()) {
+    case MemCmd::ReadResp: {
+        // Data must be routed to the indirect access
+        assert(false);
+
+        // assert(pkt->getSize() == 64);
+        // std::vector<uint32_t> data;
+        // std::vector<uint16_t> wid;
+        // for (int i = 0; i < 64; i += 4) {
+        //     if (pkt->req->getByteEnable()[i] == true) {
+        //         data.push_back(*(pkt->getPtr<uint32_t>() + i / 4));
+        //         wid.push_back(i / 4);
+        //     }
+        // }
+        // for (int i = 0; i < num_stream_access_units; i++) {
+        //     if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
+        //         streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+        //         streamAccessUnits[i].recvData(pkt->getAddr(), data, wid);
+        //     }
+        // }
+        break;
+    }
+    default:
+        assert(false);
+    }
+}
+bool MAA::MemSidePort::recvTimingResp(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    maa->recvMemTimingResp(pkt);
+    return true;
+}
+
+void MAA::recvMemTimingSnoopReq(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+}
+// Express snooping requests to memside port
+void MAA::MemSidePort::recvTimingSnoopReq(PacketPtr pkt) {
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    // handle snooping requests
+    maa->recvMemTimingSnoopReq(pkt);
+    assert(false);
+}
+
+Tick MAA::recvMemAtomicSnoop(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+    return 0;
+}
+Tick MAA::MemSidePort::recvAtomicSnoop(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    return maa->recvMemAtomicSnoop(pkt);
+    assert(false);
+}
+
+void MAA::memFunctionalAccess(PacketPtr pkt, bool from_cpu_side) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+}
+void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    // functional snoop (note that in contrast to atomic we don't have
+    // a specific functionalSnoop method, as they have the same
+    // behaviour regardless)
+    maa->memFunctionalAccess(pkt, false);
+    assert(false);
+}
+
+void MAA::MemSidePort::recvReqRetry() {
+    /// print the packet
+    DPRINTF(MAA, "%s: called!\n", __func__);
+    // this will be used for the indirect access
+    assert(false);
+    for (int i = 0; i < maa->num_stream_access_units; i++) {
+        if (maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
+            maa->streamAccessUnits[i].execute();
+        }
+    }
+}
+
+void MAA::MAAReqPacketQueue::sendDeferredPacket() {
+    /// print the packet
+    DPRINTF(MAA, "%s: called!\n", __func__);
+    assert(false);
+}
+
+MAA::MemSidePort::MemSidePort(const std::string &_name,
+                              MAA *_maa,
+                              const std::string &_label)
+    : MAAMemRequestPort(_name, _reqQueue, _snoopRespQueue),
+      _reqQueue(*_maa, *this, _snoopRespQueue, _label),
+      _snoopRespQueue(*_maa, *this, true, _label), maa(_maa) {
+}
+
+///////////////
+//
+// CacheSidePort
+//
+///////////////
+void MAA::recvCacheTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAA, "%s: received %s, cmd: %s, size: %d\n",
             __func__,
@@ -332,132 +518,55 @@ void MAA::recvTimingResp(PacketPtr pkt) {
         assert(false);
     }
 }
-
-void MAA::functionalAccess(PacketPtr pkt, bool from_cpu_side) {
+bool MAA::CacheSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-}
-
-Tick MAA::recvAtomic(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-    return 0;
-}
-
-Tick MAA::recvAtomicSnoop(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-    return 0;
-}
-
-void MAA::recvTimingSnoopResp(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-}
-
-void MAA::recvTimingSnoopReq(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-}
-
-///////////////
-//
-// CpuSidePort
-//
-///////////////
-bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
-    assert(pkt->isResponse());
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
-    // Express snoop responses from requestor to responder, e.g., from L1 to L2
-    maa.recvTimingSnoopResp(pkt);
+    maa->recvCacheTimingResp(pkt);
     return true;
 }
 
-bool MAA::CpuSidePort::tryTiming(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    return true;
-}
-
-bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
-    assert(pkt->isRequest());
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-
-    if (tryTiming(pkt)) {
-        maa.recvTimingReq(pkt);
-        return true;
-    }
-    return false;
-}
-
-void MAA::CpuSidePort::recvFunctional(PacketPtr pkt) {
-    assert(false);
-}
-
-Tick MAA::CpuSidePort::recvAtomic(PacketPtr pkt) {
+void MAA::recvCacheTimingSnoopReq(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
     assert(false);
-    return maa.recvAtomic(pkt);
 }
-
-AddrRangeList
-MAA::CpuSidePort::getAddrRanges() const {
-    return maa.getAddrRanges();
-}
-
-MAA::
-    CpuSidePort::CpuSidePort(const std::string &_name, MAA &_maa,
-                             const std::string &_label)
-    : MAAResponsePort(_name, _maa, _label) {
-}
-
-///////////////
-//
-// MemSidePort
-//
-///////////////
-bool MAA::MemSidePort::recvTimingResp(PacketPtr pkt) {
-    /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    maa->recvTimingResp(pkt);
-    return true;
-}
-
 // Express snooping requests to memside port
-void MAA::MemSidePort::recvTimingSnoopReq(PacketPtr pkt) {
+void MAA::CacheSidePort::recvTimingSnoopReq(PacketPtr pkt) {
     DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
     // handle snooping requests
-    maa->recvTimingSnoopReq(pkt);
+    maa->recvCacheTimingSnoopReq(pkt);
     assert(false);
 }
 
-Tick MAA::MemSidePort::recvAtomicSnoop(PacketPtr pkt) {
+Tick MAA::recvCacheAtomicSnoop(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    return maa->recvAtomicSnoop(pkt);
     assert(false);
+    return 0;
 }
-
-void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
+Tick MAA::CacheSidePort::recvAtomicSnoop(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
-    // functional snoop (note that in contrast to atomic we don't have
-    // a specific functionalSnoop method, as they have the same
-    // behaviour regardless)
-    maa->functionalAccess(pkt, false);
+    return maa->recvCacheAtomicSnoop(pkt);
     assert(false);
 }
 
-void MAA::MemSidePort::recvReqRetry() {
+void MAA::cacheFunctionalAccess(PacketPtr pkt, bool from_cpu_side) {
+    /// print the packet
+    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    assert(false);
+}
+void MAA::CacheSidePort::recvFunctionalSnoop(PacketPtr pkt) {
+    /// print the packet
+    // DPRINTF(MAA, "%s: received %s, doing nothing\n", __func__, pkt->print());
+    // // functional snoop (note that in contrast to atomic we don't have
+    // // a specific functionalSnoop method, as they have the same
+    // // behaviour regardless)
+    // maa->cacheFunctionalAccess(pkt, false);
+    // assert(false);
+}
+
+void MAA::CacheSidePort::recvReqRetry() {
     /// print the packet
     DPRINTF(MAA, "%s: called!\n", __func__);
     for (int i = 0; i < maa->num_stream_access_units; i++) {
@@ -467,19 +576,14 @@ void MAA::MemSidePort::recvReqRetry() {
     }
 }
 
-void MAA::MAAReqPacketQueue::sendDeferredPacket() {
-    /// print the packet
-    DPRINTF(MAA, "%s: called!\n", __func__);
-    assert(false);
-}
-
-MAA::MemSidePort::MemSidePort(const std::string &_name,
-                              MAA *_maa,
-                              const std::string &_label)
-    : MAARequestPort(_name, _reqQueue, _snoopRespQueue),
+MAA::CacheSidePort::CacheSidePort(const std::string &_name,
+                                  MAA *_maa,
+                                  const std::string &_label)
+    : MAACacheRequestPort(_name, _reqQueue, _snoopRespQueue),
       _reqQueue(*_maa, *this, _snoopRespQueue, _label),
       _snoopRespQueue(*_maa, *this, true, _label), maa(_maa) {
 }
+
 ///////////////
 //
 // MAA
@@ -602,7 +706,7 @@ void StreamAccessUnit::createMyPacket() {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(my_translated_physical_address, block_size, flags, maa->requestorId);
     real_req->setByteEnable(my_byte_enable);
-    my_pkt = new Packet(real_req, MemCmd::ReadReq);
+    my_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
     my_pkt->allocate();
     my_outstanding_pkt = true;
     DPRINTF(MAA, "%s: created %s, be:\n", __func__, my_pkt->print());
@@ -615,7 +719,7 @@ void StreamAccessUnit::createMyPacket() {
 }
 bool StreamAccessUnit::sendOutstandingPacket() {
     DPRINTF(MAA, "%s: trying sending %s, be:\n", __func__, my_pkt->print());
-    if (maa->memSidePort.sendTimingReq(my_pkt) == false) {
+    if (maa->cacheSidePort.sendTimingReq(my_pkt) == false) {
         DPRINTF(MAA, "%s: send failed, leaving execution...\n", __func__);
         return false;
     } else {

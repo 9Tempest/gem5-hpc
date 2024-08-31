@@ -19,6 +19,7 @@ class MAA(ClockedObject):
 
     cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
     mem_side = RequestPort("Downstream port closer to DRAM memory")
+    cache_side = RequestPort("Downstream port closer to DRAM memory")
 
     # llc_side = RequestPort("Downstream port closer to cache memory")
 

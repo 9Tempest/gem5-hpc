@@ -88,6 +88,8 @@ def config_maa(options, system):
     # CPU side is derived by the memory side of the memory bus
     system.maa.cpu_side = system.membusnc.mem_side_ports
     # LLC side derives the cpu side of the L3 bus
+    assert(options.l3cache)
+    system.maa.cache_side = system.tol3bus.cpu_side_ports
     # Memory side derives the cpu side of the memory bus
     system.maa.mem_side = system.membusnc.cpu_side_ports
 
