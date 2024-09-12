@@ -118,6 +118,12 @@ public:
     void startup() override;
 
     void resetStats() override;
+    void getAddrMapData(std::vector<int> &m_org,
+                        std::vector<int> &m_addr_bits,
+                        int &m_num_levels,
+                        int &m_tx_offset,
+                        int &m_col_bits_idx,
+                        int &m_row_bits_idx);
 
 protected:
     Tick recvAtomic(PacketPtr pkt);

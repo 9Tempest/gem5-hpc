@@ -2,9 +2,14 @@
 #include "base/addr_range.hh"
 #include "base/logging.hh"
 #include "base/trace.hh"
+#include "mem/MAA/IndirectAccess.hh"
 #include "mem/packet.hh"
 #include "params/MAA.hh"
 #include "debug/MAA.hh"
+#include "debug/MAACpuPort.hh"
+#include "debug/MAACachePort.hh"
+#include "debug/MAAMemPort.hh"
+#include "debug/MAAController.hh"
 #include <cassert>
 #include <cstdint>
 
@@ -34,6 +39,8 @@ MAA::MAA(const MAAParams &p)
       num_indirect_access_units(p.num_indirect_access_units),
       num_range_units(p.num_range_units),
       num_alu_units(p.num_alu_units),
+      num_row_table_rows(p.num_row_table_rows),
+      num_row_table_entries_per_row(p.num_row_table_entries_per_row),
       system(p.system),
       mmu(p.mmu) {
 
@@ -45,6 +52,7 @@ MAA::MAA(const MAAParams &p)
     for (int i = 0; i < num_stream_access_units; i++) {
         streamAccessUnits[i].allocate(num_tile_elements, this);
     }
+    indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];
 }
 
 void MAA::init() {
@@ -67,7 +75,6 @@ Port &MAA::getPort(const std::string &if_name, PortID idx) {
         return ClockedObject::getPort(if_name, idx);
     }
 }
-
 int MAA::inRange(Addr addr) const {
     int r_id = -1;
     for (const auto &r : addrRanges) {
@@ -77,7 +84,52 @@ int MAA::inRange(Addr addr) const {
     }
     return r_id;
 }
-
+void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
+    _ramulator2->getAddrMapData(m_org,
+                                m_addr_bits,
+                                m_num_levels,
+                                m_tx_offset,
+                                m_col_bits_idx,
+                                m_row_bits_idx);
+    DPRINTF(MAA, "Ramulator organization [n_levels: %d] -- CH: %d, RA: %d, BG: %d, BA: %d, RO: %d, CO: %d\n",
+            m_num_levels,
+            m_org[ADDR_CHANNEL_LEVEL],
+            m_org[ADDR_RANK_LEVEL],
+            m_org[ADDR_BANKGROUP_LEVEL],
+            m_org[ADDR_BANK_LEVEL],
+            m_org[ADDR_ROW_LEVEL],
+            m_org[ADDR_COLUMN_LEVEL]);
+    assert(m_num_levels == 6);
+    for (int i = 0; i < num_indirect_access_units; i++) {
+        indirectAccessUnits[i].allocate(num_tile_elements,
+                                        num_row_table_rows,
+                                        num_row_table_entries_per_row,
+                                        this);
+    }
+}
+// RoBaRaCoCh address mapping taking from the Ramulator2
+int slice_lower_bits(uint64_t &addr, int bits) {
+    int lbits = addr & ((1 << bits) - 1);
+    addr >>= bits;
+    return lbits;
+}
+std::vector<int> MAA::map_addr(Addr addr) {
+    std::vector<int> addr_vec(m_num_levels, -1);
+    addr = addr >> m_tx_offset;
+    addr_vec[0] = slice_lower_bits(addr, m_addr_bits[0]);
+    addr_vec[m_addr_bits.size() - 1] = slice_lower_bits(addr, m_addr_bits[m_addr_bits.size() - 1]);
+    for (int i = 1; i <= m_row_bits_idx; i++) {
+        addr_vec[i] = slice_lower_bits(addr, m_addr_bits[i]);
+    }
+    return addr_vec;
+}
+Addr MAA::calc_Grow_addr(std::vector<int> addr_vec) {
+    assert(addr_vec.size() == 6);
+    Addr Grow_addr = (addr_vec[ADDR_BANKGROUP_LEVEL] >> 1) * m_org[ADDR_BANK_LEVEL];
+    Grow_addr = (Grow_addr + addr_vec[ADDR_BANK_LEVEL]) * m_org[ADDR_ROW_LEVEL];
+    Grow_addr += addr_vec[ADDR_ROW_LEVEL];
+    return Grow_addr;
+}
 ///////////////
 //
 // CpuSidePort
@@ -85,13 +137,23 @@ int MAA::inRange(Addr addr) const {
 ///////////////
 void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
 }
 bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     assert(pkt->isResponse());
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s, hasData %s, hasResponseData %s, size %u, isCached %s, satisfied: %d, be:\n",
+            __func__,
+            pkt->print(),
+            pkt->hasData() ? "True" : "False",
+            pkt->hasRespData() ? "True" : "False",
+            pkt->getSize(),
+            pkt->isBlockCached() ? "True" : "False",
+            pkt->satisfied());
+    for (int i = 0; i < pkt->getSize(); i++) {
+        DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+    }
     assert(false);
     // Express snoop responses from requestor to responder, e.g., from L1 to L2
     maa.recvTimingSnoopResp(pkt);
@@ -100,14 +162,14 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
 
 bool MAA::CpuSidePort::tryTiming(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     return true;
 }
 
 void MAA::recvTimingReq(PacketPtr pkt) {
     /// print the packet
     AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
-    DPRINTF(MAA, "%s: received %s, %s, cmd: %s, isMaskedWrite: %d, size: %d\n",
+    DPRINTF(MAACpuPort, "%s: received %s, %s, cmd: %s, isMaskedWrite: %d, size: %d\n",
             __func__,
             pkt->print(),
             address_range.print(),
@@ -115,7 +177,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->isMaskedWrite(),
             pkt->getSize());
     for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAA, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+        DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
     switch (pkt->cmd.toInt()) {
     case MemCmd::WriteReq: {
@@ -129,7 +191,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
             uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAA, "%s: TILE[%d][%d] = %d\n", __func__, tile_id, element_id, data);
+            DPRINTF(MAAController, "%s: TILE[%d][%d] = %d\n", __func__, tile_id, element_id, data);
             spd->setData(tile_id, element_id, data);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
@@ -144,7 +206,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
             uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAA, "%s: REG[%d] = %d\n", __func__, element_id, data);
+            DPRINTF(MAAController, "%s: REG[%d] = %d\n", __func__, element_id, data);
             rf->setData(element_id, data);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
@@ -159,7 +221,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint64_t) == 0);
             element_id /= sizeof(uint64_t);
             uint64_t data = pkt->getPtr<uint64_t>()[0];
-            DPRINTF(MAA, "%s: IF[%d] = %ld\n", __func__, element_id, data);
+            DPRINTF(MAAController, "%s: IF[%d] = %ld\n", __func__, element_id, data);
 #define NA_UINT8 0xFF
             switch (element_id) {
             case 0: {
@@ -200,10 +262,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 current_instruction.state = Instruction::Status::Idle;
                 current_instruction.CID = pkt->req->contextId();
                 current_instruction.PC = pkt->req->getPC();
-                bool ready = true;
-                ready &= current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
-                ready &= current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
-                assert(ifile->pushInstruction(current_instruction, ready));
+                current_instruction.src1Ready = current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
+                current_instruction.src2Ready = current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
+                DPRINTF(MAAController, "%s: %s pushing!\n", __func__, current_instruction.print());
+                assert(ifile->pushInstruction(current_instruction));
                 if (current_instruction.dst1SpdID != -1) {
                     assert(current_instruction.dst1SpdID != current_instruction.src1SpdID);
                     assert(current_instruction.dst1SpdID != current_instruction.src2SpdID);
@@ -214,7 +276,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                     assert(current_instruction.dst2SpdID != current_instruction.src2SpdID);
                     spd->unsetReady(current_instruction.dst2SpdID);
                 }
-                DPRINTF(MAA, "%s: %s pushed, ready: %d!\n", __func__, current_instruction.print(), ready);
+                DPRINTF(MAAController, "%s: %s pushed!\n", __func__, current_instruction.print());
                 issueInstruction();
                 break;
             }
@@ -232,7 +294,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             // Write to SPD_DATA_CACHEABLE_RANGE not possible. All SPD writes must be to SPD_DATA_NONCACHEABLE_RANGE
             // Write to SPD_SIZE_RANGE not possible. Size is read-only.
             // Write to SPD_READY_RANGE not possible. Ready is read-only.
-            DPRINTF(MAA, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
+            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
                     __func__, address_range.print(), pkt->cmdString());
             assert(false);
         }
@@ -290,7 +352,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         default: {
             // Read from SPD_DATA_CACHEABLE_RANGE uses ReadSharedReq command.
             // Read from SPD_DATA_NONCACHEABLE_RANGE not possible. All SPD reads must be from SPD_DATA_CACHEABLE_RANGE.
-            DPRINTF(MAA, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
+            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
                     __func__, address_range.print(), pkt->cmdString());
             assert(false);
         }
@@ -317,7 +379,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             break;
         }
         default:
-            DPRINTF(MAA, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
+            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
                     __func__, address_range.print(), pkt->cmdString());
             assert(false);
         }
@@ -330,7 +392,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
 bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     assert(pkt->isRequest());
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
 
     if (tryTiming(pkt)) {
         maa.recvTimingReq(pkt);
@@ -345,13 +407,13 @@ void MAA::CpuSidePort::recvFunctional(PacketPtr pkt) {
 
 Tick MAA::recvAtomic(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
     return 0;
 }
 Tick MAA::CpuSidePort::recvAtomic(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
     return maa.recvAtomic(pkt);
 }
@@ -372,34 +434,31 @@ MAA::CpuSidePort::CpuSidePort(const std::string &_name, MAA &_maa,
 ///////////////
 void MAA::recvMemTimingResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s, cmd: %s, size: %d\n",
+    DPRINTF(MAAMemPort, "%s: received %s, cmd: %s, size: %d\n",
             __func__,
             pkt->print(),
             pkt->cmdString(),
             pkt->getSize());
     for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAA, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+        DPRINTF(MAAMemPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
     switch (pkt->cmd.toInt()) {
     case MemCmd::ReadResp: {
-        // Data must be routed to the indirect access
-        assert(false);
-
-        // assert(pkt->getSize() == 64);
-        // std::vector<uint32_t> data;
-        // std::vector<uint16_t> wid;
-        // for (int i = 0; i < 64; i += 4) {
-        //     if (pkt->req->getByteEnable()[i] == true) {
-        //         data.push_back(*(pkt->getPtr<uint32_t>() + i / 4));
-        //         wid.push_back(i / 4);
-        //     }
-        // }
-        // for (int i = 0; i < num_stream_access_units; i++) {
-        //     if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
-        //         streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-        //         streamAccessUnits[i].recvData(pkt->getAddr(), data, wid);
-        //     }
-        // }
+        assert(pkt->getSize() == 64);
+        std::vector<uint32_t> data;
+        std::vector<uint16_t> wid;
+        for (int i = 0; i < 64; i += 4) {
+            if (pkt->req->getByteEnable()[i] == true) {
+                data.push_back(*(pkt->getPtr<uint32_t>() + i / 4));
+                wid.push_back(i / 4);
+            }
+        }
+        for (int i = 0; i < num_indirect_access_units; i++) {
+            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, false);
+            }
+        }
         break;
     }
     default:
@@ -408,19 +467,19 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
 }
 bool MAA::MemSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     maa->recvMemTimingResp(pkt);
     return true;
 }
 
 void MAA::recvMemTimingSnoopReq(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
 }
 // Express snooping requests to memside port
 void MAA::MemSidePort::recvTimingSnoopReq(PacketPtr pkt) {
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     // handle snooping requests
     maa->recvMemTimingSnoopReq(pkt);
     assert(false);
@@ -428,25 +487,25 @@ void MAA::MemSidePort::recvTimingSnoopReq(PacketPtr pkt) {
 
 Tick MAA::recvMemAtomicSnoop(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
     return 0;
 }
 Tick MAA::MemSidePort::recvAtomicSnoop(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     return maa->recvMemAtomicSnoop(pkt);
     assert(false);
 }
 
 void MAA::memFunctionalAccess(PacketPtr pkt, bool from_cpu_side) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
 }
 void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     // functional snoop (note that in contrast to atomic we don't have
     // a specific functionalSnoop method, as they have the same
     // behaviour regardless)
@@ -456,19 +515,18 @@ void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
 
 void MAA::MemSidePort::recvReqRetry() {
     /// print the packet
-    DPRINTF(MAA, "%s: called!\n", __func__);
+    DPRINTF(MAAMemPort, "%s: called!\n", __func__);
     // this will be used for the indirect access
-    assert(false);
-    for (int i = 0; i < maa->num_stream_access_units; i++) {
-        if (maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
-            maa->streamAccessUnits[i].execute();
+    for (int i = 0; i < maa->num_indirect_access_units; i++) {
+        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
+            maa->indirectAccessUnits[i].execute();
         }
     }
 }
 
 void MAA::MAAReqPacketQueue::sendDeferredPacket() {
     /// print the packet
-    DPRINTF(MAA, "%s: called!\n", __func__);
+    DPRINTF(MAAMemPort, "%s: called!\n", __func__);
     assert(false);
 }
 
@@ -487,13 +545,13 @@ MAA::MemSidePort::MemSidePort(const std::string &_name,
 ///////////////
 void MAA::recvCacheTimingResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s, cmd: %s, size: %d\n",
+    DPRINTF(MAACachePort, "%s: received %s, cmd: %s, size: %d\n",
             __func__,
             pkt->print(),
             pkt->cmdString(),
             pkt->getSize());
     for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAA, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+        DPRINTF(MAACachePort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
     switch (pkt->cmd.toInt()) {
     case MemCmd::ReadResp: {
@@ -512,6 +570,12 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 streamAccessUnits[i].recvData(pkt->getAddr(), data, wid);
             }
         }
+        for (int i = 0; i < num_indirect_access_units; i++) {
+            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, true);
+            }
+        }
         break;
     }
     default:
@@ -520,19 +584,19 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
 }
 bool MAA::CacheSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     maa->recvCacheTimingResp(pkt);
     return true;
 }
 
 void MAA::recvCacheTimingSnoopReq(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
 }
 // Express snooping requests to memside port
 void MAA::CacheSidePort::recvTimingSnoopReq(PacketPtr pkt) {
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     // handle snooping requests
     maa->recvCacheTimingSnoopReq(pkt);
     assert(false);
@@ -540,25 +604,25 @@ void MAA::CacheSidePort::recvTimingSnoopReq(PacketPtr pkt) {
 
 Tick MAA::recvCacheAtomicSnoop(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
     return 0;
 }
 Tick MAA::CacheSidePort::recvAtomicSnoop(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     return maa->recvCacheAtomicSnoop(pkt);
     assert(false);
 }
 
 void MAA::cacheFunctionalAccess(PacketPtr pkt, bool from_cpu_side) {
     /// print the packet
-    DPRINTF(MAA, "%s: received %s\n", __func__, pkt->print());
+    DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     assert(false);
 }
 void MAA::CacheSidePort::recvFunctionalSnoop(PacketPtr pkt) {
     /// print the packet
-    // DPRINTF(MAA, "%s: received %s, doing nothing\n", __func__, pkt->print());
+    // DPRINTF(MAACachePort, "%s: received %s, doing nothing\n", __func__, pkt->print());
     // // functional snoop (note that in contrast to atomic we don't have
     // // a specific functionalSnoop method, as they have the same
     // // behaviour regardless)
@@ -568,10 +632,15 @@ void MAA::CacheSidePort::recvFunctionalSnoop(PacketPtr pkt) {
 
 void MAA::CacheSidePort::recvReqRetry() {
     /// print the packet
-    DPRINTF(MAA, "%s: called!\n", __func__);
+    DPRINTF(MAACachePort, "%s: called!\n", __func__);
     for (int i = 0; i < maa->num_stream_access_units; i++) {
         if (maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
             maa->streamAccessUnits[i].execute();
+        }
+    }
+    for (int i = 0; i < maa->num_indirect_access_units; i++) {
+        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
+            maa->indirectAccessUnits[i].execute();
         }
     }
 }
@@ -599,229 +668,27 @@ void MAA::issueInstruction() {
             }
         }
     }
-}
-
-/**
- * Returns the address of the closest aligned fixed-size block to the given
- * address.
- * @param addr Input address.
- * @param block_size Block size in bytes.
- * @return Address of the closest aligned block.
- */
-inline Addr addrBlockAlign(Addr addr, Addr block_size) {
-    return addr & ~(block_size - 1);
-}
-
-void StreamAccessUnit::execute(Instruction *_instruction) {
-    switch (state) {
-    case Status::Idle: {
-        assert(_instruction != nullptr);
-        DPRINTF(MAA, "%s: idling %s!\n", __func__, _instruction->print());
-        state = Status::Decode;
-        [[fallthrough]];
-    }
-    case Status::Decode: {
-        assert(_instruction != nullptr);
-        DPRINTF(MAA, "%s: decoding %s!\n", __func__, _instruction->print());
-        my_instruction = _instruction;
-
-        // Decoding the instruction
-        my_dst_tile = my_instruction->dst1SpdID;
-        my_cond_tile = my_instruction->condSpdID;
-        my_min = *((int *)maa->rf->getDataPtr(my_instruction->src1RegID));
-        my_max = *((int *)maa->rf->getDataPtr(my_instruction->src2RegID));
-        my_stride = *((int *)maa->rf->getDataPtr(my_instruction->src3RegID));
-
-        // Initialization
-        my_i = my_min;
-        my_last_block_addr = 0;
-        my_idx = 0;
-        my_base_addr = my_instruction->baseAddr;
-        my_byte_enable = std::vector<bool>(block_size, false);
-        my_outstanding_pkt = false;
-        my_received_responses = 0;
-
-        // Setting the state of the instruction and stream unit
-        my_instruction->state = Instruction::Status::Service;
-        state = Status::Request;
-        [[fallthrough]];
-    }
-    case Status::Request: {
-        DPRINTF(MAA, "%s: requesting %s!\n", __func__, my_instruction->print());
-        if (my_outstanding_pkt) {
-            if (sendOutstandingPacket() == false) {
-                break;
+    for (int i = 0; i < num_indirect_access_units; i++) {
+        if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Idle) {
+            Instruction *inst = ifile->getReady(Instruction::FuncUnitType::INDIRECT);
+            if (inst != nullptr) {
+                indirectAccessUnits[i].execute(inst);
             }
         }
-        for (; my_i < my_max && my_idx < maa->num_tile_elements; my_i += my_stride, my_idx++) {
-            if (my_cond_tile == -1 || maa->spd->getData(my_cond_tile, my_idx) != 0) {
-                Addr curr_addr = my_base_addr + word_size * my_i;
-                Addr curr_block_addr = addrBlockAlign(curr_addr, block_size);
-                if (curr_block_addr != my_last_block_addr) {
-                    if (my_last_block_addr != 0) {
-                        createMyPacket();
-                        if (sendOutstandingPacket() == false) {
-                            return;
-                        }
-                    }
-                    my_last_block_addr = curr_block_addr;
-                    translatePacket();
-                }
-                uint16_t base_byte_id = curr_addr - curr_block_addr;
-                uint16_t word_id = base_byte_id / word_size;
-                for (int byte_id = base_byte_id; byte_id < base_byte_id + word_size; byte_id++) {
-                    assert((byte_id >= 0) && (byte_id < block_size));
-                    my_byte_enable[byte_id] = true;
-                }
-                request_table->add_entry(my_idx, my_translated_physical_address, word_id);
-                DPRINTF(MAA, "RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
-                        my_idx, curr_block_addr, my_translated_physical_address, word_id);
-            }
-        }
-        if (my_last_block_addr != 0) {
-            assert(std::find(my_byte_enable.begin(), my_byte_enable.end(), true) != my_byte_enable.end());
-            createMyPacket();
-            if (sendOutstandingPacket() == false) {
-                break;
-            }
-        }
-        state = Status::Response;
-        maa->spd->setSize(my_dst_tile, my_idx);
-        break;
-    }
-    case Status::Response: {
-        DPRINTF(MAA, "%s: responding %s!\n", __func__, my_instruction->print());
-        if (my_received_responses == my_idx) {
-            my_instruction->state = Instruction::Status::Finish;
-            state = Status::Idle;
-            maa->spd->setReady(my_dst_tile);
-        }
-        break;
-    }
-    default:
-        assert(false);
     }
 }
-void StreamAccessUnit::createMyPacket() {
-    /**** Packet generation ****/
-    RequestPtr real_req = std::make_shared<Request>(my_translated_physical_address, block_size, flags, maa->requestorId);
-    real_req->setByteEnable(my_byte_enable);
-    my_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
-    my_pkt->allocate();
-    my_outstanding_pkt = true;
-    DPRINTF(MAA, "%s: created %s, be:\n", __func__, my_pkt->print());
-    for (int j = 0; j < block_size; j++) {
-        DPRINTF(MAA, "[%d] %s\n", j, my_byte_enable[j] ? "T" : "F");
+void MAA::finishInstruction(Instruction *instruction,
+                            int dst1SpdID,
+                            int dst2SpdID) {
+    DPRINTF(MAAController, "%s: %s finishing!\n", __func__, instruction->print());
+    if (dst1SpdID != -1) {
+        spd->setReady(dst1SpdID);
     }
-    DPRINTF(MAA, "\n");
-    my_last_block_addr = 0;
-    std::fill(my_byte_enable.begin(), my_byte_enable.end(), false);
-}
-bool StreamAccessUnit::sendOutstandingPacket() {
-    DPRINTF(MAA, "%s: trying sending %s, be:\n", __func__, my_pkt->print());
-    if (maa->cacheSidePort.sendTimingReq(my_pkt) == false) {
-        DPRINTF(MAA, "%s: send failed, leaving execution...\n", __func__);
-        return false;
-    } else {
-        my_outstanding_pkt = false;
-        return true;
+    if (dst2SpdID != -1) {
+        spd->setReady(dst2SpdID);
     }
-}
-void StreamAccessUnit::translatePacket() {
-    /**** Address translation ****/
-    RequestPtr translation_req = std::make_shared<Request>(my_last_block_addr, block_size, flags, maa->requestorId, my_instruction->PC, my_instruction->CID);
-    ThreadContext *tc = maa->system->threads[my_instruction->CID];
-    maa->mmu->translateTiming(translation_req, tc, this, BaseMMU::Read);
-    // The above function immediately does the translation and calls the finish function
-    assert(translation_done);
-    translation_done = false;
-}
-void StreamAccessUnit::recvData(const Addr addr,
-                                std::vector<uint32_t> data,
-                                std::vector<uint16_t> wids) {
-    std::vector<RequestTableEntry> entries = request_table->get_entries(addr);
-    if (entries.empty()) {
-        return;
-    }
-
-    int num_words = data.size();
-    assert(num_words == wids.size());
-    assert(num_words == entries.size());
-
-    DPRINTF(MAA, "%s: addr(0x%lx), (RT) wids: \n", __func__, addr);
-    for (int i = 0; i < num_words; i++) {
-        DPRINTF(MAA, " %d | %d\n", wids[i], entries[i].wid);
-    }
-    for (int i = 0; i < num_words; i++) {
-        int itr = entries[i].itr;
-        int wid = entries[i].wid;
-        assert(wid == wids[i]);
-        maa->spd->setData(my_dst_tile, itr, data[i]);
-        my_received_responses++;
-    }
-    if (state == Status::Response) {
-        execute(my_instruction);
-    }
-}
-void StreamAccessUnit::finish(const Fault &fault,
-                              const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
-    assert(fault == NoFault);
-    assert(translation_done == false);
-    translation_done = true;
-    my_translated_physical_address = req->getPaddr();
-}
-
-bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
-    int address_itr = -1;
-    int free_address_itr = -1;
-    for (int i = 0; i < num_addresses; i++) {
-        if (addresses_valid[i] == true) {
-            if (addresses[i] == base_addr) {
-                address_itr = i;
-            }
-        } else if (free_address_itr == -1) {
-            free_address_itr = i;
-        }
-    }
-    if (address_itr == -1) {
-        if (free_address_itr == -1) {
-            return false;
-        } else {
-            addresses[free_address_itr] = base_addr;
-            addresses_valid[free_address_itr] = true;
-            address_itr = free_address_itr;
-        }
-    }
-    int free_entry_itr = -1;
-    for (int i = 0; i < num_entries_per_address; i++) {
-        if (entries_valid[address_itr][i] == false) {
-            free_entry_itr = i;
-            break;
-        }
-    }
-    if (free_entry_itr == -1) {
-        return false;
-    } else {
-        entries[address_itr][free_entry_itr] = RequestTableEntry(itr, wid);
-        entries_valid[address_itr][free_entry_itr] = true;
-    }
-    return true;
-}
-std::vector<RequestTableEntry> RequestTable::get_entries(Addr base_addr) {
-    std::vector<RequestTableEntry> result;
-    for (int i = 0; i < num_addresses; i++) {
-        if (addresses_valid[i] == true && addresses[i] == base_addr) {
-            for (int j = 0; j < num_entries_per_address; j++) {
-                if (entries_valid[i][j] == true) {
-                    result.push_back(entries[i][j]);
-                    entries_valid[i][j] = false;
-                }
-            }
-            addresses_valid[i] = false;
-            break;
-        }
-    }
-    return result;
+    ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
+    issueInstruction();
 }
 
 } // namespace gem5

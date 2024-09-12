@@ -726,6 +726,9 @@ def run(options, root, testsys, cpu_class):
 
     workloads = []
     if options.maa:
+        assert(len(testsys.mem_ctrls) == 1)
+        testsys.maa.addRamulatorInstance(testsys.mem_ctrls[0])
+
         start_cacheable_addr, size_cacheable_addr, start_noncacheable_addr, size_noncacheable_addr = MAAConfig.get_maa_address(options)
         for cpu_id in range(len(testsys.cpu)):
             for workload_id in range(len(testsys.cpu[cpu_id].workload)):

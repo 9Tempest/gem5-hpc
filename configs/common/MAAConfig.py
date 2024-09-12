@@ -32,6 +32,12 @@ def _get_maa_opts(options):
     
     if hasattr(options, "maa_num_alu_units"):
         opts["num_alu_units"] = getattr(options, "maa_num_alu_units")
+
+    if hasattr(options, "maa_num_row_table_rows"):
+        opts["num_row_table_rows"] = getattr(options, "maa_num_row_table_rows")
+    
+    if hasattr(options, "maa_num_row_table_entries_per_row"):
+        opts["num_row_table_entries_per_row"] = getattr(options, "maa_num_row_table_entries_per_row")
     
     addr_ranges = []
     start = options.mem_size
@@ -86,7 +92,7 @@ def config_maa(options, system):
     system.maa = SharedMAA(clk_domain=system.cpu_clk_domain, **opts)
 
     # CPU side is derived by the memory side of the memory bus
-    system.maa.cpu_side = system.membusnc.mem_side_ports
+    system.maa.cpu_side = system.membus.mem_side_ports
     # LLC side derives the cpu side of the L3 bus
     assert(options.l3cache)
     system.maa.cache_side = system.tol3bus.cpu_side_ports

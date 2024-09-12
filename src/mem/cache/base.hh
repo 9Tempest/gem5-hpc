@@ -136,7 +136,8 @@ protected:
     protected:
         CacheRequestPort(const std::string &_name,
                          ReqPacketQueue &_reqQueue,
-                         SnoopRespPacketQueue &_snoopRespQueue) : QueuedRequestPort(_name, _reqQueue, _snoopRespQueue) {}
+                         SnoopRespPacketQueue &_snoopRespQueue)
+            : QueuedRequestPort(_name, _reqQueue, _snoopRespQueue) {}
 
         /**
          * Memory-side port always snoops.

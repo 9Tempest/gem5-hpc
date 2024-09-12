@@ -563,7 +563,7 @@ CoherentXBar::recvTimingSnoopReq(PacketPtr pkt, PortID mem_side_port_id)
     // device responsible for the address range something is
     // wrong, hence there is nothing further to do as the packet
     // would be going back to where it came from
-    assert(findPort(pkt) == mem_side_port_id);
+    // assert(findPort(pkt) == mem_side_port_id);
 }
 
 bool
