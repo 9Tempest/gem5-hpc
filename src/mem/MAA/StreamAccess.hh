@@ -89,15 +89,14 @@ protected:
     int dst_tile_id;
 
 public:
-    StreamAccessUnit() {
-        request_table = nullptr;
-    }
+    StreamAccessUnit();
     ~StreamAccessUnit() {
         if (request_table != nullptr) {
             delete request_table;
         }
     }
-    void allocate(unsigned int _num_tile_elements, MAA *_maa) {
+    void allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa) {
+        my_stream_id = _my_stream_id;
         num_tile_elements = _num_tile_elements;
         state = Status::Idle;
         maa = _maa;
@@ -106,8 +105,12 @@ public:
         translation_done = false;
     }
     Status getState() const { return state; }
-    void execute(Instruction *_instruction = nullptr);
-    void recvData(const Addr addr,
+
+    void setInstruction(Instruction *_instruction);
+
+    void scheduleExecuteInstructionEvent(int latency = 0);
+
+    bool recvData(const Addr addr,
                   std::vector<uint32_t> data,
                   std::vector<uint16_t> wids);
 
@@ -130,6 +133,8 @@ protected:
     std::vector<bool> my_byte_enable;
     int my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
     int my_received_responses;
+    int my_stream_id;
+    bool my_request_table_full;
 
     Addr my_translated_physical_address;
     bool translation_done;
@@ -137,6 +142,8 @@ protected:
     void createMyPacket();
     bool sendOutstandingPacket();
     void translatePacket();
+    void executeInstruction();
+    EventFunctionWrapper executeInstructionEvent;
 };
 } // namespace gem5
 

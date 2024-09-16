@@ -2,6 +2,7 @@
 #include "base/addr_range.hh"
 #include "base/logging.hh"
 #include "base/trace.hh"
+#include "mem/MAA/IF.hh"
 #include "mem/MAA/IndirectAccess.hh"
 #include "mem/packet.hh"
 #include "params/MAA.hh"
@@ -42,7 +43,8 @@ MAA::MAA(const MAAParams &p)
       num_row_table_rows(p.num_row_table_rows),
       num_row_table_entries_per_row(p.num_row_table_entries_per_row),
       system(p.system),
-      mmu(p.mmu) {
+      mmu(p.mmu),
+      issueInstructionEvent([this] { issueInstruction(); }, name()) {
 
     requestorId = p.system->getRequestorId(this);
     spd = new SPD(num_tiles, num_tile_elements);
@@ -50,9 +52,10 @@ MAA::MAA(const MAAParams &p)
     ifile = new IF(num_instructions);
     streamAccessUnits = new StreamAccessUnit[num_stream_access_units];
     for (int i = 0; i < num_stream_access_units; i++) {
-        streamAccessUnits[i].allocate(num_tile_elements, this);
+        streamAccessUnits[i].allocate(i, num_tile_elements, this);
     }
     indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];
+    cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
 }
 
 void MAA::init() {
@@ -101,7 +104,8 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
             m_org[ADDR_COLUMN_LEVEL]);
     assert(m_num_levels == 6);
     for (int i = 0; i < num_indirect_access_units; i++) {
-        indirectAccessUnits[i].allocate(num_tile_elements,
+        indirectAccessUnits[i].allocate(i,
+                                        num_tile_elements,
                                         num_row_table_rows,
                                         num_row_table_entries_per_row,
                                         this);
@@ -168,14 +172,14 @@ bool MAA::CpuSidePort::tryTiming(PacketPtr pkt) {
 
 void MAA::recvTimingReq(PacketPtr pkt) {
     /// print the packet
-    AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
-    DPRINTF(MAACpuPort, "%s: received %s, %s, cmd: %s, isMaskedWrite: %d, size: %d\n",
+    DPRINTF(MAACpuPort, "%s: received %s, cmd: %s, isMaskedWrite: %d, size: %d\n",
             __func__,
             pkt->print(),
-            address_range.print(),
             pkt->cmdString(),
             pkt->isMaskedWrite(),
             pkt->getSize());
+    AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
+    DPRINTF(MAACpuPort, "%s: address range type: %s\n", __func__, address_range.print());
     for (int i = 0; i < pkt->getSize(); i++) {
         DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
@@ -277,7 +281,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                     spd->unsetReady(current_instruction.dst2SpdID);
                 }
                 DPRINTF(MAAController, "%s: %s pushed!\n", __func__, current_instruction.print());
-                issueInstruction();
+                scheduleIssueInstructionEvent(1);
                 break;
             }
             default:
@@ -456,7 +460,9 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
         for (int i = 0; i < num_indirect_access_units; i++) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, false);
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, false)) {
+                    break;
+                }
             }
         }
         break;
@@ -519,7 +525,7 @@ void MAA::MemSidePort::recvReqRetry() {
     // this will be used for the indirect access
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
-            maa->indirectAccessUnits[i].execute();
+            maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
         }
     }
 }
@@ -564,16 +570,24 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 wid.push_back(i / 4);
             }
         }
+        bool received = false;
         for (int i = 0; i < num_stream_access_units; i++) {
             if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
                 streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                streamAccessUnits[i].recvData(pkt->getAddr(), data, wid);
+                if (streamAccessUnits[i].recvData(pkt->getAddr(), data, wid)) {
+                    received = true;
+                    break;
+                }
             }
         }
-        for (int i = 0; i < num_indirect_access_units; i++) {
-            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, true);
+        if (received == false) {
+            for (int i = 0; i < num_indirect_access_units; i++) {
+                if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, true)) {
+                        break;
+                    }
+                }
             }
         }
         break;
@@ -586,6 +600,10 @@ bool MAA::CacheSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
     maa->recvCacheTimingResp(pkt);
+    outstandingCacheSidePackets--;
+    if (blockReason == BlockReason::MAX_XBAR_PACKETS) {
+        setUnblocked(BlockReason::MAX_XBAR_PACKETS);
+    }
     return true;
 }
 
@@ -633,15 +651,77 @@ void MAA::CacheSidePort::recvFunctionalSnoop(PacketPtr pkt) {
 void MAA::CacheSidePort::recvReqRetry() {
     /// print the packet
     DPRINTF(MAACachePort, "%s: called!\n", __func__);
+    setUnblocked(BlockReason::CACHE_FAILED);
+}
+
+bool MAA::CacheSidePort::sendPacket(FuncUnitType func_unit_type,
+                                    int func_unit_id,
+                                    PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n",
+            __func__,
+            func_unit_names[(int)func_unit_id],
+            func_unit_id,
+            pkt->print());
+    assert(funcBlockReasons[(int)func_unit_type][func_unit_id] == BlockReason::NOT_BLOCKED);
+    if (blockReason != BlockReason::NOT_BLOCKED) {
+        DPRINTF(MAACachePort, "%s Send blocked because of %s...\n", __func__,
+                blockReason == BlockReason::MAX_XBAR_PACKETS ? "MAX_XBAR_PACKETS" : "CACHE_FAILED");
+        funcBlockReasons[(int)func_unit_type][func_unit_id] = blockReason;
+        return false;
+    }
+    if (outstandingCacheSidePackets == maxOutstandingCacheSidePackets) {
+        // XBAR is full
+        DPRINTF(MAACachePort, "%s Send failed because XBAR is full...\n", __func__);
+        assert(blockReason == BlockReason::NOT_BLOCKED);
+        blockReason = BlockReason::MAX_XBAR_PACKETS;
+        funcBlockReasons[(int)func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
+        return false;
+    }
+    if (maa->cacheSidePort.sendTimingReq(pkt) == false) {
+        // Cache cannot receive a new request
+        DPRINTF(MAACachePort, "%s Send failed because cache returned false...\n", __func__);
+        blockReason = BlockReason::CACHE_FAILED;
+        funcBlockReasons[(int)func_unit_type][func_unit_id] = BlockReason::CACHE_FAILED;
+        return false;
+    }
+    DPRINTF(MAACachePort, "%s Send is successfull...\n", __func__);
+    outstandingCacheSidePackets++;
+    return true;
+}
+
+void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
+    assert(blockReason == reason);
+    blockReason = BlockReason::NOT_BLOCKED;
     for (int i = 0; i < maa->num_stream_access_units; i++) {
-        if (maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
-            maa->streamAccessUnits[i].execute();
+        if (funcBlockReasons[(int)FuncUnitType::STREAM][i] != BlockReason::NOT_BLOCKED) {
+            assert(funcBlockReasons[(int)FuncUnitType::STREAM][i] == reason);
+            assert(maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request);
+            funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
+            DPRINTF(MAACachePort, "%s unblocked Unit[stream][%d]...\n", __func__, i);
+            maa->streamAccessUnits[i].scheduleExecuteInstructionEvent();
         }
     }
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
-            maa->indirectAccessUnits[i].execute();
+        if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
+            assert(funcBlockReasons[(int)FuncUnitType::INDIRECT][i] == reason);
+            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
+            funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
+            DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
+            maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
         }
+    }
+}
+
+void MAA::CacheSidePort::allocate(int _maxOutstandingCacheSidePackets) {
+    maxOutstandingCacheSidePackets = _maxOutstandingCacheSidePackets - 16;
+    funcBlockReasons[(int)FuncUnitType::STREAM] = new BlockReason[maa->num_stream_access_units];
+    for (int i = 0; i < maa->num_stream_access_units; i++) {
+        funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
+    }
+    funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa->num_indirect_access_units];
+    for (int i = 0; i < maa->num_indirect_access_units; i++) {
+        funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
     }
 }
 
@@ -651,6 +731,8 @@ MAA::CacheSidePort::CacheSidePort(const std::string &_name,
     : MAACacheRequestPort(_name, _reqQueue, _snoopRespQueue),
       _reqQueue(*_maa, *this, _snoopRespQueue, _label),
       _snoopRespQueue(*_maa, *this, true, _label), maa(_maa) {
+    outstandingCacheSidePackets = 0;
+    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 ///////////////
@@ -662,17 +744,23 @@ MAA::CacheSidePort::CacheSidePort(const std::string &_name,
 void MAA::issueInstruction() {
     for (int i = 0; i < num_stream_access_units; i++) {
         if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Idle) {
-            Instruction *inst = ifile->getReady(Instruction::FuncUnitType::STREAM);
+            Instruction *inst = ifile->getReady(FuncUnitType::STREAM);
             if (inst != nullptr) {
-                streamAccessUnits[i].execute(inst);
+                streamAccessUnits[i].setInstruction(inst);
+                streamAccessUnits[i].scheduleExecuteInstructionEvent(1);
+            } else {
+                break;
             }
         }
     }
     for (int i = 0; i < num_indirect_access_units; i++) {
         if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Idle) {
-            Instruction *inst = ifile->getReady(Instruction::FuncUnitType::INDIRECT);
+            Instruction *inst = ifile->getReady(FuncUnitType::INDIRECT);
             if (inst != nullptr) {
-                indirectAccessUnits[i].execute(inst);
+                indirectAccessUnits[i].setInstruction(inst);
+                indirectAccessUnits[i].scheduleExecuteInstructionEvent(1);
+            } else {
+                break;
             }
         }
     }
@@ -688,7 +776,18 @@ void MAA::finishInstruction(Instruction *instruction,
         spd->setReady(dst2SpdID);
     }
     ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
-    issueInstruction();
+    scheduleIssueInstructionEvent();
+}
+void MAA::scheduleIssueInstructionEvent(int latency) {
+    DPRINTF(MAAController, "%s: scheduling issue for the next %d cycles!\n", __func__, latency);
+    Tick new_when = curTick() + latency;
+    if (!issueInstructionEvent.scheduled()) {
+        schedule(issueInstructionEvent, new_when);
+    } else {
+        Tick old_when = issueInstructionEvent.when();
+        if (new_when < old_when)
+            reschedule(issueInstructionEvent, new_when);
+    }
 }
 
 } // namespace gem5

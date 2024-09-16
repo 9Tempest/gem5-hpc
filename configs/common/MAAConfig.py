@@ -95,6 +95,16 @@ def config_maa(options, system):
     system.maa.cpu_side = system.membus.mem_side_ports
     # LLC side derives the cpu side of the L3 bus
     assert(options.l3cache)
+    
+    # Increasing LLC side packets to accommodate the MAA routing table
+    max_routing_table_size = (1 if "num_stream_access_units" not in opts else opts["num_stream_access_units"])
+    max_routing_table_size += (1 if "num_indirect_access_units" not in opts else opts["num_indirect_access_units"])
+    max_routing_table_size *= (1 if "num_tile_elements" not in opts else opts["num_tile_elements"])
+    max_routing_table_size = max(512, max_routing_table_size)
+    print(f"MAA max routing table size: {max_routing_table_size}")
+    system.maa.max_outstanding_cache_side_packets = max_routing_table_size
+
+    system.tol3bus.max_routing_table_size = max_routing_table_size
     system.maa.cache_side = system.tol3bus.cpu_side_ports
     # Memory side derives the cpu side of the memory bus
     system.maa.mem_side = system.membusnc.cpu_side_ports

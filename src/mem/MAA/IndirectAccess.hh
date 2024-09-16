@@ -71,7 +71,10 @@ public:
             delete[] entries_valid;
         }
     }
-    void allocate(int _num_row_table_entries_per_row,
+    void allocate(int _my_indirect_id,
+                  int _my_table_id,
+                  int _my_table_row_id,
+                  int _num_row_table_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
     bool insert(Addr addr,
@@ -89,6 +92,7 @@ public:
     int num_row_table_entries_per_row;
     int last_sent_entry_id;
     IndirectAccessUnit *indir_access;
+    int my_indirect_id, my_table_id, my_table_row_id;
 };
 class RowTable {
 public:
@@ -103,7 +107,9 @@ public:
             delete[] entries_valid;
         }
     }
-    void allocate(int _num_row_table_rows,
+    void allocate(int _my_indirect_id,
+                  int _my_table_id,
+                  int _num_row_table_rows,
                   int _num_row_table_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
@@ -126,6 +132,7 @@ public:
     int num_row_table_entries_per_row;
     int last_sent_row_id;
     IndirectAccessUnit *indir_access;
+    int my_indirect_id, my_table_id;
 };
 
 class IndirectAccessUnit : public BaseMMU::Translation {
@@ -156,21 +163,22 @@ protected:
     int dst_tile_id;
 
 public:
-    IndirectAccessUnit() {
-        row_table = nullptr;
-    }
+    IndirectAccessUnit();
     ~IndirectAccessUnit() {
         if (row_table != nullptr) {
             delete row_table;
         }
     }
-    void allocate(int _num_tile_elements,
+    void allocate(int _my_indirect_id,
+                  int _num_tile_elements,
                   int _num_row_table_rows,
                   int _num_row_table_entries_per_row,
                   MAA *_maa);
     Status getState() const { return state; }
-    void execute(Instruction *_instruction = nullptr);
-    void recvData(const Addr addr,
+    void scheduleExecuteInstructionEvent(int latency = 0);
+    void setInstruction(Instruction *_instruction);
+
+    bool recvData(const Addr addr,
                   std::vector<uint32_t> data,
                   std::vector<uint16_t> wids,
                   bool is_block_cached);
@@ -202,12 +210,15 @@ protected:
     Addr my_translated_physical_address;
     Addr my_translated_block_physical_address;
     bool translation_done;
+    int my_indirect_id;
 
     void createMyPacket();
     bool sendOutstandingPacket();
     void translatePacket();
     void checkAllRowTablesSent();
     int getRowTableIdx(int channel, int rank, int bankgroup);
+    void executeInstruction();
+    EventFunctionWrapper executeInstructionEvent;
 };
 } // namespace gem5
 

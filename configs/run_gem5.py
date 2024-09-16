@@ -2,7 +2,7 @@ import argparse
 import os
 from threading import Thread, Lock
 
-parallelism = 24
+parallelism = 1
 
 tasks = []
 lock = Lock()
@@ -32,10 +32,12 @@ parser.add_argument('--options', type=str, help='options to the cmd', default="0
 parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file.', default=None)
 parser.add_argument('--output', type=str, help='Path to the output directory.', required=True)
 parser.add_argument('--fast', help='Fast gem5 version.', action=argparse.BooleanOptionalAction)
+parser.add_argument('--maa', help='Run it with MAA.', action=argparse.BooleanOptionalAction)
 
 args = parser.parse_args()
 
 FAST_SIM_TYPE = False if (args.fast == None or args.fast == False) else True
+MAA_SIM_TYPE = False if (args.maa == None or args.maa == False) else True
 cpu_type = "X86O3CPU"
 # cpu_type = "AtomicSimpleCPU"
 # core_num = 4
@@ -86,6 +88,9 @@ checkpoint_address = args.checkpoint
 debug_type = None
 # debug_type = "LSQ,CacheAll,PseudoInst"
 # debug_type = "O3CPUAll,CacheAll,PseudoInst"
+if MAA_SIM_TYPE:
+    debug_type = "MAACachePort,MAAMemPort,MAAIndirect,MAAStream"
+    # debug_type = "MAACachePort,MAAIndirect,MAAStream,Cache"
 out_dir = args.output
 if out_dir[-1] == "/":
     out_dir = out_dir[:-1]
@@ -129,11 +134,14 @@ def add_command(cpu_buffer_enlarge_factor, cpu_register_enlarge_factor, cpu_widt
     COMMAND += "--cacheline_size=64 "
     COMMAND += f"--mem-type {mem_type} "
     COMMAND += f"--mem-channels {mem_channels} "
+    if MAA_SIM_TYPE:
+        COMMAND += "--maa "
     COMMAND += f"--cmd {cmd} "
     COMMAND += f"--options \"{options}\" "
     if checkpoint_address != None:
         COMMAND += f"-r 1 "
-    COMMAND += f"--prog-interval={program_interval} --work-end-exit-count=1 "
+    COMMAND += f"--prog-interval={program_interval} "
+    # COMMAND += f"--work-end-exit-count=1 "
     COMMAND += f"2>&1 "
     COMMAND += "| awk '{ print strftime(), $0; fflush() }' "
     COMMAND += f"| tee {m5out_addr}/logs.txt "

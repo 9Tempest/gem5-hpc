@@ -52,21 +52,21 @@ bool IF::pushInstruction(Instruction _instruction) {
     bool pushed = false;
     switch (_instruction.opcode) {
     case Instruction::OpcodeType::STREAM_LD: {
-        _instruction.funcUnit = Instruction::FuncUnitType::STREAM;
+        _instruction.funcUnit = FuncUnitType::STREAM;
         break;
     }
     case Instruction::OpcodeType::INDIR_LD:
     case Instruction::OpcodeType::INDIR_ST:
     case Instruction::OpcodeType::INDIR_RMW: {
-        _instruction.funcUnit = Instruction::FuncUnitType::INDIRECT;
+        _instruction.funcUnit = FuncUnitType::INDIRECT;
         break;
     }
     case Instruction::OpcodeType::RANGE_LOOP: {
-        _instruction.funcUnit = Instruction::FuncUnitType::RANGE;
+        _instruction.funcUnit = FuncUnitType::RANGE;
         break;
     }
     case Instruction::OpcodeType::CONDITION: {
-        _instruction.funcUnit = Instruction::FuncUnitType::ALU;
+        _instruction.funcUnit = FuncUnitType::ALU;
         break;
     }
     default: {
@@ -98,7 +98,7 @@ bool IF::pushInstruction(Instruction _instruction) {
     }
     return pushed;
 }
-Instruction *IF::getReady(Instruction::FuncUnitType funcUnit) {
+Instruction *IF::getReady(FuncUnitType funcUnit) {
     for (int i = 0; i < num_instructions; i++) {
         if (valids[i] &&
             instructions[i].src1Ready &&

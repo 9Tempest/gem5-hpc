@@ -1,4 +1,5 @@
 #include "mem/MAA/StreamAccess.hh"
+#include "base/trace.hh"
 #include "mem/MAA/MAA.hh"
 #include "debug/MAAStream.hh"
 #include <cassert>
@@ -13,6 +14,10 @@ namespace gem5 {
 // STREAM ACCESS UNIT
 //
 ///////////////
+StreamAccessUnit::StreamAccessUnit()
+    : executeInstructionEvent([this] { executeInstruction(); }, name()) {
+    request_table = nullptr;
+}
 std::vector<RequestTableEntry> RequestTable::get_entries(Addr base_addr) {
     std::vector<RequestTableEntry> result;
     for (int i = 0; i < num_addresses; i++) {
@@ -63,18 +68,17 @@ bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
     entries_valid[address_itr][free_entry_itr] = true;
     return true;
 }
-void StreamAccessUnit::execute(Instruction *_instruction) {
+void StreamAccessUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
-        assert(_instruction != nullptr);
-        DPRINTF(MAAStream, "%s: idling %s!\n", __func__, _instruction->print());
+        assert(my_instruction != nullptr);
+        DPRINTF(MAAStream, "%s: idling %s!\n", __func__, my_instruction->print());
         state = Status::Decode;
         [[fallthrough]];
     }
     case Status::Decode: {
-        assert(_instruction != nullptr);
-        DPRINTF(MAAStream, "%s: decoding %s!\n", __func__, _instruction->print());
-        my_instruction = _instruction;
+        assert(my_instruction != nullptr);
+        DPRINTF(MAAStream, "%s: decoding %s!\n", __func__, my_instruction->print());
 
         // Decoding the instruction
         my_dst_tile = my_instruction->dst1SpdID;
@@ -91,6 +95,7 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
         my_byte_enable = std::vector<bool>(block_size, false);
         my_outstanding_pkt = false;
         my_received_responses = 0;
+        my_request_table_full = false;
 
         // Setting the state of the instruction and stream unit
         DPRINTF(MAAStream, "%s: state set to request for request %s!\n", __func__, my_instruction->print());
@@ -99,6 +104,8 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
         [[fallthrough]];
     }
     case Status::Request: {
+        assert(my_instruction != nullptr);
+        assert(my_request_table_full == false);
         DPRINTF(MAAStream, "%s: requesting %s!\n", __func__, my_instruction->print());
         if (my_outstanding_pkt) {
             if (sendOutstandingPacket() == false) {
@@ -128,6 +135,7 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
                 if (request_table->add_entry(my_idx, my_translated_physical_address, word_id) == false) {
                     DPRINTF(MAAStream, "RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
                             my_idx, curr_block_addr, my_translated_physical_address, word_id);
+                    my_request_table_full = true;
                     return;
                 } else {
                     DPRINTF(MAAStream, "RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
@@ -148,6 +156,7 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
         [[fallthrough]];
     }
     case Status::Response: {
+        assert(my_instruction != nullptr);
         DPRINTF(MAAStream, "%s: responding %s!\n", __func__, my_instruction->print());
         if (my_received_responses == my_idx) {
             DPRINTF(MAAStream, "%s: state set to finish for request %s!\n", __func__, my_instruction->print());
@@ -155,6 +164,7 @@ void StreamAccessUnit::execute(Instruction *_instruction) {
             state = Status::Idle;
             maa->spd->setReady(my_dst_tile);
             maa->finishInstruction(my_instruction, my_dst_tile);
+            my_instruction = nullptr;
         }
         break;
     }
@@ -179,7 +189,9 @@ void StreamAccessUnit::createMyPacket() {
 }
 bool StreamAccessUnit::sendOutstandingPacket() {
     DPRINTF(MAAStream, "%s: trying sending %s\n", __func__, my_pkt->print());
-    if (maa->cacheSidePort.sendTimingReq(my_pkt) == false) {
+    if (maa->cacheSidePort.sendPacket(FuncUnitType::STREAM,
+                                      my_stream_id,
+                                      my_pkt) == false) {
         DPRINTF(MAAStream, "%s: send failed, leaving execution...\n", __func__);
         return false;
     } else {
@@ -196,13 +208,13 @@ void StreamAccessUnit::translatePacket() {
     assert(translation_done);
     translation_done = false;
 }
-void StreamAccessUnit::recvData(const Addr addr,
+bool StreamAccessUnit::recvData(const Addr addr,
                                 std::vector<uint32_t> data,
                                 std::vector<uint16_t> wids) {
     std::vector<RequestTableEntry> entries = request_table->get_entries(addr);
     if (entries.empty()) {
         DPRINTF(MAAStream, "%s: no entries found for addr(0x%lx)\n", __func__, addr);
-        return;
+        return false;
     }
 
     int num_words = data.size();
@@ -220,10 +232,19 @@ void StreamAccessUnit::recvData(const Addr addr,
         maa->spd->setData(my_dst_tile, itr, data[i]);
         my_received_responses++;
     }
-    if (state == Status::Response ||
-        (state == Status::Request && my_outstanding_pkt == false)) {
-        execute(my_instruction);
+    if (my_request_table_full) {
+        assert(state == Status::Request);
+        my_request_table_full = false;
+        DPRINTF(MAAStream, "%s: request table was full, calling execution again!\n", __func__);
+        scheduleExecuteInstructionEvent();
+    } else if (my_received_responses == my_idx) {
+        assert(state == Status::Response);
+        DPRINTF(MAAStream, "%s: all words received, calling execution again!\n", __func__);
+        scheduleExecuteInstructionEvent();
+    } else {
+        DPRINTF(MAAStream, "%s: expected: %d, received: %d!\n", __func__, my_idx, my_received_responses);
     }
+    return true;
 }
 void StreamAccessUnit::finish(const Fault &fault,
                               const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
@@ -231,5 +252,20 @@ void StreamAccessUnit::finish(const Fault &fault,
     assert(translation_done == false);
     translation_done = true;
     my_translated_physical_address = req->getPaddr();
+}
+void StreamAccessUnit::setInstruction(Instruction *_instruction) {
+    assert(my_instruction == nullptr);
+    my_instruction = _instruction;
+}
+void StreamAccessUnit::scheduleExecuteInstructionEvent(int latency) {
+    DPRINTF(MAAStream, "%s: scheduling execute for the next %d cycles!\n", __func__, latency);
+    Tick new_when = curTick() + latency;
+    if (!executeInstructionEvent.scheduled()) {
+        maa->schedule(executeInstructionEvent, new_when);
+    } else {
+        Tick old_when = executeInstructionEvent.when();
+        if (new_when < old_when)
+            maa->reschedule(executeInstructionEvent, new_when);
+    }
 }
 } // namespace gem5

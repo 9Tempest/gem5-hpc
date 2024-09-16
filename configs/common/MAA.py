@@ -14,3 +14,4 @@ class SharedMAA(MAA):
     num_alu_units = 1
     num_row_table_rows = 64
     num_row_table_entries_per_row = 16
+    max_outstanding_cache_side_packets = 512

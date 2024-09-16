@@ -184,6 +184,12 @@ class MAA : public ClockedObject {
      * access functions for functional, atomic and timing snoops.
      */
     class CacheSidePort : public MAACacheRequestPort {
+        enum class BlockReason : uint8_t {
+            NOT_BLOCKED,
+            MAX_XBAR_PACKETS,
+            CACHE_FAILED
+        };
+
     private:
         /** The maa-specific queue. */
         MAAReqPacketQueue _reqQueue;
@@ -203,6 +209,19 @@ class MAA : public ClockedObject {
         void recvFunctionalSnoop(PacketPtr pkt);
 
         void recvReqRetry();
+
+    protected:
+        int outstandingCacheSidePackets;
+        int maxOutstandingCacheSidePackets;
+        BlockReason blockReason;
+        BlockReason *funcBlockReasons[2];
+        void setUnblocked(BlockReason reason);
+
+    public:
+        bool sendPacket(FuncUnitType func_unit_type,
+                        int func_unit_id,
+                        PacketPtr pkt);
+        void allocate(int _maxOutstandingCacheSidePackets);
 
     public:
         CacheSidePort(const std::string &_name, MAA *_maa,
@@ -357,9 +376,12 @@ public:
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID = -1,
                            int dst2SpdID = -1);
+    bool sentMemSidePacket(PacketPtr pkt);
 
 protected:
     void issueInstruction();
+    EventFunctionWrapper issueInstructionEvent;
+    void scheduleIssueInstructionEvent(int latency = 0);
 };
 /**
  * Returns the address of the closest aligned fixed-size block to the given

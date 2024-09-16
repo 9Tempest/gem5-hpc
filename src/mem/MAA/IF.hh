@@ -11,16 +11,21 @@
 #include "arch/generic/mmu.hh"
 
 namespace gem5 {
-
+enum class FuncUnitType : uint8_t {
+    STREAM = 0,
+    INDIRECT = 1,
+    ALU = 2,
+    RANGE = 3,
+    MAX
+};
+const std::string func_unit_names[5] = {
+    "STREAM",
+    "INDIRECT",
+    "ALU",
+    "RANGE",
+    "MAX"};
 class Instruction {
 public:
-    enum class FuncUnitType : uint8_t {
-        ALU = 0,
-        STREAM = 1,
-        INDIRECT = 2,
-        RANGE = 3,
-        MAX
-    };
     enum class OpcodeType : uint8_t {
         STREAM_LD = 0,
         INDIR_LD = 1,
@@ -126,7 +131,7 @@ public:
         delete[] valids;
     }
     bool pushInstruction(Instruction _instruction);
-    Instruction *getReady(Instruction::FuncUnitType funcUnit);
+    Instruction *getReady(FuncUnitType funcUnit);
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID,
                            int dst2SpdID);

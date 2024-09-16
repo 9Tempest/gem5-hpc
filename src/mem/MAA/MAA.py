@@ -20,6 +20,7 @@ class MAA(ClockedObject):
     num_alu_units = Param.Unsigned(1, "Number of alu units")
     num_row_table_rows = Param.Unsigned(64, "Number of rows in each row table bank")
     num_row_table_entries_per_row = Param.Unsigned(16, "Number of row table entries (bursts) per row table row")
+    max_outstanding_cache_side_packets = Param.Unsigned(512, "Maximum number of outstanding cache side packets")
 
     cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
     mem_side = RequestPort("Downstream port closer to DRAM memory")
