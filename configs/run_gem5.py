@@ -89,7 +89,7 @@ debug_type = None
 # debug_type = "LSQ,CacheAll,PseudoInst"
 # debug_type = "O3CPUAll,CacheAll,PseudoInst"
 if MAA_SIM_TYPE:
-    debug_type = "MAACachePort,MAAMemPort,MAAIndirect,MAAStream"
+    debug_type = "MAACachePort,MAAMemPort,MAAIndirect,MAAStream,MAAInvalidator"
     # debug_type = "MAACachePort,MAAIndirect,MAAStream,Cache"
 out_dir = args.output
 if out_dir[-1] == "/":

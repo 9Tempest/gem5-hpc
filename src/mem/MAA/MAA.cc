@@ -56,6 +56,12 @@ MAA::MAA(const MAAParams &p)
     }
     indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];
     cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
+    invalidator = new Invalidator();
+    invalidator->allocate(
+        num_tiles,
+        num_tile_elements,
+        addrRanges.front().start(),
+        this);
 }
 
 void MAA::init() {
@@ -268,6 +274,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 current_instruction.PC = pkt->req->getPC();
                 current_instruction.src1Ready = current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
                 current_instruction.src2Ready = current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
+                current_instruction.dst1Ready = (current_instruction.opcode == Instruction::OpcodeType::STREAM_LD ||
+                                                 current_instruction.opcode == Instruction::OpcodeType::INDIR_LD)
+                                                    ? false
+                                                    : true;
                 DPRINTF(MAAController, "%s: %s pushing!\n", __func__, current_instruction.print());
                 assert(ifile->pushInstruction(current_instruction));
                 if (current_instruction.dst1SpdID != -1) {
@@ -380,6 +390,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             Cycles lat = Cycles(2);
             Tick request_time = clockEdge(lat);
             cpuSidePort.schedTimingResp(pkt, request_time);
+            invalidator->read(tile_id, element_id);
             break;
         }
         default:
@@ -556,9 +567,9 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
             pkt->print(),
             pkt->cmdString(),
             pkt->getSize());
-    for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAACachePort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
-    }
+    // for (int i = 0; i < pkt->getSize(); i++) {
+    //     DPRINTF(MAACachePort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+    // }
     switch (pkt->cmd.toInt()) {
     case MemCmd::ReadResp: {
         assert(pkt->getSize() == 64);
@@ -590,6 +601,18 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 }
             }
         }
+        break;
+    }
+    case MemCmd::InvalidateResp: {
+        assert(pkt->getSize() == 64);
+        AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
+        assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
+        Addr offset = address_range.getOffset();
+        int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+        int element_id = offset % (num_tile_elements * sizeof(uint32_t));
+        assert(element_id % sizeof(uint32_t) == 0);
+        element_id /= sizeof(uint32_t);
+        invalidator->recvData(tile_id, element_id);
         break;
     }
     default:
@@ -693,6 +716,13 @@ bool MAA::CacheSidePort::sendPacket(FuncUnitType func_unit_type,
 void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     assert(blockReason == reason);
     blockReason = BlockReason::NOT_BLOCKED;
+    if (funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] != BlockReason::NOT_BLOCKED) {
+        assert(funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] == reason);
+        assert(maa->invalidator->getState() == Invalidator::Status::Request);
+        funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
+        DPRINTF(MAACachePort, "%s unblocked Unit[invalidator]...\n", __func__);
+        maa->invalidator->scheduleExecuteInstructionEvent();
+    }
     for (int i = 0; i < maa->num_stream_access_units; i++) {
         if (funcBlockReasons[(int)FuncUnitType::STREAM][i] != BlockReason::NOT_BLOCKED) {
             assert(funcBlockReasons[(int)FuncUnitType::STREAM][i] == reason);
@@ -723,6 +753,8 @@ void MAA::CacheSidePort::allocate(int _maxOutstandingCacheSidePackets) {
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
     }
+    funcBlockReasons[(int)FuncUnitType::INVALIDATOR] = new BlockReason[1];
+    funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
 }
 
 MAA::CacheSidePort::CacheSidePort(const std::string &_name,
@@ -742,6 +774,13 @@ MAA::CacheSidePort::CacheSidePort(const std::string &_name,
 ///////////////
 
 void MAA::issueInstruction() {
+    if (invalidator->getState() == Invalidator::Status::Idle) {
+        Instruction *inst = ifile->getReady(FuncUnitType::INVALIDATOR);
+        if (inst != nullptr) {
+            invalidator->setInstruction(inst);
+            invalidator->scheduleExecuteInstructionEvent(1);
+        }
+    }
     for (int i = 0; i < num_stream_access_units; i++) {
         if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Idle) {
             Instruction *inst = ifile->getReady(FuncUnitType::STREAM);
@@ -776,6 +815,10 @@ void MAA::finishInstruction(Instruction *instruction,
         spd->setReady(dst2SpdID);
     }
     ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
+    scheduleIssueInstructionEvent();
+}
+void MAA::setDstReady(Instruction *instruction) {
+    instruction->dst1Ready = true;
     scheduleIssueInstructionEvent();
 }
 void MAA::scheduleIssueInstructionEvent(int latency) {

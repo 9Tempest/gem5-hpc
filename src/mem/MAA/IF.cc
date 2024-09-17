@@ -99,14 +99,25 @@ bool IF::pushInstruction(Instruction _instruction) {
     return pushed;
 }
 Instruction *IF::getReady(FuncUnitType funcUnit) {
-    for (int i = 0; i < num_instructions; i++) {
-        if (valids[i] &&
-            instructions[i].src1Ready &&
-            instructions[i].src2Ready &&
-            instructions[i].state == Instruction::Status::Idle &&
-            instructions[i].funcUnit == funcUnit) {
-            instructions[i].state = Instruction::Status::Service;
-            return &instructions[i];
+    if (funcUnit == FuncUnitType::INVALIDATOR) {
+        for (int i = 0; i < num_instructions; i++) {
+            if (valids[i] &&
+                instructions[i].dst1Ready == false) {
+                // instruction state does not matter anymore as we only have one invalidator
+                return &instructions[i];
+            }
+        }
+    } else {
+        for (int i = 0; i < num_instructions; i++) {
+            if (valids[i] &&
+                instructions[i].src1Ready &&
+                instructions[i].src2Ready &&
+                instructions[i].dst1Ready &&
+                instructions[i].state == Instruction::Status::Idle &&
+                instructions[i].funcUnit == funcUnit) {
+                instructions[i].state = Instruction::Status::Service;
+                return &instructions[i];
+            }
         }
     }
     return nullptr;

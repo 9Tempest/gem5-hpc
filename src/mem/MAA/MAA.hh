@@ -24,6 +24,7 @@
 #include "mem/MAA/SPD.hh"
 #include "mem/MAA/StreamAccess.hh"
 #include "mem/MAA/IndirectAccess.hh"
+#include "mem/MAA/Invalidator.hh"
 
 namespace gem5 {
 
@@ -214,7 +215,7 @@ class MAA : public ClockedObject {
         int outstandingCacheSidePackets;
         int maxOutstandingCacheSidePackets;
         BlockReason blockReason;
-        BlockReason *funcBlockReasons[2];
+        BlockReason *funcBlockReasons[3];
         void setUnblocked(BlockReason reason);
 
     public:
@@ -237,6 +238,7 @@ public:
     IF *ifile;
     StreamAccessUnit *streamAccessUnits;
     IndirectAccessUnit *indirectAccessUnits;
+    Invalidator *invalidator;
 
     // Ramulator related variables for address mapping
     std::vector<int> m_org;
@@ -376,6 +378,7 @@ public:
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID = -1,
                            int dst2SpdID = -1);
+    void setDstReady(Instruction *instruction);
     bool sentMemSidePacket(PacketPtr pkt);
 
 protected:

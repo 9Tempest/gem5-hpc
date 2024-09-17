@@ -2,9 +2,11 @@ Import('*')
 
 SimObject('MAA.py', sim_objects=['MAA'])
 
+Source('SPD.cc')
 Source('IF.cc')
 Source('IndirectAccess.cc')
 Source('StreamAccess.cc')
+Source('Invalidator.cc')
 Source('MAA.cc')
 
 DebugFlag('MAA')
@@ -14,8 +16,9 @@ DebugFlag('MAAMemPort')
 DebugFlag('MAAController')
 DebugFlag('MAAIndirect')
 DebugFlag('MAAStream')
+DebugFlag('MAAInvalidator')
 
 # MAA Tags is so outrageously verbose, printing the MAA's entire tag
 # array on each timing access, that you should probably have to ask for
 # it explicitly even above and beyond MAAAll.
-CompoundFlag('MAAAll', ['MAA', 'MAACpuPort', 'MAACachePort', 'MAAMemPort', 'MAAController', 'MAAIndirect', 'MAAStream'])
+CompoundFlag('MAAAll', ['MAA', 'MAACpuPort', 'MAACachePort', 'MAAMemPort', 'MAAController', 'MAAIndirect', 'MAAStream', 'MAAInvalidator'])
