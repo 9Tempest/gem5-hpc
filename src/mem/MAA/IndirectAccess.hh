@@ -113,21 +113,23 @@ public:
                   int _num_row_table_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
-    void insert(Addr Grow_addr,
+    bool insert(Addr Grow_addr,
                 Addr addr,
                 int itr,
                 int wid);
     bool get_entry_send(Addr &addr,
                         bool &is_block_cached);
+    bool get_entry_send_first_row(Addr &addr,
+                                  bool &is_block_cached);
     std::vector<OffsetTableEntry> get_entry_recv(Addr Grow_addr,
                                                  Addr addr,
                                                  bool is_block_cached);
 
     void reset();
+    float getAverageEntriesPerRow();
     OffsetTable *offset_table;
     RowTableEntry *entries;
     bool *entries_valid;
-    bool *entries_received;
     int num_row_table_rows;
     int num_row_table_entries_per_row;
     int last_sent_row_id;
@@ -140,15 +142,19 @@ public:
     enum class Status : uint8_t {
         Idle = 0,
         Decode = 1,
-        Request = 2,
-        Response = 3,
+        Fill = 2,
+        Drain = 3,
+        Request = 4,
+        Response = 5,
         max
     };
 
 protected:
-    std::string status_names[5] = {
+    std::string status_names[7] = {
         "Idle",
         "Decode",
+        "Fill",
+        "Drain",
         "Request",
         "Response",
         "max"};
@@ -199,6 +205,7 @@ protected:
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
     int my_dst_tile, my_cond_tile, my_max, my_idx_tile;
+    int my_expected_responses;
     int my_received_responses;
     std::vector<int> my_sorted_indices;
     bool *my_row_table_req_sent;
@@ -206,19 +213,22 @@ protected:
     bool my_is_block_cached;
     int my_last_row_table_sent;
     std::vector<int> my_row_table_bank_order;
+    int my_i, my_row_table_idx;
 
     Addr my_translated_physical_address;
     Addr my_translated_block_physical_address;
     bool translation_done;
     int my_indirect_id;
 
-    void createMyPacket();
-    bool sendOutstandingPacket();
     void translatePacket();
     void checkAllRowTablesSent();
     int getRowTableIdx(int channel, int rank, int bankgroup);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
+
+public:
+    void createMyPacket();
+    bool sendOutstandingPacket();
 };
 } // namespace gem5
 

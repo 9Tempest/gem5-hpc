@@ -100,7 +100,7 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
                                 m_tx_offset,
                                 m_col_bits_idx,
                                 m_row_bits_idx);
-    DPRINTF(MAA, "Ramulator organization [n_levels: %d] -- CH: %d, RA: %d, BG: %d, BA: %d, RO: %d, CO: %d\n",
+    DPRINTF(MAA, "DRAM organization [n_levels: %d] -- CH: %d, RA: %d, BG: %d, BA: %d, RO: %d, CO: %d\n",
             m_num_levels,
             m_org[ADDR_CHANNEL_LEVEL],
             m_org[ADDR_RANK_LEVEL],
@@ -108,6 +108,14 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
             m_org[ADDR_BANK_LEVEL],
             m_org[ADDR_ROW_LEVEL],
             m_org[ADDR_COLUMN_LEVEL]);
+    DPRINTF(MAA, "DRAM addr_bit -- RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d, TX: %d\n",
+            m_addr_bits[ADDR_ROW_LEVEL],
+            m_addr_bits[ADDR_BANK_LEVEL],
+            m_addr_bits[ADDR_BANKGROUP_LEVEL],
+            m_addr_bits[ADDR_RANK_LEVEL],
+            m_addr_bits[ADDR_COLUMN_LEVEL],
+            m_addr_bits[ADDR_CHANNEL_LEVEL],
+            m_tx_offset);
     assert(m_num_levels == 6);
     for (int i = 0; i < num_indirect_access_units; i++) {
         indirectAccessUnits[i].allocate(i,
@@ -470,6 +478,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
         }
         for (int i = 0; i < num_indirect_access_units; i++) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
                 if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, false)) {
                     break;
@@ -535,7 +544,8 @@ void MAA::MemSidePort::recvReqRetry() {
     DPRINTF(MAAMemPort, "%s: called!\n", __func__);
     // this will be used for the indirect access
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
+        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+            maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain) {
             maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
         }
     }
@@ -594,6 +604,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         if (received == false) {
             for (int i = 0; i < num_indirect_access_units; i++) {
                 if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
                     if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, true)) {
                         break;
@@ -735,7 +746,8 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
             assert(funcBlockReasons[(int)FuncUnitType::INDIRECT][i] == reason);
-            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
+            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain);
             funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
             maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();

@@ -105,6 +105,12 @@ bool RowTableEntry::insert(Addr addr,
             my_indirect_id, my_table_id, my_table_row_id, __func__,
             free_entry_id,
             addr);
+    // if (entries[free_entry_id].is_cached) {
+    //     DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry is cached, draining...\n",
+    //             my_indirect_id, my_table_id, my_table_row_id, __func__);
+    //     indir_access->createMyPacket();
+    //     indir_access->sendOutstandingPacket();
+    // }
     return true;
 }
 void RowTableEntry::reset() {
@@ -120,10 +126,9 @@ bool RowTableEntry::get_entry_send(Addr &addr,
         if (entries_valid[last_sent_entry_id] == true) {
             addr = entries[last_sent_entry_id].addr;
             is_block_cached = entries[last_sent_entry_id].is_cached;
-            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d [addr(0x%lx)] retuned!\n",
+            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: sending entry %d [addr(0x%lx)]!\n",
                     my_indirect_id, my_table_id, my_table_row_id, __func__,
-                    last_sent_entry_id,
-                    addr);
+                    last_sent_entry_id, addr);
             last_sent_entry_id++;
             return true;
         }
@@ -135,6 +140,8 @@ std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr,
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             entries_valid[i] = false;
+            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d received, setting to invalid!\n",
+                    my_indirect_id, my_table_id, my_table_row_id, __func__, i);
             assert(entries[i].is_cached == is_block_cached);
             return offset_table->get_entry_recv(entries[i].first_itr);
         }
@@ -170,7 +177,6 @@ void RowTable::allocate(int _my_indirect_id,
     num_row_table_entries_per_row = _num_row_table_entries_per_row;
     entries = new RowTableEntry[num_row_table_rows];
     entries_valid = new bool[num_row_table_rows];
-    entries_received = new bool[num_row_table_rows];
     last_sent_row_id = 0;
     for (int i = 0; i < num_row_table_rows; i++) {
         entries[i].allocate(my_indirect_id,
@@ -180,10 +186,9 @@ void RowTable::allocate(int _my_indirect_id,
                             offset_table,
                             indir_access);
         entries_valid[i] = false;
-        entries_received[i] = false;
     }
 }
-void RowTable::insert(Addr Grow_addr,
+bool RowTable::insert(Addr Grow_addr,
                       Addr addr,
                       int itr,
                       int wid) {
@@ -197,17 +202,19 @@ void RowTable::insert(Addr Grow_addr,
                         __func__,
                         Grow_addr,
                         i);
-                return;
+                return true;
             }
         } else if (entries_valid[i] == false && free_row_id == -1) {
             free_row_id = i;
         }
     }
     if (free_row_id == -1) {
-        printf("Error: no free row id found for addr(0x%lx) and Grow_addr(0x%lx)!\n",
-               addr, Grow_addr);
+        return false;
+        printf("I[%d] T[%d] Error: no free row id found for addr(0x%lx) and Grow_addr(0x%lx)!\n",
+               my_indirect_id, my_table_id, addr, Grow_addr);
         for (int i = 0; i < num_row_table_rows; i++) {
-            printf("Row[i]: Grow_addr(0x%lx) Valid (%s), entries:", entries[i].Grow_addr, entries_valid[i] ? "T" : "F");
+            printf("Row[%d]: Grow_addr(0x%lx) Valid (%s), entries:",
+                   i, entries[i].Grow_addr, entries_valid[i] ? "T" : "F");
             for (int j = 0; j < num_row_table_entries_per_row; j++) {
                 printf("  (%d: %s)", j, entries[i].entries_valid[j] ? "T" : "F");
             }
@@ -223,12 +230,23 @@ void RowTable::insert(Addr Grow_addr,
     entries[free_row_id].Grow_addr = Grow_addr;
     assert(entries[free_row_id].insert(addr, itr, wid) == true);
     entries_valid[free_row_id] = true;
+    return true;
+}
+float RowTable::getAverageEntriesPerRow() {
+    float total_entries = 0.0000;
+    for (int i = 0; i < num_row_table_rows; i++) {
+        if (entries_valid[i] == true) {
+            for (int j = 0; j < num_row_table_entries_per_row; j++) {
+                total_entries += entries[i].entries_valid[j] ? 1 : 0;
+            }
+        }
+    }
+    return total_entries / num_row_table_rows;
 }
 void RowTable::reset() {
     for (int i = 0; i < num_row_table_rows; i++) {
         entries[i].reset();
         entries_valid[i] = false;
-        entries_received[i] = false;
     }
     last_sent_row_id = 0;
 }
@@ -244,12 +262,23 @@ bool RowTable::get_entry_send(Addr &addr,
     }
     return false;
 }
+bool RowTable::get_entry_send_first_row(Addr &addr,
+                                        bool &is_block_cached) {
+    // This function must be called only when blocked b/c of not entry available
+    assert(entries_valid[0]);
+    if (entries[0].get_entry_send(addr, is_block_cached)) {
+        DPRINTF(MAAIndirect, "I[%d] T[%d] %s: retuned addr(0x%lx)!\n",
+                my_indirect_id, my_table_id, __func__, addr);
+        return true;
+    }
+    return false;
+}
 std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
                                                        Addr addr,
                                                        bool is_block_cached) {
     std::vector<OffsetTableEntry> results;
     for (int i = 0; i < num_row_table_rows; i++) {
-        if (entries_valid[i] == true && entries_received[i] == false && entries[i].Grow_addr == Grow_addr) {
+        if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
             DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] hit with row[%d]!\n",
                     my_indirect_id,
                     my_table_id,
@@ -259,8 +288,10 @@ std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
             std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr, is_block_cached);
             results.insert(results.begin(), result.begin(), result.end());
             if (entries[i].all_entries_received()) {
-                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: all entries received!\n", my_indirect_id, my_table_id, __func__);
-                entries_received[i] = false;
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: all R[%d] entries received, setting to invalid!\n",
+                        my_indirect_id, my_table_id, __func__, i);
+                entries_valid[i] = false;
+                entries[i].reset();
             }
         }
     }
@@ -303,6 +334,7 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
     my_all_row_table_req_sent = false;
     translation_done = false;
     state = Status::Idle;
+    my_instruction = nullptr;
     dst_tile_id = -1;
     my_row_table_bank_order.clear();
     for (int bankgroup = 0; bankgroup < 2; bankgroup++) {
@@ -336,52 +368,90 @@ void IndirectAccessUnit::executeInstruction() {
         my_virtual_addr = 0;
         my_base_addr = my_instruction->baseAddr;
         my_outstanding_pkt = false;
-        my_received_responses = 0;
-        my_is_block_cached = false;
+        my_received_responses = my_expected_responses = 0;
+        my_is_block_cached = true;
         my_last_row_table_sent = 0;
         for (int i = 0; i < num_row_table_banks; i++) {
             row_table[i].reset();
             my_row_table_req_sent[i] = false;
         }
-        my_all_row_table_req_sent = false;
-
+        my_i = 0;
+        DPRINTF(MAAIndirect, "I[%d] %s: state set to Fill for request %s!\n", my_indirect_id, __func__, my_instruction->print());
+        state = Status::Fill;
+        [[fallthrough]];
+    }
+    case Status::Fill: {
         // Reordering the indices
-        for (int i = 0; i < my_max; i++) {
-            if (my_cond_tile == -1 || maa->spd->getData(my_cond_tile, i) != 0) {
-                uint32_t idx = maa->spd->getData(my_idx_tile, i);
+        DPRINTF(MAAIndirect, "I[%d] %s: filling %s!\n", my_indirect_id, __func__, my_instruction->print());
+        my_all_row_table_req_sent = false;
+        for (; my_i < my_max; my_i++) {
+            if (my_cond_tile == -1 || maa->spd->getData(my_cond_tile, my_i) != 0) {
+                uint32_t idx = maa->spd->getData(my_idx_tile, my_i);
                 Addr curr_addr = my_base_addr + word_size * idx;
                 my_virtual_addr = addrBlockAlign(curr_addr, block_size);
                 translatePacket();
                 my_translated_block_physical_address = addrBlockAlign(my_translated_physical_address, block_size);
                 uint16_t wid = (curr_addr - my_virtual_addr) / word_size;
-                std::vector addr_vec = maa->map_addr(my_translated_block_physical_address);
+                std::vector<int> addr_vec = maa->map_addr(my_translated_block_physical_address);
                 Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
-                int row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL],
-                                                   addr_vec[ADDR_RANK_LEVEL],
-                                                   addr_vec[ADDR_BANKGROUP_LEVEL]);
-                assert(row_table_idx < num_row_table_banks);
-                row_table[row_table_idx].insert(Grow_addr,
-                                                my_translated_block_physical_address,
-                                                i,
-                                                wid);
-                DPRINTF(MAAIndirect, "I[%d] %s: addr(0x%lx), blockaddr(0x%lx), Grow(0x%lx), itr(%d), wid(%d) inserted to table(%d)\n",
-                        my_indirect_id,
-                        __func__,
-                        my_translated_physical_address,
-                        my_translated_block_physical_address,
-                        Grow_addr,
-                        i,
-                        wid,
-                        row_table_idx);
+                my_row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL],
+                                                  addr_vec[ADDR_RANK_LEVEL],
+                                                  addr_vec[ADDR_BANKGROUP_LEVEL]);
+                assert(my_row_table_idx < num_row_table_banks);
+                DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), Grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n",
+                        my_indirect_id, __func__,
+                        my_virtual_addr, my_translated_block_physical_address,
+                        addr_vec[ADDR_ROW_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_COLUMN_LEVEL], addr_vec[ADDR_CHANNEL_LEVEL],
+                        Grow_addr, my_i, idx, wid, my_row_table_idx);
+                bool inserted = row_table[my_row_table_idx].insert(Grow_addr, my_translated_block_physical_address, my_i, wid);
+                if (inserted == false) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: insertion failed due to no space, average entry/row = %.2f, switching to drain mode...\n",
+                            my_indirect_id, __func__, row_table[my_row_table_idx].getAverageEntriesPerRow());
+                    state = Status::Drain;
+                    scheduleExecuteInstructionEvent();
+                    return;
+                }
             }
         }
         maa->spd->setSize(my_dst_tile, my_max);
-
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for request %s!\n", my_indirect_id, __func__, my_instruction->print());
         state = Status::Request;
-        [[fallthrough]];
+        scheduleExecuteInstructionEvent();
+        return;
+    }
+    case Status::Drain: {
+        DPRINTF(MAAIndirect, "I[%d] %s: draining %s!\n", my_indirect_id, __func__, my_instruction->print());
+        if (my_outstanding_pkt) {
+            if (sendOutstandingPacket() == false) {
+                break;
+            }
+        }
+        while (my_all_row_table_req_sent == false) {
+            if (row_table[my_row_table_idx].get_entry_send_first_row(my_translated_block_physical_address, my_is_block_cached)) {
+                DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx], is_cached[%s]!\n",
+                        my_indirect_id,
+                        __func__,
+                        my_row_table_idx,
+                        my_translated_block_physical_address,
+                        my_is_block_cached ? "T" : "F");
+                my_expected_responses++;
+                createMyPacket();
+                if (sendOutstandingPacket() == false) {
+                    break;
+                }
+            } else {
+                DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, my_row_table_idx);
+                my_all_row_table_req_sent = true;
+            }
+        }
+        if ((my_all_row_table_req_sent == true) && (my_received_responses == my_expected_responses)) {
+            DPRINTF(MAAIndirect, "I[%d] %s: drain completed, returning to the fill stage...\n", my_indirect_id, __func__);
+            state = Status::Fill;
+            scheduleExecuteInstructionEvent();
+        }
+        break;
     }
     case Status::Request: {
         assert(my_instruction != nullptr);
@@ -406,17 +476,18 @@ void IndirectAccessUnit::executeInstruction() {
                                 row_table_idx,
                                 my_translated_block_physical_address,
                                 my_is_block_cached ? "T" : "F");
+                        my_expected_responses++;
                         createMyPacket();
                         if (sendOutstandingPacket() == false) {
                             my_last_row_table_sent++;
                             break;
                         }
                     } else {
-                        DPRINTF(MAAIndirect, "I[%d] %s: Row table bank[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, row_table_idx);
+                        DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, row_table_idx);
                         my_row_table_req_sent[row_table_idx] = true;
                     }
                 } else {
-                    DPRINTF(MAAIndirect, "I[%d] %s: Row table bank[%d] has already sent the requests!\n", my_indirect_id, __func__, row_table_idx);
+                    DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has already sent the requests!\n", my_indirect_id, __func__, row_table_idx);
                 }
             }
             my_last_row_table_sent = (my_last_row_table_sent >= num_row_table_banks) ? 0 : my_last_row_table_sent;
@@ -431,7 +502,7 @@ void IndirectAccessUnit::executeInstruction() {
     case Status::Response: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: responding %s!\n", my_indirect_id, __func__, my_instruction->print());
-        if (my_received_responses == my_max) {
+        if (my_received_responses == my_expected_responses) {
             my_instruction->state = Instruction::Status::Finish;
             DPRINTF(MAAIndirect, "I[%d] %s: state set to finish for request %s!\n", my_indirect_id, __func__, my_instruction->print());
             state = Status::Idle;
@@ -439,7 +510,7 @@ void IndirectAccessUnit::executeInstruction() {
             maa->finishInstruction(my_instruction, my_dst_tile);
             my_instruction = nullptr;
         } else {
-            DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_max, my_received_responses);
+            DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses);
         }
         break;
     }
@@ -544,13 +615,9 @@ bool IndirectAccessUnit::recvData(const Addr addr,
     std::vector<OffsetTableEntry> entries = row_table[row_table_idx].get_entry_recv(Grow_addr,
                                                                                     addr,
                                                                                     is_block_cached);
-    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), Grow(x%lx) from table(%d)!\n",
-            my_indirect_id,
-            __func__,
-            entries.size(),
-            addr,
-            Grow_addr,
-            row_table_idx);
+    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), Grow(x%lx) from T[%d]!\n",
+            my_indirect_id, __func__, entries.size(),
+            addr, Grow_addr, row_table_idx);
     if (entries.size() == 0) {
         return false;
     }
@@ -563,14 +630,14 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         int wid = entry.wid;
         DPRINTF(MAAIndirect, "I[%d] %s: itr (%d) wid (%d) matched!\n", my_indirect_id, __func__, itr, wid);
         maa->spd->setData(my_dst_tile, itr, data[wid]);
-        my_received_responses++;
     }
-    if (my_received_responses == my_max) {
-        assert(state == Status::Response);
-        DPRINTF(MAAIndirect, "%s: all words received, calling execution again!\n", __func__);
+    my_received_responses++;
+    if (my_received_responses == my_expected_responses) {
+        DPRINTF(MAAIndirect, "%s: all responses received, calling execution again in state %s!\n",
+                __func__, status_names[(int)state]);
         scheduleExecuteInstructionEvent();
     } else {
-        DPRINTF(MAAIndirect, "%s: expected: %d, received: %d!\n", __func__, my_max, my_received_responses);
+        DPRINTF(MAAIndirect, "%s: expected: %d, received: %d responses!\n", __func__, my_expected_responses, my_received_responses);
     }
     return true;
 }

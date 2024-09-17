@@ -146,9 +146,9 @@ def add_command(cpu_buffer_enlarge_factor, cpu_register_enlarge_factor, cpu_widt
     COMMAND += "| awk '{ print strftime(), $0; fflush() }' "
     COMMAND += f"| tee {m5out_addr}/logs.txt "
     if checkpoint_address != None:
-        tasks.append(f"mkdir -p {m5out_addr} 2>&1 > /dev/null; cp -r {checkpoint_address} {m5out_addr}/; {COMMAND};")
+        tasks.append(f"rm -r {m5out_addr} &> /dev/null; sleep 1; mkdir -p {m5out_addr} 2>&1 > /dev/null; sleep 1; cp -r {checkpoint_address} {m5out_addr}/; sleep 1; {COMMAND}; sleep 1;")
     else:
-        tasks.append(f"mkdir -p {m5out_addr} 2>&1 > /dev/null; {COMMAND};")
+        tasks.append(f"rm -r {m5out_addr} &> /dev/null; sleep 1; mkdir -p {m5out_addr} 2>&1 > /dev/null; sleep 1; {COMMAND}; sleep 1;")
 
 add_command(1, 1, 1)
 # for enlarge_factor in [2, 4, 8, 16]: #, 32, 64, 128]:
