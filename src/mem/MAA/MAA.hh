@@ -25,6 +25,7 @@
 #include "mem/MAA/StreamAccess.hh"
 #include "mem/MAA/IndirectAccess.hh"
 #include "mem/MAA/Invalidator.hh"
+#include "mem/MAA/ALU.hh"
 
 namespace gem5 {
 
@@ -155,6 +156,11 @@ class MAA : public ClockedObject {
      * access functions for functional, atomic and timing snoops.
      */
     class MemSidePort : public MAAMemRequestPort {
+        enum class BlockReason : uint8_t {
+            NOT_BLOCKED,
+            MEM_FAILED
+        };
+
     private:
         /** The maa-specific queue. */
         MAAReqPacketQueue _reqQueue;
@@ -174,6 +180,16 @@ class MAA : public ClockedObject {
         void recvFunctionalSnoop(PacketPtr pkt);
 
         void recvReqRetry();
+
+    protected:
+        BlockReason blockReason;
+        BlockReason *funcBlockReasons;
+        void setUnblocked(BlockReason reason);
+
+    public:
+        bool sendPacket(int func_unit_id,
+                        PacketPtr pkt);
+        void allocate();
 
     public:
         MemSidePort(const std::string &_name, MAA *_maa,
@@ -239,6 +255,7 @@ public:
     StreamAccessUnit *streamAccessUnits;
     IndirectAccessUnit *indirectAccessUnits;
     Invalidator *invalidator;
+    ALUUnit *aluUnits;
 
     // Ramulator related variables for address mapping
     std::vector<int> m_org;
@@ -382,9 +399,13 @@ public:
     bool sentMemSidePacket(PacketPtr pkt);
 
 protected:
+    PacketPtr my_instruction_pkt;
+    bool my_outstanding_instruction_pkt;
     void issueInstruction();
-    EventFunctionWrapper issueInstructionEvent;
+    void dispatchInstruction();
+    EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;
     void scheduleIssueInstructionEvent(int latency = 0);
+    void scheduleDispatchInstructionEvent(int latency = 0);
 };
 /**
  * Returns the address of the closest aligned fixed-size block to the given

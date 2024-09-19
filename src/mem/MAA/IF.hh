@@ -34,16 +34,18 @@ public:
         INDIR_ST = 2,
         INDIR_RMW = 3,
         RANGE_LOOP = 4,
-        CONDITION = 5,
+        ALU_SCALAR = 5,
+        ALU_VECTOR = 6,
         MAX
     };
-    std::string opcode_names[6] = {
+    std::string opcode_names[7] = {
         "STREAM_LD",
         "INDIR_LD",
         "INDIR_ST",
         "INDIR_RMW",
         "RANGE_LOOP",
-        "CONDITION"};
+        "ALU_SCALAR",
+        "ALU_VECTOR"};
     enum class OPType : uint8_t {
         ADD_OP = 0,
         SUB_OP = 1,

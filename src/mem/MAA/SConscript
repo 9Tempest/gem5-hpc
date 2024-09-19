@@ -7,6 +7,7 @@ Source('IF.cc')
 Source('IndirectAccess.cc')
 Source('StreamAccess.cc')
 Source('Invalidator.cc')
+Source('ALU.cc')
 Source('MAA.cc')
 
 DebugFlag('MAA')
@@ -17,6 +18,7 @@ DebugFlag('MAAController')
 DebugFlag('MAAIndirect')
 DebugFlag('MAAStream')
 DebugFlag('MAAInvalidator')
+DebugFlag('MAAALU')
 
 # MAA Tags is so outrageously verbose, printing the MAA's entire tag
 # array on each timing access, that you should probably have to ask for

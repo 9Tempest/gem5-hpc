@@ -49,7 +49,6 @@ std::string Instruction::print() const {
     return str.str();
 }
 bool IF::pushInstruction(Instruction _instruction) {
-    bool pushed = false;
     switch (_instruction.opcode) {
     case Instruction::OpcodeType::STREAM_LD: {
         _instruction.funcUnit = FuncUnitType::STREAM;
@@ -65,7 +64,8 @@ bool IF::pushInstruction(Instruction _instruction) {
         _instruction.funcUnit = FuncUnitType::RANGE;
         break;
     }
-    case Instruction::OpcodeType::CONDITION: {
+    case Instruction::OpcodeType::ALU_SCALAR:
+    case Instruction::OpcodeType::ALU_VECTOR: {
         _instruction.funcUnit = FuncUnitType::ALU;
         break;
     }
@@ -73,30 +73,39 @@ bool IF::pushInstruction(Instruction _instruction) {
         assert(false);
     }
     }
+    int free_instruction_slot = -1;
     for (int i = 0; i < num_instructions; i++) {
         if (valids[i] == false) {
-            if (pushed == false) {
-                instructions[i] = _instruction;
-                valids[i] = true;
-                pushed = true;
-                instructions[i].if_id = i;
+            if (free_instruction_slot == -1) {
+                free_instruction_slot = i;
             }
         } else {
             if (_instruction.dst1SpdID != -1) {
-                assert(instructions[i].dst1SpdID == -1 || _instruction.dst1SpdID != instructions[i].dst1SpdID);
-                assert(instructions[i].dst2SpdID == -1 || _instruction.dst1SpdID != instructions[i].dst2SpdID);
-                assert(instructions[i].src1SpdID == -1 || _instruction.dst1SpdID != instructions[i].src1SpdID);
-                assert(instructions[i].src2SpdID == -1 || _instruction.dst1SpdID != instructions[i].src2SpdID);
+                if ((instructions[i].dst1SpdID != -1 && _instruction.dst1SpdID == instructions[i].dst1SpdID) ||
+                    (instructions[i].dst2SpdID != -1 && _instruction.dst1SpdID == instructions[i].dst2SpdID) ||
+                    (instructions[i].src1SpdID != -1 && _instruction.dst1SpdID == instructions[i].src1SpdID) ||
+                    (instructions[i].src2SpdID != -1 && _instruction.dst1SpdID == instructions[i].src2SpdID)) {
+                    return false;
+                }
             }
             if (_instruction.dst2SpdID != -1) {
-                assert(instructions[i].dst1SpdID == -1 || _instruction.dst2SpdID != instructions[i].dst1SpdID);
-                assert(instructions[i].dst2SpdID == -1 || _instruction.dst2SpdID != instructions[i].dst2SpdID);
-                assert(instructions[i].src1SpdID == -1 || _instruction.dst2SpdID != instructions[i].src1SpdID);
-                assert(instructions[i].src2SpdID == -1 || _instruction.dst2SpdID != instructions[i].src2SpdID);
+                if ((instructions[i].dst1SpdID != -1 && _instruction.dst2SpdID == instructions[i].dst1SpdID) ||
+                    (instructions[i].dst2SpdID != -1 && _instruction.dst2SpdID == instructions[i].dst2SpdID) ||
+                    (instructions[i].src1SpdID != -1 && _instruction.dst2SpdID == instructions[i].src1SpdID) ||
+                    (instructions[i].src2SpdID != -1 && _instruction.dst2SpdID == instructions[i].src2SpdID)) {
+                    return false;
+                }
             }
         }
     }
-    return pushed;
+    if (free_instruction_slot == -1) {
+        return false;
+    }
+    assert(free_instruction_slot < num_instructions);
+    instructions[free_instruction_slot] = _instruction;
+    valids[free_instruction_slot] = true;
+    instructions[free_instruction_slot].if_id = free_instruction_slot;
+    return true;
 }
 Instruction *IF::getReady(FuncUnitType funcUnit) {
     if (funcUnit == FuncUnitType::INVALIDATOR) {

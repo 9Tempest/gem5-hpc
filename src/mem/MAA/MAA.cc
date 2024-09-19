@@ -44,7 +44,10 @@ MAA::MAA(const MAAParams &p)
       num_row_table_entries_per_row(p.num_row_table_entries_per_row),
       system(p.system),
       mmu(p.mmu),
-      issueInstructionEvent([this] { issueInstruction(); }, name()) {
+      my_instruction_pkt(nullptr),
+      my_outstanding_instruction_pkt(false),
+      issueInstructionEvent([this] { issueInstruction(); }, name()),
+      dispatchInstructionEvent([this] { dispatchInstruction(); }, name()) {
 
     requestorId = p.system->getRequestorId(this);
     spd = new SPD(num_tiles, num_tile_elements);
@@ -56,12 +59,14 @@ MAA::MAA(const MAAParams &p)
     }
     indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];
     cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
+    memSidePort.allocate();
     invalidator = new Invalidator();
     invalidator->allocate(
         num_tiles,
         num_tile_elements,
         addrRanges.front().start(),
         this);
+    aluUnits = new ALUUnit[num_alu_units];
 }
 
 void MAA::init() {
@@ -156,7 +161,32 @@ Addr MAA::calc_Grow_addr(std::vector<int> addr_vec) {
 void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
-    assert(false);
+    switch (pkt->cmd.toInt()) {
+    case MemCmd::ReadExResp: {
+        assert(pkt->getSize() == 64);
+        std::vector<uint32_t> data;
+        std::vector<uint16_t> wid;
+        for (int i = 0; i < 64; i += 4) {
+            if (pkt->req->getByteEnable()[i] == true) {
+                data.push_back(*(pkt->getPtr<uint32_t>() + i / 4));
+                wid.push_back(i / 4);
+            }
+        }
+        for (int i = 0; i < num_indirect_access_units; i++) {
+            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
+                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
+                    break;
+                }
+            }
+        }
+        break;
+    }
+    default:
+        assert(false);
+    }
+    // assert(false);
 }
 bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     assert(pkt->isResponse());
@@ -172,7 +202,7 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     for (int i = 0; i < pkt->getSize(); i++) {
         DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
-    assert(false);
+    // assert(false);
     // Express snoop responses from requestor to responder, e.g., from L1 to L2
     maa.recvTimingSnoopResp(pkt);
     return true;
@@ -199,6 +229,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
     }
     switch (pkt->cmd.toInt()) {
     case MemCmd::WriteReq: {
+        bool respond_immediately = true;
         assert(pkt->isMaskedWrite() == false);
         switch (address_range.getType()) {
         case AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE: {
@@ -209,7 +240,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
             uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAAController, "%s: TILE[%d][%d] = %d\n", __func__, tile_id, element_id, data);
+            DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %d\n", __func__, tile_id, element_id, data);
             spd->setData(tile_id, element_id, data);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
@@ -224,7 +255,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
             uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAAController, "%s: REG[%d] = %d\n", __func__, element_id, data);
+            DPRINTF(MAACpuPort, "%s: REG[%d] = %d\n", __func__, element_id, data);
             rf->setData(element_id, data);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
@@ -239,7 +270,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(element_id % sizeof(uint64_t) == 0);
             element_id /= sizeof(uint64_t);
             uint64_t data = pkt->getPtr<uint64_t>()[0];
-            DPRINTF(MAAController, "%s: IF[%d] = %ld\n", __func__, element_id, data);
+            DPRINTF(MAACpuPort, "%s: IF[%d] = %ld\n", __func__, element_id, data);
 #define NA_UINT8 0xFF
             switch (element_id) {
             case 0: {
@@ -286,30 +317,23 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                                                  current_instruction.opcode == Instruction::OpcodeType::INDIR_LD)
                                                     ? false
                                                     : true;
-                DPRINTF(MAAController, "%s: %s pushing!\n", __func__, current_instruction.print());
-                assert(ifile->pushInstruction(current_instruction));
-                if (current_instruction.dst1SpdID != -1) {
-                    assert(current_instruction.dst1SpdID != current_instruction.src1SpdID);
-                    assert(current_instruction.dst1SpdID != current_instruction.src2SpdID);
-                    spd->unsetReady(current_instruction.dst1SpdID);
-                }
-                if (current_instruction.dst2SpdID != -1) {
-                    assert(current_instruction.dst2SpdID != current_instruction.src1SpdID);
-                    assert(current_instruction.dst2SpdID != current_instruction.src2SpdID);
-                    spd->unsetReady(current_instruction.dst2SpdID);
-                }
-                DPRINTF(MAAController, "%s: %s pushed!\n", __func__, current_instruction.print());
-                scheduleIssueInstructionEvent(1);
+                DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction.print());
+                respond_immediately = false;
+                my_outstanding_instruction_pkt = true;
+                // my_instruction_pkt = new Packet(pkt, false, false);
+                // my_instruction_pkt->makeTimingResponse();
+                my_instruction_pkt = pkt;
+                scheduleDispatchInstructionEvent();
                 break;
             }
             default:
                 assert(false);
             }
             assert(pkt->needsResponse());
-            pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            if (respond_immediately) {
+                pkt->makeTimingResponse();
+                cpuSidePort.schedTimingResp(pkt, clockEdge(Cycles(2)));
+            }
             break;
         }
         default:
@@ -463,7 +487,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
             pkt->cmdString(),
             pkt->getSize());
     for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAAMemPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+        DPRINTF(MAAMemPort, "[%d] %02x %s\n", i, pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
     switch (pkt->cmd.toInt()) {
     case MemCmd::ReadResp: {
@@ -480,7 +504,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, false)) {
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, false)) {
                     break;
                 }
             }
@@ -542,12 +566,50 @@ void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
 void MAA::MemSidePort::recvReqRetry() {
     /// print the packet
     DPRINTF(MAAMemPort, "%s: called!\n", __func__);
-    // this will be used for the indirect access
+    setUnblocked(BlockReason::MEM_FAILED);
+}
+
+void MAA::MemSidePort::setUnblocked(BlockReason reason) {
+    assert(blockReason == reason);
+    blockReason = BlockReason::NOT_BLOCKED;
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        if (maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-            maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain) {
+        if (funcBlockReasons[i] != BlockReason::NOT_BLOCKED) {
+            assert(funcBlockReasons[i] == reason);
+            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
+                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response);
+            funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
+            DPRINTF(MAAMemPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
             maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
         }
+    }
+}
+bool MAA::MemSidePort::sendPacket(int func_unit_id,
+                                  PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAAMemPort, "%s: UNIT[INDIRECT][%d] %s\n",
+            __func__,
+            func_unit_id,
+            pkt->print());
+    if (blockReason != BlockReason::NOT_BLOCKED) {
+        DPRINTF(MAAMemPort, "%s Send blocked because of MEM_FAILED...\n", __func__);
+        funcBlockReasons[func_unit_id] = blockReason;
+        return false;
+    }
+    if (maa->memSidePort.sendTimingReq(pkt) == false) {
+        // Cache cannot receive a new request
+        DPRINTF(MAAMemPort, "%s Send failed because cache returned false...\n", __func__);
+        blockReason = BlockReason::MEM_FAILED;
+        funcBlockReasons[func_unit_id] = BlockReason::MEM_FAILED;
+        return false;
+    }
+    DPRINTF(MAAMemPort, "%s Send is successfull...\n", __func__);
+    return true;
+}
+void MAA::MemSidePort::allocate() {
+    funcBlockReasons = new BlockReason[maa->num_indirect_access_units];
+    for (int i = 0; i < maa->num_indirect_access_units; i++) {
+        funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
     }
 }
 
@@ -581,6 +643,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
     //     DPRINTF(MAACachePort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     // }
     switch (pkt->cmd.toInt()) {
+    case MemCmd::ReadExResp:
     case MemCmd::ReadResp: {
         assert(pkt->getSize() == 64);
         std::vector<uint32_t> data;
@@ -592,12 +655,14 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
             }
         }
         bool received = false;
-        for (int i = 0; i < num_stream_access_units; i++) {
-            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
-                streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                if (streamAccessUnits[i].recvData(pkt->getAddr(), data, wid)) {
-                    received = true;
-                    break;
+        if (pkt->cmd == MemCmd::ReadResp) {
+            for (int i = 0; i < num_stream_access_units; i++) {
+                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
+                    streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+                    if (streamAccessUnits[i].recvData(pkt->getAddr(), data, wid)) {
+                        received = true;
+                        break;
+                    }
                 }
             }
         }
@@ -606,7 +671,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), data, wid, true)) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
                         break;
                     }
                 }
@@ -694,7 +759,7 @@ bool MAA::CacheSidePort::sendPacket(FuncUnitType func_unit_type,
     /// print the packet
     DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n",
             __func__,
-            func_unit_names[(int)func_unit_id],
+            func_unit_names[(int)func_unit_type],
             func_unit_id,
             pkt->print());
     assert(funcBlockReasons[(int)func_unit_type][func_unit_id] == BlockReason::NOT_BLOCKED);
@@ -816,6 +881,35 @@ void MAA::issueInstruction() {
         }
     }
 }
+void MAA::dispatchInstruction() {
+    DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
+    if (my_outstanding_instruction_pkt) {
+        assert(my_instruction_pkt != nullptr);
+        if (ifile->pushInstruction(current_instruction)) {
+            DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, current_instruction.print());
+            if (current_instruction.dst1SpdID != -1) {
+                assert(current_instruction.dst1SpdID != current_instruction.src1SpdID);
+                assert(current_instruction.dst1SpdID != current_instruction.src2SpdID);
+                spd->unsetReady(current_instruction.dst1SpdID);
+            }
+            if (current_instruction.dst2SpdID != -1) {
+                assert(current_instruction.dst2SpdID != current_instruction.src1SpdID);
+                assert(current_instruction.dst2SpdID != current_instruction.src2SpdID);
+                spd->unsetReady(current_instruction.dst2SpdID);
+            }
+            if (current_instruction.opcode == Instruction::OpcodeType::INDIR_ST ||
+                current_instruction.opcode == Instruction::OpcodeType::INDIR_RMW) {
+                spd->unsetReady(current_instruction.src2SpdID);
+            }
+            my_instruction_pkt->makeTimingResponse();
+            cpuSidePort.schedTimingResp(my_instruction_pkt, clockEdge(Cycles(2)));
+            scheduleIssueInstructionEvent(1);
+            my_outstanding_instruction_pkt = false;
+        } else {
+            DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, current_instruction.print());
+        }
+    }
+}
 void MAA::finishInstruction(Instruction *instruction,
                             int dst1SpdID,
                             int dst2SpdID) {
@@ -828,6 +922,7 @@ void MAA::finishInstruction(Instruction *instruction,
     }
     ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
     scheduleIssueInstructionEvent();
+    scheduleDispatchInstructionEvent();
 }
 void MAA::setDstReady(Instruction *instruction) {
     instruction->dst1Ready = true;
@@ -842,6 +937,17 @@ void MAA::scheduleIssueInstructionEvent(int latency) {
         Tick old_when = issueInstructionEvent.when();
         if (new_when < old_when)
             reschedule(issueInstructionEvent, new_when);
+    }
+}
+void MAA::scheduleDispatchInstructionEvent(int latency) {
+    DPRINTF(MAAController, "%s: scheduling dispatch for the next %d cycles!\n", __func__, latency);
+    Tick new_when = curTick() + latency;
+    if (!dispatchInstructionEvent.scheduled()) {
+        schedule(dispatchInstructionEvent, new_when);
+    } else {
+        Tick old_when = dispatchInstructionEvent.when();
+        if (new_when < old_when)
+            reschedule(dispatchInstructionEvent, new_when);
     }
 }
 

@@ -1,8 +1,11 @@
 #include "mem/MAA/IndirectAccess.hh"
 #include "base/trace.hh"
+#include "mem/MAA/IF.hh"
 #include "mem/MAA/MAA.hh"
 #include "debug/MAAIndirect.hh"
+#include "mem/packet.hh"
 #include <cassert>
+#include <cstdint>
 
 #ifndef TRACING_ON
 #define TRACING_ON 1
@@ -108,8 +111,8 @@ bool RowTableEntry::insert(Addr addr,
     // if (entries[free_entry_id].is_cached) {
     //     DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry is cached, draining...\n",
     //             my_indirect_id, my_table_id, my_table_row_id, __func__);
-    //     indir_access->createMyPacket();
-    //     indir_access->sendOutstandingPacket();
+    //     indir_access->createMyReadPacket();
+    //     indir_access->sendOutstandingReadPacket();
     // }
     return true;
 }
@@ -142,7 +145,7 @@ std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr,
             entries_valid[i] = false;
             DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d received, setting to invalid!\n",
                     my_indirect_id, my_table_id, my_table_row_id, __func__, i);
-            assert(entries[i].is_cached == is_block_cached);
+            // assert(entries[i].is_cached == is_block_cached);
             return offset_table->get_entry_recv(entries[i].first_itr);
         }
     }
@@ -346,6 +349,21 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
         }
     }
 }
+bool IndirectAccessUnit::checkOutstandingPackets(bool check_write, bool check_read) {
+    if (check_write && my_outstanding_write_pkts.size() > 0) {
+        if (sendOutstandingWritePacket() == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: there are more writes to do, returning...!\n", my_indirect_id, __func__);
+            return false;
+        }
+    }
+    if (check_read && my_outstanding_read_pkt) {
+        if (sendOutstandingReadPacket() == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: sending read packet failed, returning...!\n", my_indirect_id, __func__);
+            return false;
+        }
+    }
+    return true;
+}
 void IndirectAccessUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
@@ -359,15 +377,20 @@ void IndirectAccessUnit::executeInstruction() {
         DPRINTF(MAAIndirect, "I[%d] %s: decoding %s!\n", my_indirect_id, __func__, my_instruction->print());
 
         // Decoding the instruction
+        my_opcode = my_instruction->opcode;
         my_idx_tile = my_instruction->src1SpdID;
+        my_src_tile = my_instruction->src2SpdID;
         my_dst_tile = my_instruction->dst1SpdID;
         my_cond_tile = my_instruction->condSpdID;
+        my_optype = my_instruction->optype;
+        my_datatype = my_instruction->datatype;
         my_max = maa->spd->getSize(my_idx_tile);
 
         // Initialization
         my_virtual_addr = 0;
         my_base_addr = my_instruction->baseAddr;
-        my_outstanding_pkt = false;
+        my_outstanding_read_pkt = false;
+        assert(my_outstanding_write_pkts.size() == 0);
         my_received_responses = my_expected_responses = 0;
         my_is_block_cached = true;
         my_last_row_table_sent = 0;
@@ -391,6 +414,8 @@ void IndirectAccessUnit::executeInstruction() {
                 my_virtual_addr = addrBlockAlign(curr_addr, block_size);
                 translatePacket();
                 my_translated_block_physical_address = addrBlockAlign(my_translated_physical_address, block_size);
+                DPRINTF(MAAIndirect, "I[%d] %s: idx = %u, addr = 0x%lx!\n",
+                        my_indirect_id, __func__, idx, my_translated_block_physical_address);
                 uint16_t wid = (curr_addr - my_virtual_addr) / word_size;
                 std::vector<int> addr_vec = maa->map_addr(my_translated_block_physical_address);
                 Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
@@ -413,7 +438,9 @@ void IndirectAccessUnit::executeInstruction() {
                 }
             }
         }
-        maa->spd->setSize(my_dst_tile, my_max);
+        if (my_opcode == Instruction::OpcodeType::INDIR_LD) {
+            maa->spd->setSize(my_dst_tile, my_max);
+        }
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for request %s!\n", my_indirect_id, __func__, my_instruction->print());
@@ -423,10 +450,8 @@ void IndirectAccessUnit::executeInstruction() {
     }
     case Status::Drain: {
         DPRINTF(MAAIndirect, "I[%d] %s: draining %s!\n", my_indirect_id, __func__, my_instruction->print());
-        if (my_outstanding_pkt) {
-            if (sendOutstandingPacket() == false) {
-                break;
-            }
+        if (checkOutstandingPackets() == false) {
+            break;
         }
         while (my_all_row_table_req_sent == false) {
             if (row_table[my_row_table_idx].get_entry_send_first_row(my_translated_block_physical_address, my_is_block_cached)) {
@@ -437,8 +462,8 @@ void IndirectAccessUnit::executeInstruction() {
                         my_translated_block_physical_address,
                         my_is_block_cached ? "T" : "F");
                 my_expected_responses++;
-                createMyPacket();
-                if (sendOutstandingPacket() == false) {
+                createMyReadPacket();
+                if (sendOutstandingReadPacket() == false) {
                     break;
                 }
             } else {
@@ -456,12 +481,12 @@ void IndirectAccessUnit::executeInstruction() {
     case Status::Request: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: requesting %s!\n", my_indirect_id, __func__, my_instruction->print());
-        if (my_outstanding_pkt) {
-            sendOutstandingPacket();
+        if (checkOutstandingPackets() == false) {
+            break;
         }
         while (true) {
             checkAllRowTablesSent();
-            if (my_outstanding_pkt || my_all_row_table_req_sent) {
+            if (my_outstanding_read_pkt || (my_outstanding_write_pkts.size() > 0) || my_all_row_table_req_sent) {
                 break;
             }
             for (; my_last_row_table_sent < num_row_table_banks; my_last_row_table_sent++) {
@@ -477,8 +502,8 @@ void IndirectAccessUnit::executeInstruction() {
                                 my_translated_block_physical_address,
                                 my_is_block_cached ? "T" : "F");
                         my_expected_responses++;
-                        createMyPacket();
-                        if (sendOutstandingPacket() == false) {
+                        createMyReadPacket();
+                        if (sendOutstandingReadPacket() == false) {
                             my_last_row_table_sent++;
                             break;
                         }
@@ -492,7 +517,7 @@ void IndirectAccessUnit::executeInstruction() {
             }
             my_last_row_table_sent = (my_last_row_table_sent >= num_row_table_banks) ? 0 : my_last_row_table_sent;
         }
-        if (my_outstanding_pkt) {
+        if (my_outstanding_read_pkt || (my_outstanding_write_pkts.size() > 0)) {
             break;
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to respond for request %s!\n", my_indirect_id, __func__, my_instruction->print());
@@ -502,12 +527,20 @@ void IndirectAccessUnit::executeInstruction() {
     case Status::Response: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: responding %s!\n", my_indirect_id, __func__, my_instruction->print());
+        if (checkOutstandingPackets(true, false) == false) {
+            break;
+        }
         if (my_received_responses == my_expected_responses) {
             my_instruction->state = Instruction::Status::Finish;
             DPRINTF(MAAIndirect, "I[%d] %s: state set to finish for request %s!\n", my_indirect_id, __func__, my_instruction->print());
             state = Status::Idle;
-            maa->spd->setReady(my_dst_tile);
-            maa->finishInstruction(my_instruction, my_dst_tile);
+            if (my_opcode == Instruction::OpcodeType::INDIR_LD) {
+                maa->spd->setReady(my_dst_tile);
+                maa->finishInstruction(my_instruction, my_dst_tile);
+            } else {
+                maa->spd->setReady(my_src_tile);
+                maa->finishInstruction(my_instruction);
+            }
             my_instruction = nullptr;
         } else {
             DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses);
@@ -544,48 +577,80 @@ bool IndirectAccessUnit::checkBlockCached(Addr physical_addr) {
     DPRINTF(MAAIndirect, "I[%d] %s: sending snoop of %s\n", my_indirect_id, __func__, curr_pkt->print());
     maa->cpuSidePort.sendTimingSnoopReq(curr_pkt);
     // assert(curr_pkt->satisfied() == false);
-    DPRINTF(MAAIndirect, "I[%d] %s: Snoop of %s returned with isBlockCached(%s), satisfied (%s)\n",
+    DPRINTF(MAAIndirect, "I[%d] %s: Snoop of %s returned with cache responding (%s), has sharers (%s), had writable (%s), satisfied (%s), is block cached (%s)\n",
             my_indirect_id,
             __func__,
             curr_pkt->print(),
-            curr_pkt->isBlockCached() ? "true" : "false",
-            curr_pkt->satisfied() ? "true" : "false");
+            curr_pkt->cacheResponding() ? "True" : "False",
+            curr_pkt->hasSharers() ? "True" : "False",
+            curr_pkt->responderHadWritable() ? "True" : "False",
+            curr_pkt->satisfied() ? "True" : "False",
+            curr_pkt->isBlockCached() ? "True" : "False");
     return curr_pkt->isBlockCached();
 }
-void IndirectAccessUnit::createMyPacket() {
+void IndirectAccessUnit::createMyReadPacket() {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(my_translated_block_physical_address,
                                                     block_size,
                                                     flags,
                                                     maa->requestorId);
-    if (my_is_block_cached)
-        my_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
-    else
-        my_pkt = new Packet(real_req, MemCmd::ReadReq);
-    my_pkt->allocate();
-    my_outstanding_pkt = true;
-    DPRINTF(MAAIndirect, "I[%d] %s: created %s\n", my_indirect_id, __func__, my_pkt->print());
-}
-bool IndirectAccessUnit::sendOutstandingPacket() {
     if (my_is_block_cached) {
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cache\n", my_indirect_id, __func__, my_pkt->print());
-
-        if (maa->cacheSidePort.sendPacket(FuncUnitType::INDIRECT,
-                                          my_indirect_id,
-                                          my_pkt) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving execution...\n", my_indirect_id, __func__);
-            return false;
+        if (my_opcode == Instruction::OpcodeType::INDIR_LD) {
+            my_read_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
         } else {
-            my_outstanding_pkt = false;
-            return true;
+            my_read_pkt = new Packet(real_req, MemCmd::ReadExReq);
         }
     } else {
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memory\n", my_indirect_id, __func__, my_pkt->print());
-        if (maa->memSidePort.sendTimingReq(my_pkt) == false) {
+        my_read_pkt = new Packet(real_req, MemCmd::ReadReq);
+    }
+    my_read_pkt->allocate();
+    my_outstanding_read_pkt = true;
+    DPRINTF(MAAIndirect, "I[%d] %s: created %s\n", my_indirect_id, __func__, my_read_pkt->print());
+}
+bool IndirectAccessUnit::sendOutstandingReadPacket() {
+    if (my_is_block_cached) {
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cache\n", my_indirect_id, __func__, my_read_pkt->print());
+        if (my_opcode == Instruction::OpcodeType::INDIR_LD) {
+            if (maa->cacheSidePort.sendPacket(FuncUnitType::INDIRECT,
+                                              my_indirect_id,
+                                              my_read_pkt) == false) {
+                DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving execution...\n", my_indirect_id, __func__);
+                return false;
+            } else {
+                my_outstanding_read_pkt = false;
+                return true;
+            }
+        } else {
+            PacketPtr new_my_read_pkt = new Packet(my_read_pkt, true, false);
+            new_my_read_pkt->setExpressSnoop();
+            new_my_read_pkt->headerDelay = new_my_read_pkt->payloadDelay = 0;
+            maa->cpuSidePort.sendTimingSnoopReq(new_my_read_pkt);
+            DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to membus, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
+                    my_indirect_id,
+                    __func__,
+                    new_my_read_pkt->cacheResponding() ? "True" : "False",
+                    new_my_read_pkt->hasSharers() ? "True" : "False",
+                    new_my_read_pkt->responderHadWritable() ? "True" : "False",
+                    new_my_read_pkt->satisfied() ? "True" : "False",
+                    new_my_read_pkt->isBlockCached() ? "True" : "False");
+            if (new_my_read_pkt->cacheResponding() == true) {
+                DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
+                my_outstanding_read_pkt = false;
+                return true;
+            }
+            DPRINTF(MAAIndirect, "I[%d] %s: no cache responds (I/S/E --> I), creating again and sending to memory\n", my_indirect_id, __func__);
+            my_is_block_cached = false;
+            createMyReadPacket();
+            return sendOutstandingReadPacket();
+        }
+    } else {
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memory\n", my_indirect_id, __func__, my_read_pkt->print());
+        if (maa->memSidePort.sendPacket(my_indirect_id,
+                                        my_read_pkt) == false) {
             DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving execution...\n", my_indirect_id, __func__);
             return false;
         } else {
-            my_outstanding_pkt = false;
+            my_outstanding_read_pkt = false;
             return true;
         }
     }
@@ -604,6 +669,7 @@ void IndirectAccessUnit::translatePacket() {
     translation_done = false;
 }
 bool IndirectAccessUnit::recvData(const Addr addr,
+                                  uint8_t *dataptr,
                                   std::vector<uint32_t> data,
                                   std::vector<uint16_t> wids,
                                   bool is_block_cached) {
@@ -621,6 +687,8 @@ bool IndirectAccessUnit::recvData(const Addr addr,
     if (entries.size() == 0) {
         return false;
     }
+    uint8_t new_data[block_size];
+    std::memcpy(new_data, dataptr, block_size);
     assert(wids.size() == block_size / word_size);
     for (int i = 0; i < block_size / word_size; i++) {
         assert(wids[i] == i);
@@ -629,15 +697,97 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         int itr = entry.itr;
         int wid = entry.wid;
         DPRINTF(MAAIndirect, "I[%d] %s: itr (%d) wid (%d) matched!\n", my_indirect_id, __func__, itr, wid);
-        maa->spd->setData(my_dst_tile, itr, data[wid]);
+        switch (my_opcode) {
+        case Instruction::OpcodeType::INDIR_LD: {
+            maa->spd->setData(my_dst_tile, itr, data[wid]);
+            break;
+        }
+        case Instruction::OpcodeType::INDIR_ST: {
+            uint8_t *spd_data_ptr = maa->spd->getDataPtr(my_src_tile, itr);
+            std::memcpy(new_data + wid * sizeof(uint32_t),
+                        spd_data_ptr,
+                        sizeof(uint32_t));
+            DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
+                    my_indirect_id, __func__, wid, my_src_tile, itr, ((float *)new_data)[wid]);
+
+            // uint32_t word_data = maa->spd->getData(my_src_tile, itr);
+            // ((uint32_t *)new_data)[wid] = word_data;
+            break;
+        }
+        case Instruction::OpcodeType::INDIR_RMW: {
+            switch (my_datatype) {
+            case Instruction::DataType::INT32_TYPE: {
+                int32_t word_data = *((int32_t *)maa->spd->getDataPtr(my_src_tile, itr));
+                assert(my_optype == Instruction::OPType::ADD_OP);
+                ((int32_t *)new_data)[wid] += word_data;
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%d) += SPD[%d][%d] (%d) = %d!\n",
+                        my_indirect_id, __func__, wid, ((int *)new_data)[wid], my_src_tile, itr, word_data, ((int *)new_data)[wid] + word_data);
+                break;
+            }
+            case Instruction::DataType::FLOAT32_TYPE: {
+                float word_data = *((float *)maa->spd->getDataPtr(my_src_tile, itr));
+                assert(my_optype == Instruction::OPType::ADD_OP);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%f) += SPD[%d][%d] (%f) = %f!\n",
+                        my_indirect_id, __func__, wid, ((float *)new_data)[wid], my_src_tile, itr, word_data, ((float *)new_data)[wid] + word_data);
+                ((float *)new_data)[wid] += word_data;
+                break;
+            }
+            default:
+                assert(false);
+            }
+            break;
+        }
+        default:
+            assert(false);
+        }
     }
-    my_received_responses++;
-    if (my_received_responses == my_expected_responses) {
-        DPRINTF(MAAIndirect, "%s: all responses received, calling execution again in state %s!\n",
-                __func__, status_names[(int)state]);
-        scheduleExecuteInstructionEvent();
+    if (my_opcode == Instruction::OpcodeType::INDIR_ST || my_opcode == Instruction::OpcodeType::INDIR_RMW) {
+        RequestPtr real_req = std::make_shared<Request>(addr,
+                                                        block_size,
+                                                        flags,
+                                                        maa->requestorId);
+        PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
+        write_pkt->allocate();
+        write_pkt->setData(new_data);
+        for (int i = 0; i < block_size / word_size; i++) {
+            DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = %f!\n",
+                    my_indirect_id, __func__, i, write_pkt->getPtr<float>()[i]);
+        }
+        my_outstanding_write_pkts.push_back(write_pkt);
+        sendOutstandingWritePacket(true);
     } else {
-        DPRINTF(MAAIndirect, "%s: expected: %d, received: %d responses!\n", __func__, my_expected_responses, my_received_responses);
+        my_received_responses++;
+        if (my_received_responses == my_expected_responses) {
+            DPRINTF(MAAIndirect, "%s: all responses received, calling execution again in state %s!\n",
+                    __func__, status_names[(int)state]);
+            scheduleExecuteInstructionEvent();
+        } else {
+            DPRINTF(MAAIndirect, "%s: expected: %d, received: %d responses!\n", __func__, my_expected_responses, my_received_responses);
+        }
+    }
+    return true;
+}
+bool IndirectAccessUnit::sendOutstandingWritePacket(bool call_execute) {
+    while (my_outstanding_write_pkts.size() != 0) {
+        PacketPtr my_write_pkt = my_outstanding_write_pkts.front();
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memory\n", my_indirect_id, __func__, my_write_pkt->print());
+        if (maa->memSidePort.sendPacket(my_indirect_id,
+                                        my_write_pkt) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving execution...\n", my_indirect_id, __func__);
+            return false;
+        } else {
+            my_outstanding_write_pkts.pop_front();
+            my_received_responses++;
+        }
+    }
+    if (call_execute) {
+        if (my_received_responses == my_expected_responses) {
+            DPRINTF(MAAIndirect, "%s: all responses received, calling execution again in state %s!\n",
+                    __func__, status_names[(int)state]);
+            scheduleExecuteInstructionEvent();
+        } else {
+            DPRINTF(MAAIndirect, "%s: expected: %d, received: %d responses!\n", __func__, my_expected_responses, my_received_responses);
+        }
     }
     return true;
 }

@@ -185,6 +185,7 @@ public:
     void setInstruction(Instruction *_instruction);
 
     bool recvData(const Addr addr,
+                  uint8_t *dataptr,
                   std::vector<uint32_t> data,
                   std::vector<uint16_t> wids,
                   bool is_block_cached);
@@ -197,14 +198,18 @@ public:
 
 protected:
     Instruction *my_instruction;
-    PacketPtr my_pkt;
-    bool my_outstanding_pkt;
+    PacketPtr my_read_pkt;
+    bool my_outstanding_read_pkt, my_outstanding_read_pkt_snooped;
+    std::list<PacketPtr> my_outstanding_write_pkts;
     Request::Flags flags = 0;
     const Addr block_size = 64;
     const Addr word_size = sizeof(uint32_t);
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
-    int my_dst_tile, my_cond_tile, my_max, my_idx_tile;
+    int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;
+    Instruction::OPType my_optype;
+    Instruction::OpcodeType my_opcode;
+    Instruction::DataType my_datatype;
     int my_expected_responses;
     int my_received_responses;
     std::vector<int> my_sorted_indices;
@@ -224,11 +229,13 @@ protected:
     void checkAllRowTablesSent();
     int getRowTableIdx(int channel, int rank, int bankgroup);
     void executeInstruction();
+    bool checkOutstandingPackets(bool check_write = true, bool check_read = true);
     EventFunctionWrapper executeInstructionEvent;
 
 public:
-    void createMyPacket();
-    bool sendOutstandingPacket();
+    void createMyReadPacket();
+    bool sendOutstandingReadPacket();
+    bool sendOutstandingWritePacket(bool call_execute = false);
 };
 } // namespace gem5
 
