@@ -1,5 +1,5 @@
-#ifndef __MEM_MAA_ALU_HH__
-#define __MEM_MAA_ALU_HH__
+#ifndef __MEM_MAA_RANGEFUSER_HH__
+#define __MEM_MAA_RANGEFUSER_HH__
 
 #include <cassert>
 #include <cstdint>
@@ -12,7 +12,7 @@ namespace gem5 {
 
 class MAA;
 
-class ALUUnit {
+class RangeFuserUnit {
 public:
     enum class Status : uint8_t {
         Idle = 0,
@@ -31,9 +31,9 @@ protected:
     MAA *maa;
 
 public:
-    ALUUnit();
+    RangeFuserUnit();
 
-    void allocate(MAA *_maa);
+    void allocate(unsigned int _num_tile_elements, MAA *_maa);
 
     Status getState() const { return state; }
 
@@ -43,17 +43,14 @@ public:
 
 protected:
     Instruction *my_instruction;
-    int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
-    int my_src2_reg_int32;
-    float my_src2_reg_float32;
-    int my_max;
-    Instruction::OPType my_optype;
-    Instruction::OpcodeType my_opcode;
-    Instruction::DataType my_datatype;
+    int my_dst_i_tile, my_dst_j_tile, my_cond_tile, my_min_tile, my_max_tile;
+    int my_last_i, my_last_j, my_stride;
+    int my_max_i, my_idx_j;
+    unsigned int num_tile_elements;
 
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
 };
 } // namespace gem5
 
-#endif // __MEM_MAA_ALU_HH__
+#endif // __MEM_MAA_RANGEFUSER_HH__

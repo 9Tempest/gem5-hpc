@@ -26,6 +26,7 @@
 #include "mem/MAA/IndirectAccess.hh"
 #include "mem/MAA/Invalidator.hh"
 #include "mem/MAA/ALU.hh"
+#include "mem/MAA/RangeFuser.hh"
 
 namespace gem5 {
 
@@ -256,6 +257,7 @@ public:
     IndirectAccessUnit *indirectAccessUnits;
     Invalidator *invalidator;
     ALUUnit *aluUnits;
+    RangeFuserUnit *rangeUnits;
 
     // Ramulator related variables for address mapping
     std::vector<int> m_org;
@@ -395,7 +397,7 @@ public:
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID = -1,
                            int dst2SpdID = -1);
-    void setDstReady(Instruction *instruction);
+    void setDstReady(Instruction *instruction, int dstSpdID);
     bool sentMemSidePacket(PacketPtr pkt);
 
 protected:

@@ -9,14 +9,35 @@
 #endif
 
 namespace gem5 {
+
 ///////////////
-//
-// STREAM ACCESS UNIT
-//
+// REQUEST TABLE
 ///////////////
-StreamAccessUnit::StreamAccessUnit()
-    : executeInstructionEvent([this] { executeInstruction(); }, name()) {
-    request_table = nullptr;
+RequestTable::RequestTable() {
+    entries = new RequestTableEntry *[num_addresses];
+    entries_valid = new bool *[num_addresses];
+    for (int i = 0; i < num_addresses; i++) {
+        entries[i] = new RequestTableEntry[num_entries_per_address];
+        entries_valid[i] = new bool[num_entries_per_address];
+        for (int j = 0; j < num_entries_per_address; j++) {
+            entries_valid[i][j] = false;
+        }
+    }
+    addresses = new Addr[num_addresses];
+    addresses_valid = new bool[num_addresses];
+    for (int i = 0; i < num_addresses; i++) {
+        addresses_valid[i] = false;
+    }
+}
+RequestTable::~RequestTable() {
+    for (int i = 0; i < num_addresses; i++) {
+        delete[] entries[i];
+        delete[] entries_valid[i];
+    }
+    delete[] entries;
+    delete[] entries_valid;
+    delete[] addresses;
+    delete[] addresses_valid;
 }
 std::vector<RequestTableEntry> RequestTable::get_entries(Addr base_addr) {
     std::vector<RequestTableEntry> result;
@@ -41,6 +62,8 @@ bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
     for (int i = 0; i < num_addresses; i++) {
         if (addresses_valid[i] == true) {
             if (addresses[i] == base_addr) {
+                // Duplicate should not be allowed
+                assert(address_itr == -1);
                 address_itr = i;
             }
         } else if (free_address_itr == -1) {
@@ -67,6 +90,41 @@ bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
     entries[address_itr][free_entry_itr] = RequestTableEntry(itr, wid);
     entries_valid[address_itr][free_entry_itr] = true;
     return true;
+}
+void RequestTable::check_reset() {
+    for (int i = 0; i < num_addresses; i++) {
+        panic_if(addresses_valid[i], "Address %d is valid: 0x%lx!\n", i, addresses[i]);
+        for (int j = 0; j < num_entries_per_address; j++) {
+            panic_if(entries_valid[i][j], "Entry %d is valid: itr(%u) wid(%u)!\n", j, entries[i][j].itr, entries[i][j].wid);
+        }
+    }
+}
+void RequestTable::reset() {
+    for (int i = 0; i < num_addresses; i++) {
+        addresses_valid[i] = false;
+        for (int j = 0; j < num_entries_per_address; j++) {
+            entries_valid[i][j] = false;
+        }
+    }
+}
+
+///////////////
+//
+// STREAM ACCESS UNIT
+//
+///////////////
+StreamAccessUnit::StreamAccessUnit()
+    : executeInstructionEvent([this] { executeInstruction(); }, name()) {
+    request_table = nullptr;
+}
+void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa) {
+    my_stream_id = _my_stream_id;
+    num_tile_elements = _num_tile_elements;
+    state = Status::Idle;
+    maa = _maa;
+    dst_tile_id = -1;
+    request_table = new RequestTable();
+    translation_done = false;
 }
 void StreamAccessUnit::executeInstruction() {
     switch (state) {
@@ -95,7 +153,9 @@ void StreamAccessUnit::executeInstruction() {
         my_byte_enable = std::vector<bool>(block_size, false);
         my_outstanding_pkt = false;
         my_received_responses = 0;
+        my_sent_requests = 0;
         my_request_table_full = false;
+        request_table->reset();
 
         // Setting the state of the instruction and stream unit
         DPRINTF(MAAStream, "%s: state set to request for request %s!\n", __func__, my_instruction->print());
@@ -158,13 +218,14 @@ void StreamAccessUnit::executeInstruction() {
     case Status::Response: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAStream, "%s: responding %s!\n", __func__, my_instruction->print());
-        if (my_received_responses == my_idx) {
+        if (my_received_responses == my_sent_requests) {
             DPRINTF(MAAStream, "%s: state set to finish for request %s!\n", __func__, my_instruction->print());
             my_instruction->state = Instruction::Status::Finish;
             state = Status::Idle;
             maa->spd->setReady(my_dst_tile);
             maa->finishInstruction(my_instruction, my_dst_tile);
             my_instruction = nullptr;
+            request_table->check_reset();
         }
         break;
     }
@@ -195,6 +256,7 @@ bool StreamAccessUnit::sendOutstandingPacket() {
         DPRINTF(MAAStream, "%s: send failed, leaving execution...\n", __func__);
         return false;
     } else {
+        my_sent_requests++;
         my_outstanding_pkt = false;
         return true;
     }
@@ -230,19 +292,19 @@ bool StreamAccessUnit::recvData(const Addr addr,
         int wid = entries[i].wid;
         assert(wid == wids[i]);
         maa->spd->setData(my_dst_tile, itr, data[i]);
-        my_received_responses++;
     }
+    my_received_responses++;
     if (my_request_table_full) {
         assert(state == Status::Request);
         my_request_table_full = false;
         DPRINTF(MAAStream, "%s: request table was full, calling execution again!\n", __func__);
         scheduleExecuteInstructionEvent();
-    } else if (my_received_responses == my_idx) {
-        assert(state == Status::Response);
-        DPRINTF(MAAStream, "%s: all words received, calling execution again!\n", __func__);
+    } else if (my_received_responses == my_sent_requests) {
+        assert(state == Status::Response || state == Status::Request);
+        DPRINTF(MAAStream, "%s: all sent requests received, calling execution again!\n", __func__);
         scheduleExecuteInstructionEvent();
     } else {
-        DPRINTF(MAAStream, "%s: expected: %d, received: %d!\n", __func__, my_idx, my_received_responses);
+        DPRINTF(MAAStream, "%s: expected: %d, received: %d!\n", __func__, my_sent_requests, my_received_responses);
     }
     return true;
 }
@@ -258,14 +320,16 @@ void StreamAccessUnit::setInstruction(Instruction *_instruction) {
     my_instruction = _instruction;
 }
 void StreamAccessUnit::scheduleExecuteInstructionEvent(int latency) {
-    DPRINTF(MAAStream, "%s: scheduling execute for the next %d cycles!\n", __func__, latency);
+    DPRINTF(MAAStream, "%s: scheduling execute for the Stream Unit in the next %d cycles!\n", __func__, latency);
     Tick new_when = curTick() + latency;
-    if (!executeInstructionEvent.scheduled()) {
-        maa->schedule(executeInstructionEvent, new_when);
-    } else {
-        Tick old_when = executeInstructionEvent.when();
-        if (new_when < old_when)
-            maa->reschedule(executeInstructionEvent, new_when);
-    }
+    panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
+    maa->schedule(executeInstructionEvent, new_when);
+    // if (!executeInstructionEvent.scheduled()) {
+    //     maa->schedule(executeInstructionEvent, new_when);
+    // } else {
+    //     Tick old_when = executeInstructionEvent.when();
+    //     if (new_when < old_when)
+    //         maa->reschedule(executeInstructionEvent, new_when);
+    // }
 }
 } // namespace gem5

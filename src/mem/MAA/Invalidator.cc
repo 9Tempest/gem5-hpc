@@ -1,4 +1,5 @@
 #include "mem/MAA/Invalidator.hh"
+#include "base/logging.hh"
 #include "base/trace.hh"
 #include "mem/MAA/MAA.hh"
 #include "debug/MAAInvalidator.hh"
@@ -64,8 +65,9 @@ void Invalidator::executeInstruction() {
         DPRINTF(MAAInvalidator, "%s: decoding %s!\n", __func__, my_instruction->print());
 
         // Decoding the instruction
-        my_dst_tile = my_instruction->dst1SpdID;
-        assert(my_instruction->dst1Ready == false);
+        panic_if(my_instruction->dst1Ready && my_instruction->dst2Ready,
+                 "Both dst1 and dst2 are ready!\n");
+        my_dst_tile = my_instruction->dst1Ready == false ? my_instruction->dst1SpdID : my_instruction->dst2SpdID;
 
         // Initialization
         my_i = 0;
@@ -117,7 +119,7 @@ void Invalidator::executeInstruction() {
         if (my_received_responses == my_total_invalidations_sent) {
             DPRINTF(MAAInvalidator, "%s: state set to idle for request %s!\n", __func__, my_instruction->print());
             state = Status::Idle;
-            maa->setDstReady(my_instruction);
+            maa->setDstReady(my_instruction, my_dst_tile);
             my_instruction = nullptr;
         }
         break;
@@ -168,14 +170,16 @@ void Invalidator::recvData(int tile_id, int element_id) {
     }
 }
 void Invalidator::scheduleExecuteInstructionEvent(int latency) {
-    DPRINTF(MAAInvalidator, "%s: scheduling execute for the next %d cycles!\n", __func__, latency);
+    DPRINTF(MAAInvalidator, "%s: scheduling execute for the Invalidator Unit in the next %d cycles!\n", __func__, latency);
     Tick new_when = curTick() + latency;
-    if (!executeInstructionEvent.scheduled()) {
-        maa->schedule(executeInstructionEvent, new_when);
-    } else {
-        Tick old_when = executeInstructionEvent.when();
-        if (new_when < old_when)
-            maa->reschedule(executeInstructionEvent, new_when);
-    }
+    panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
+    maa->schedule(executeInstructionEvent, new_when);
+    // if (!executeInstructionEvent.scheduled()) {
+    //     maa->schedule(executeInstructionEvent, new_when);
+    // } else {
+    //     Tick old_when = executeInstructionEvent.when();
+    //     if (new_when < old_when)
+    //         maa->reschedule(executeInstructionEvent, new_when);
+    // }
 }
 } // namespace gem5

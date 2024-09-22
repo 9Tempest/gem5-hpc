@@ -1,6 +1,6 @@
 #include "mem/MAA/SPD.hh"
 #include "mem/MAA/MAA.hh"
-#include "debug/MAA.hh"
+#include "debug/SPD.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -86,6 +86,9 @@ void SPD::unsetReady(int tile_id) {
 }
 uint16_t SPD::getSize(int tile_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
+    panic_if(getReady(tile_id) == 0,
+             "Trying to get size of an uninitialized tile[%d]!\n",
+             tile_id);
     return tiles[tile_id].getSize();
 }
 void SPD::setSize(int tile_id, uint16_t size) {

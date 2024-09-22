@@ -8,9 +8,11 @@ Source('IndirectAccess.cc')
 Source('StreamAccess.cc')
 Source('Invalidator.cc')
 Source('ALU.cc')
+Source('RangeFuser.cc')
 Source('MAA.cc')
 
 DebugFlag('MAA')
+DebugFlag('SPD')
 DebugFlag('MAACpuPort')
 DebugFlag('MAACachePort')
 DebugFlag('MAAMemPort')
@@ -19,8 +21,19 @@ DebugFlag('MAAIndirect')
 DebugFlag('MAAStream')
 DebugFlag('MAAInvalidator')
 DebugFlag('MAAALU')
+DebugFlag('MAARangeFuser')
 
 # MAA Tags is so outrageously verbose, printing the MAA's entire tag
 # array on each timing access, that you should probably have to ask for
 # it explicitly even above and beyond MAAAll.
-CompoundFlag('MAAAll', ['MAA', 'MAACpuPort', 'MAACachePort', 'MAAMemPort', 'MAAController', 'MAAIndirect', 'MAAStream', 'MAAInvalidator'])
+CompoundFlag('MAAAll', ['MAA',
+                        'SPD',
+                        'MAACpuPort',
+                        'MAACachePort',
+                        'MAAMemPort',
+                        'MAAController',
+                        'MAAIndirect',
+                        'MAAStream',
+                        'MAAInvalidator',
+                        'MAAALU',
+                        'MAARangeFuser'])

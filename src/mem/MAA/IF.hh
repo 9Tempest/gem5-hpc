@@ -15,8 +15,8 @@ enum class FuncUnitType : uint8_t {
     STREAM = 0,
     INDIRECT = 1,
     INVALIDATOR = 2,
-    ALU = 2,
-    RANGE = 3,
+    ALU = 3,
+    RANGE = 4,
     MAX
 };
 const std::string func_unit_names[6] = {
@@ -95,7 +95,7 @@ public:
     int16_t src1RegID, src2RegID, src3RegID, dst1RegID, dst2RegID;
     int16_t src1SpdID, src2SpdID;
     bool src1Ready, src2Ready;
-    int16_t dst1SpdID, dst1Ready, dst2SpdID;
+    int16_t dst1SpdID, dst1Ready, dst2SpdID, dst2Ready;
     int16_t condSpdID;
     // {STREAM_LD, INDIR_LD, INDIR_ST, INDIR_RMW, RANGE_LOOP, CONDITION}
     OpcodeType opcode;

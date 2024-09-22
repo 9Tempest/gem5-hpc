@@ -88,9 +88,9 @@ checkpoint_address = args.checkpoint
 debug_type = None
 # debug_type = "LSQ,CacheAll,PseudoInst"
 # debug_type = "O3CPUAll,CacheAll,PseudoInst"
-# MemoryAccess,XBar,Cache,
+# MemoryAccess,XBar,Cache,MAACpuPort,
 if MAA_SIM_TYPE:
-    debug_type = "MAAController,MAACachePort,MAAMemPort,MAAIndirect,MAAStream,MAAInvalidator"
+    debug_type = "MAARangeFuser,MAAALU,MAAController,MAACachePort,MAAMemPort,MAAIndirect,MAAStream,MAAInvalidator"
     # debug_type = "MAACachePort,MAAIndirect,MAAStream,Cache"
 out_dir = args.output
 if out_dir[-1] == "/":

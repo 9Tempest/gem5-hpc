@@ -1,6 +1,6 @@
 #include "mem/MAA/IF.hh"
 #include "mem/MAA/MAA.hh"
-#include "debug/MAA.hh"
+#include "debug/MAAController.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -105,13 +105,15 @@ bool IF::pushInstruction(Instruction _instruction) {
     instructions[free_instruction_slot] = _instruction;
     valids[free_instruction_slot] = true;
     instructions[free_instruction_slot].if_id = free_instruction_slot;
+    DPRINTF(MAAController, "%s: %s pushed to instruction[%d]!\n", __func__, _instruction.print(), free_instruction_slot);
     return true;
 }
 Instruction *IF::getReady(FuncUnitType funcUnit) {
     if (funcUnit == FuncUnitType::INVALIDATOR) {
         for (int i = 0; i < num_instructions; i++) {
             if (valids[i] &&
-                instructions[i].dst1Ready == false) {
+                ((instructions[i].dst1SpdID != -1 && instructions[i].dst1Ready == false) ||
+                 (instructions[i].dst2SpdID != -1 && instructions[i].dst2Ready == false))) {
                 // instruction state does not matter anymore as we only have one invalidator
                 return &instructions[i];
             }
@@ -122,9 +124,11 @@ Instruction *IF::getReady(FuncUnitType funcUnit) {
                 instructions[i].src1Ready &&
                 instructions[i].src2Ready &&
                 instructions[i].dst1Ready &&
+                instructions[i].dst2Ready &&
                 instructions[i].state == Instruction::Status::Idle &&
                 instructions[i].funcUnit == funcUnit) {
                 instructions[i].state = Instruction::Status::Service;
+                DPRINTF(MAAController, "%s: returned instruction[%d] %s for execute!\n", __func__, i, instructions[i].print());
                 return &instructions[i];
             }
         }

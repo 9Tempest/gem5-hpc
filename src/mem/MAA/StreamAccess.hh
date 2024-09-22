@@ -26,35 +26,13 @@ struct RequestTableEntry {
 
 class RequestTable {
 public:
-    RequestTable() {
-        entries = new RequestTableEntry *[num_addresses];
-        entries_valid = new bool *[num_addresses];
-        for (int i = 0; i < num_addresses; i++) {
-            entries[i] = new RequestTableEntry[num_entries_per_address];
-            entries_valid[i] = new bool[num_entries_per_address];
-            for (int j = 0; j < num_entries_per_address; j++) {
-                entries_valid[i][j] = false;
-            }
-        }
-        addresses = new Addr[num_addresses];
-        addresses_valid = new bool[num_addresses];
-        for (int i = 0; i < num_addresses; i++) {
-            addresses_valid[i] = false;
-        }
-    }
-    ~RequestTable() {
-        for (int i = 0; i < num_addresses; i++) {
-            delete[] entries[i];
-            delete[] entries_valid[i];
-        }
-        delete[] entries;
-        delete[] entries_valid;
-        delete[] addresses;
-        delete[] addresses_valid;
-    }
+    RequestTable();
+    ~RequestTable();
 
     bool add_entry(int itr, Addr base_addr, uint16_t wid);
     std::vector<RequestTableEntry> get_entries(Addr base_addr);
+    void check_reset();
+    void reset();
 
 protected:
     const int num_addresses = 32;
@@ -95,15 +73,8 @@ public:
             delete request_table;
         }
     }
-    void allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa) {
-        my_stream_id = _my_stream_id;
-        num_tile_elements = _num_tile_elements;
-        state = Status::Idle;
-        maa = _maa;
-        dst_tile_id = -1;
-        request_table = new RequestTable();
-        translation_done = false;
-    }
+    void allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa);
+
     Status getState() const { return state; }
 
     void setInstruction(Instruction *_instruction);
@@ -132,7 +103,7 @@ protected:
     Addr my_base_addr;
     std::vector<bool> my_byte_enable;
     int my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
-    int my_received_responses;
+    int my_received_responses, my_sent_requests;
     int my_stream_id;
     bool my_request_table_full;
 

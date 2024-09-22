@@ -25,6 +25,7 @@ void OffsetTable::allocate(int _num_tile_elements) {
     for (int i = 0; i < num_tile_elements; i++) {
         entries_valid[i] = false;
         entries[i].next_itr = -1;
+        entries[i].wid = -1;
         entries[i].itr = i;
     }
 }
@@ -40,18 +41,34 @@ std::vector<OffsetTableEntry> OffsetTable::get_entry_recv(int first_itr) {
     std::vector<OffsetTableEntry> result;
     assert(first_itr != -1);
     int itr = first_itr;
+    int prev_itr = itr;
     while (itr != -1) {
         result.push_back(entries[itr]);
         assert(entries_valid[itr] == true);
-        entries_valid[itr] = false;
+        prev_itr = itr;
         itr = entries[itr].next_itr;
+        // Invalidate the previous itr
+        entries_valid[prev_itr] = false;
+        entries[prev_itr].wid = -1;
+        entries[prev_itr].next_itr = -1;
     }
     return result;
+}
+void OffsetTable::check_reset() {
+    for (int i = 0; i < num_tile_elements; i++) {
+        panic_if(entries_valid[i], "Entry %d is valid: wid(%d) next_itr(%d)!\n",
+                 i, entries[i].wid, entries[i].next_itr);
+        panic_if(entries[i].next_itr != -1, "Entry %d has next_itr(%d) with wid(%d)!\n",
+                 i, entries[i].next_itr, entries[i].wid);
+        panic_if(entries[i].wid != -1, "Entry %d has wid(%d) with next_itr(%d)!\n",
+                 i, entries[i].wid, entries[i].next_itr);
+    }
 }
 void OffsetTable::reset() {
     for (int i = 0; i < num_tile_elements; i++) {
         entries_valid[i] = false;
         entries[i].next_itr = -1;
+        entries[i].wid = -1;
     }
 }
 
@@ -116,6 +133,14 @@ bool RowTableEntry::insert(Addr addr,
     // }
     return true;
 }
+void RowTableEntry::check_reset() {
+    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+        panic_if(entries_valid[i], "Entry %d is valid: addr(0x%lx)!\n",
+                 i, entries[i].addr);
+    }
+    panic_if(last_sent_entry_id != 0, "Last sent entry id is not 0: %d!\n",
+             last_sent_entry_id);
+}
 void RowTableEntry::reset() {
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
         entries_valid[i] = false;
@@ -158,6 +183,7 @@ bool RowTableEntry::all_entries_received() {
             return false;
         }
     }
+    last_sent_entry_id = 0;
     return true;
 }
 
@@ -246,6 +272,15 @@ float RowTable::getAverageEntriesPerRow() {
     }
     return total_entries / num_row_table_rows;
 }
+void RowTable::check_reset() {
+    for (int i = 0; i < num_row_table_rows; i++) {
+        entries[i].check_reset();
+        panic_if(entries_valid[i], "Row[%d] is valid: Grow_addr(0x%lx)!\n",
+                 i, entries[i].Grow_addr);
+    }
+    panic_if(last_sent_row_id != 0, "Last sent row id is not 0: %d!\n",
+             last_sent_row_id);
+}
 void RowTable::reset() {
     for (int i = 0; i < num_row_table_rows; i++) {
         entries[i].reset();
@@ -263,6 +298,7 @@ bool RowTable::get_entry_send(Addr &addr,
             return true;
         }
     }
+    last_sent_row_id = 0;
     return false;
 }
 bool RowTable::get_entry_send_first_row(Addr &addr,
@@ -274,6 +310,7 @@ bool RowTable::get_entry_send_first_row(Addr &addr,
                 my_indirect_id, my_table_id, __func__, addr);
         return true;
     }
+    last_sent_row_id = 0;
     return false;
 }
 std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
@@ -294,7 +331,7 @@ std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
                 DPRINTF(MAAIndirect, "I[%d] T[%d] %s: all R[%d] entries received, setting to invalid!\n",
                         my_indirect_id, my_table_id, __func__, i);
                 entries_valid[i] = false;
-                entries[i].reset();
+                entries[i].check_reset();
             }
         }
     }
@@ -385,6 +422,9 @@ void IndirectAccessUnit::executeInstruction() {
         my_optype = my_instruction->optype;
         my_datatype = my_instruction->datatype;
         my_max = maa->spd->getSize(my_idx_tile);
+        panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
+                 "I[%d] %s: idx size(%d) != cond size(%d)!\n",
+                 my_indirect_id, __func__, my_max, maa->spd->getSize(my_cond_tile));
 
         // Initialization
         my_virtual_addr = 0;
@@ -394,6 +434,7 @@ void IndirectAccessUnit::executeInstruction() {
         my_received_responses = my_expected_responses = 0;
         my_is_block_cached = true;
         my_last_row_table_sent = 0;
+        offset_table->reset();
         for (int i = 0; i < num_row_table_banks; i++) {
             row_table[i].reset();
             my_row_table_req_sent[i] = false;
@@ -534,6 +575,10 @@ void IndirectAccessUnit::executeInstruction() {
             my_instruction->state = Instruction::Status::Finish;
             DPRINTF(MAAIndirect, "I[%d] %s: state set to finish for request %s!\n", my_indirect_id, __func__, my_instruction->print());
             state = Status::Idle;
+            for (int i = 0; i < num_row_table_banks; i++) {
+                row_table[i].check_reset();
+            }
+            offset_table->check_reset();
             if (my_opcode == Instruction::OpcodeType::INDIR_LD) {
                 maa->spd->setReady(my_dst_tile);
                 maa->finishInstruction(my_instruction, my_dst_tile);
@@ -719,9 +764,9 @@ bool IndirectAccessUnit::recvData(const Addr addr,
             case Instruction::DataType::INT32_TYPE: {
                 int32_t word_data = *((int32_t *)maa->spd->getDataPtr(my_src_tile, itr));
                 assert(my_optype == Instruction::OPType::ADD_OP);
-                ((int32_t *)new_data)[wid] += word_data;
                 DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%d) += SPD[%d][%d] (%d) = %d!\n",
                         my_indirect_id, __func__, wid, ((int *)new_data)[wid], my_src_tile, itr, word_data, ((int *)new_data)[wid] + word_data);
+                ((int32_t *)new_data)[wid] += word_data;
                 break;
             }
             case Instruction::DataType::FLOAT32_TYPE: {
@@ -803,14 +848,16 @@ void IndirectAccessUnit::setInstruction(Instruction *_instruction) {
     my_instruction = _instruction;
 }
 void IndirectAccessUnit::scheduleExecuteInstructionEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling execute for the next %d cycles!\n", my_indirect_id, __func__, latency);
+    DPRINTF(MAAIndirect, "I[%d] %s: scheduling execute for the IndirectAccess Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
     Tick new_when = curTick() + latency;
-    if (!executeInstructionEvent.scheduled()) {
-        maa->schedule(executeInstructionEvent, new_when);
-    } else {
-        Tick old_when = executeInstructionEvent.when();
-        if (new_when < old_when)
-            maa->reschedule(executeInstructionEvent, new_when);
-    }
+    panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
+    maa->schedule(executeInstructionEvent, new_when);
+    // if (!executeInstructionEvent.scheduled()) {
+    //     maa->schedule(executeInstructionEvent, new_when);
+    // } else {
+    //     Tick old_when = executeInstructionEvent.when();
+    //     if (new_when < old_when)
+    //         maa->reschedule(executeInstructionEvent, new_when);
+    // }
 }
 } // namespace gem5

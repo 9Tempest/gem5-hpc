@@ -19,6 +19,10 @@ ALUUnit::ALUUnit()
     : executeInstructionEvent([this] { executeInstruction(); }, name()) {
     my_dst_tile = -1;
 }
+void ALUUnit::allocate(MAA *_maa) {
+    state = Status::Idle;
+    maa = _maa;
+}
 void ALUUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
@@ -40,11 +44,12 @@ void ALUUnit::executeInstruction() {
         my_opcode = my_instruction->opcode;
         my_datatype = my_instruction->datatype;
         my_max = maa->spd->getSize(my_src1_tile);
-        if (my_cond_tile == -1)
-            assert(my_max == maa->spd->getSize(my_src2_tile));
-        if (my_src2_tile != -1) {
-            assert(my_max == maa->spd->getSize(my_src2_tile));
-        }
+        panic_if(my_src2_tile != -1 && my_max != maa->spd->getSize(my_src2_tile),
+                 "%s: src1 size(%d) != src2 size(%d)!\n",
+                 __func__, my_max, maa->spd->getSize(my_src2_tile));
+        panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
+                 "%s: src1 size(%d) != cond size(%d)!\n",
+                 __func__, my_max, maa->spd->getSize(my_cond_tile));
         if (my_datatype == Instruction::DataType::INT32_TYPE) {
             my_src2_reg_int32 = *((int32_t *)maa->rf->getDataPtr(my_instruction->src1RegID));
         } else if (my_datatype == Instruction::DataType::FLOAT32_TYPE) {
@@ -183,6 +188,7 @@ void ALUUnit::executeInstruction() {
         my_instruction->state = Instruction::Status::Finish;
         state = Status::Idle;
         maa->spd->setReady(my_dst_tile);
+        maa->spd->setSize(my_dst_tile, my_max);
         maa->finishInstruction(my_instruction, my_dst_tile);
         my_instruction = nullptr;
         break;
@@ -196,14 +202,16 @@ void ALUUnit::setInstruction(Instruction *_instruction) {
     my_instruction = _instruction;
 }
 void ALUUnit::scheduleExecuteInstructionEvent(int latency) {
-    DPRINTF(MAAALU, "%s: scheduling execute for the next %d cycles!\n", __func__, latency);
+    DPRINTF(MAAALU, "%s: scheduling execute for the ALU Unit in the next %d cycles!\n", __func__, latency);
     Tick new_when = curTick() + latency;
-    if (!executeInstructionEvent.scheduled()) {
-        maa->schedule(executeInstructionEvent, new_when);
-    } else {
-        Tick old_when = executeInstructionEvent.when();
-        if (new_when < old_when)
-            maa->reschedule(executeInstructionEvent, new_when);
-    }
+    panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
+    maa->schedule(executeInstructionEvent, new_when);
+    // if (!executeInstructionEvent.scheduled()) {
+    //     maa->schedule(executeInstructionEvent, new_when);
+    // } else {
+    //     Tick old_when = executeInstructionEvent.when();
+    //     if (new_when < old_when)
+    //         maa->reschedule(executeInstructionEvent, new_when);
+    // }
 }
 } // namespace gem5

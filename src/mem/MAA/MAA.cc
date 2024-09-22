@@ -2,6 +2,7 @@
 #include "base/addr_range.hh"
 #include "base/logging.hh"
 #include "base/trace.hh"
+#include "mem/MAA/ALU.hh"
 #include "mem/MAA/IF.hh"
 #include "mem/MAA/IndirectAccess.hh"
 #include "mem/packet.hh"
@@ -67,6 +68,13 @@ MAA::MAA(const MAAParams &p)
         addrRanges.front().start(),
         this);
     aluUnits = new ALUUnit[num_alu_units];
+    for (int i = 0; i < num_alu_units; i++) {
+        aluUnits[i].allocate(this);
+    }
+    rangeUnits = new RangeFuserUnit[num_range_units];
+    for (int i = 0; i < num_range_units; i++) {
+        rangeUnits[i].allocate(num_tile_elements, this);
+    }
 }
 
 void MAA::init() {
@@ -172,13 +180,21 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
                 wid.push_back(i / 4);
             }
         }
+        bool received = false;
         for (int i = 0; i < num_indirect_access_units; i++) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
                 if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
-                    break;
+                    panic_if(received, "Received multiple responses for the same request\n");
                 }
+            }
+        }
+        for (int i = 0; i < num_stream_access_units; i++) {
+            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
+                streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), data, wid),
+                         "Received multiple responses for the same request\n");
             }
         }
         break;
@@ -313,10 +329,11 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 current_instruction.PC = pkt->req->getPC();
                 current_instruction.src1Ready = current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
                 current_instruction.src2Ready = current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
-                current_instruction.dst1Ready = (current_instruction.opcode == Instruction::OpcodeType::STREAM_LD ||
-                                                 current_instruction.opcode == Instruction::OpcodeType::INDIR_LD)
-                                                    ? false
-                                                    : true;
+                // assume that we can read from any tile, so invalidate all destinations
+                // Instructions with DST1: stream and indirect load, range loop, ALU
+                current_instruction.dst1Ready = current_instruction.dst1SpdID == -1 ? true : false;
+                // Instructions with DST2: range loop
+                current_instruction.dst2Ready = current_instruction.dst2SpdID == -1 ? true : false;
                 DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction.print());
                 respond_immediately = false;
                 my_outstanding_instruction_pkt = true;
@@ -500,13 +517,21 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
                 wid.push_back(i / 4);
             }
         }
+        bool received = false;
         for (int i = 0; i < num_indirect_access_units; i++) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
                 if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, false)) {
-                    break;
+                    panic_if(received, "Received multiple responses for the same request\n");
                 }
+            }
+        }
+        for (int i = 0; i < num_stream_access_units; i++) {
+            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
+                streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), data, wid),
+                         "Received multiple responses for the same request\n");
             }
         }
         break;
@@ -660,8 +685,8 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
                     streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
                     if (streamAccessUnits[i].recvData(pkt->getAddr(), data, wid)) {
+                        panic_if(received, "Received multiple responses for the same request\n");
                         received = true;
-                        break;
                     }
                 }
             }
@@ -672,7 +697,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
                     if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
-                        break;
+                        panic_if(received, "Received multiple responses for the same request\n");
                     }
                 }
             }
@@ -880,6 +905,28 @@ void MAA::issueInstruction() {
             }
         }
     }
+    for (int i = 0; i < num_alu_units; i++) {
+        if (aluUnits[i].getState() == ALUUnit::Status::Idle) {
+            Instruction *inst = ifile->getReady(FuncUnitType::ALU);
+            if (inst != nullptr) {
+                aluUnits[i].setInstruction(inst);
+                aluUnits[i].scheduleExecuteInstructionEvent(1);
+            } else {
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < num_range_units; i++) {
+        if (rangeUnits[i].getState() == RangeFuserUnit::Status::Idle) {
+            Instruction *inst = ifile->getReady(FuncUnitType::RANGE);
+            if (inst != nullptr) {
+                rangeUnits[i].setInstruction(inst);
+                rangeUnits[i].scheduleExecuteInstructionEvent(1);
+            } else {
+                break;
+            }
+        }
+    }
 }
 void MAA::dispatchInstruction() {
     DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
@@ -924,8 +971,14 @@ void MAA::finishInstruction(Instruction *instruction,
     scheduleIssueInstructionEvent();
     scheduleDispatchInstructionEvent();
 }
-void MAA::setDstReady(Instruction *instruction) {
-    instruction->dst1Ready = true;
+void MAA::setDstReady(Instruction *instruction, int dstSpdID) {
+    if (dstSpdID == instruction->dst1SpdID) {
+        instruction->dst1Ready = true;
+    } else if (dstSpdID == instruction->dst2SpdID) {
+        instruction->dst2Ready = true;
+    } else {
+        assert(false);
+    }
     scheduleIssueInstructionEvent();
 }
 void MAA::scheduleIssueInstructionEvent(int latency) {

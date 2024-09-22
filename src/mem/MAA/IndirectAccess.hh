@@ -6,6 +6,7 @@
 #include <cstring>
 #include <string>
 
+#include "base/statistics.hh"
 #include "base/types.hh"
 #include "mem/packet.hh"
 #include "mem/request.hh"
@@ -47,6 +48,7 @@ public:
     void insert(int itr, int wid, int last_itr);
     std::vector<OffsetTableEntry> get_entry_recv(int first_itr);
     void reset();
+    void check_reset();
     OffsetTableEntry *entries;
     bool *entries_valid;
     int num_tile_elements;
@@ -81,6 +83,7 @@ public:
                 int itr,
                 int wid);
     void reset();
+    void check_reset();
     bool get_entry_send(Addr &addr, bool &is_block_cached);
     std::vector<OffsetTableEntry> get_entry_recv(Addr addr,
                                                  bool is_block_cached);
@@ -126,6 +129,7 @@ public:
                                                  bool is_block_cached);
 
     void reset();
+    void check_reset();
     float getAverageEntriesPerRow();
     OffsetTable *offset_table;
     RowTableEntry *entries;
@@ -236,6 +240,23 @@ public:
     void createMyReadPacket();
     bool sendOutstandingReadPacket();
     bool sendOutstandingWritePacket(bool call_execute = false);
+
+    // struct IndirectAccessUnitStats : public statistics::Group {
+    //     IndirectAccessUnitStats(MAA &m);
+
+    //     void regStats() override;
+
+    //     const MAA &maa;
+
+    //     /** Number of instructions. */
+    //     statistics::Scalar numInstRD;
+    //     statistics::Scalar numInstWR;
+    //     statistics::Scalar numInstRMW;
+    //     statistics::Scalar numInst;
+
+    //     /** Number of instructions. */
+
+    // } stats;
 };
 } // namespace gem5
 
