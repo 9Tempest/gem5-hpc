@@ -4,8 +4,10 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include "base/types.hh"
 
 namespace gem5 {
+class MAA;
 
 class TILE {
 protected:
@@ -15,9 +17,17 @@ protected:
     uint16_t size;
 
 public:
-    uint32_t getData(int element_id);
+    template <typename T>
+    T getData(int element_id) {
+        assert((0 <= element_id) && (element_id < num_tile_elements));
+        return ((T *)data)[element_id];
+    }
     uint8_t *getDataPtr(int element_id);
-    void setData(int element_id, uint32_t _data);
+    template <typename T>
+    void setData(int element_id, T _data) {
+        assert((0 <= element_id) && (element_id < num_tile_elements));
+        ((T *)this->data)[element_id] = _data;
+    }
 
     uint16_t getReady();
     void setReady();
@@ -37,11 +47,26 @@ protected:
     TILE *tiles;
     unsigned int num_tiles;
     unsigned int num_tile_elements;
+    Tick *read_port_busy_until;
+    Tick *write_port_busy_until;
+    const Cycles read_latency, write_latency;
+    const int num_read_ports, num_write_ports;
+    MAA *maa;
 
 public:
-    uint32_t getData(int tile_id, int element_id);
+    template <typename T>
+    T getData(int tile_id, int element_id) {
+        assert((0 <= tile_id) && (tile_id < num_tiles));
+        return tiles[tile_id].getData<T>(element_id);
+    }
+    Cycles getDataLatency(int num_accesses);
     uint8_t *getDataPtr(int tile_id, int element_id);
-    void setData(int tile_id, int element_id, uint32_t _data);
+    template <typename T>
+    void setData(int tile_id, int element_id, T _data) {
+        assert((0 <= tile_id) && (tile_id < num_tiles));
+        tiles[tile_id].setData<T>(element_id, _data);
+    }
+    Cycles setDataLatency(int num_accesses);
     uint16_t getReady(int tile_id);
     void setReady(int tile_id);
     void unsetReady(int tile_id);
@@ -49,7 +74,14 @@ public:
     void setSize(int tile_id, uint16_t size);
 
 public:
-    SPD(unsigned int _num_tiles, unsigned int _num_tile_elements);
+    SPD(MAA *_maa,
+        unsigned int _num_tiles,
+        unsigned int _num_tile_elements,
+        Cycles _read_latency,
+        Cycles _write_latency,
+        int _num_read_ports,
+        int _num_write_ports);
+
     ~SPD();
 };
 
@@ -59,9 +91,17 @@ protected:
     unsigned int num_regs;
 
 public:
-    uint32_t getData(int reg_id);
+    template <typename T>
+    T getData(int reg_id) {
+        assert((0 <= reg_id) && (reg_id < num_regs));
+        return ((T *)data)[reg_id];
+    }
     uint8_t *getDataPtr(int reg_id);
-    void setData(int reg_id, uint32_t _data);
+    template <typename T>
+    void setData(int reg_id, T _data) {
+        assert((0 <= reg_id) && (reg_id < num_regs));
+        ((T *)this->data)[reg_id] = _data;
+    }
 
 public:
     RF(unsigned int _num_regs);

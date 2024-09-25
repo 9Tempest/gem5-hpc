@@ -95,8 +95,10 @@ public:
     int16_t src1RegID, src2RegID, src3RegID, dst1RegID, dst2RegID;
     int16_t src1SpdID, src2SpdID;
     bool src1Ready, src2Ready;
-    int16_t dst1SpdID, dst1Ready, dst2SpdID, dst2Ready;
+    int16_t dst1SpdID, dst2SpdID;
+    bool dst1Ready, dst2Ready;
     int16_t condSpdID;
+    bool condReady;
     // {STREAM_LD, INDIR_LD, INDIR_ST, INDIR_RMW, RANGE_LOOP, CONDITION}
     OpcodeType opcode;
     // {ADD, SUB, MUL, DIV, MIN, MAX, GT, GTE, LT, LTE, EQ}

@@ -5,12 +5,12 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
-
-#include "mem/MAA/IF.hh"
+#include "sim/system.hh"
 
 namespace gem5 {
 
 class MAA;
+class Instruction;
 
 class RangeFuserUnit {
 public:
@@ -18,14 +18,16 @@ public:
         Idle = 0,
         Decode = 1,
         Work = 2,
+        Finish = 3,
         max
     };
 
 protected:
-    std::string status_names[4] = {
+    std::string status_names[5] = {
         "Idle",
         "Decode",
         "Work",
+        "Finish",
         "max"};
     Status state;
     MAA *maa;

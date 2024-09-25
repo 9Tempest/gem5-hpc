@@ -1,10 +1,15 @@
 #include "mem/MAA/MAA.hh"
-#include "base/addr_range.hh"
-#include "base/logging.hh"
-#include "base/trace.hh"
 #include "mem/MAA/ALU.hh"
 #include "mem/MAA/IF.hh"
 #include "mem/MAA/IndirectAccess.hh"
+#include "mem/MAA/Invalidator.hh"
+#include "mem/MAA/RangeFuser.hh"
+#include "mem/MAA/SPD.hh"
+#include "mem/MAA/StreamAccess.hh"
+
+#include "base/addr_range.hh"
+#include "base/logging.hh"
+#include "base/trace.hh"
 #include "mem/packet.hh"
 #include "params/MAA.hh"
 #include "debug/MAA.hh"
@@ -43,6 +48,8 @@ MAA::MAA(const MAAParams &p)
       num_alu_units(p.num_alu_units),
       num_row_table_rows(p.num_row_table_rows),
       num_row_table_entries_per_row(p.num_row_table_entries_per_row),
+      rowtable_latency(p.rowtable_latency),
+      cache_snoop_latency(p.cache_snoop_latency),
       system(p.system),
       mmu(p.mmu),
       my_instruction_pkt(nullptr),
@@ -51,7 +58,13 @@ MAA::MAA(const MAAParams &p)
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()) {
 
     requestorId = p.system->getRequestorId(this);
-    spd = new SPD(num_tiles, num_tile_elements);
+    spd = new SPD(this,
+                  num_tiles,
+                  num_tile_elements,
+                  p.spd_read_latency,
+                  p.spd_write_latency,
+                  p.num_spd_read_ports,
+                  p.num_spd_write_ports);
     rf = new RF(num_regs);
     ifile = new IF(num_instructions);
     streamAccessUnits = new StreamAccessUnit[num_stream_access_units];
@@ -69,12 +82,13 @@ MAA::MAA(const MAAParams &p)
         this);
     aluUnits = new ALUUnit[num_alu_units];
     for (int i = 0; i < num_alu_units; i++) {
-        aluUnits[i].allocate(this);
+        aluUnits[i].allocate(this, p.ALU_lane_latency, p.num_ALU_lanes);
     }
     rangeUnits = new RangeFuserUnit[num_range_units];
     for (int i = 0; i < num_range_units; i++) {
         rangeUnits[i].allocate(num_tile_elements, this);
     }
+    current_instruction = new Instruction();
 }
 
 void MAA::init() {
@@ -135,6 +149,8 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
                                         num_tile_elements,
                                         num_row_table_rows,
                                         num_row_table_entries_per_row,
+                                        rowtable_latency,
+                                        cache_snoop_latency,
                                         this);
     }
 }
@@ -170,7 +186,8 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     switch (pkt->cmd.toInt()) {
-    case MemCmd::ReadExResp: {
+    case MemCmd::ReadExResp:
+    case MemCmd::ReadResp: {
         assert(pkt->getSize() == 64);
         std::vector<uint32_t> data;
         std::vector<uint16_t> wid;
@@ -202,7 +219,6 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     default:
         assert(false);
     }
-    // assert(false);
 }
 bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     assert(pkt->isResponse());
@@ -290,51 +306,44 @@ void MAA::recvTimingReq(PacketPtr pkt) {
 #define NA_UINT8 0xFF
             switch (element_id) {
             case 0: {
-                current_instruction.dst2SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->dst2SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.dst1SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->dst1SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.optype = (data & NA_UINT8) == NA_UINT8 ? Instruction::OPType::MAX : static_cast<Instruction::OPType>(data & NA_UINT8);
+                current_instruction->optype = (data & NA_UINT8) == NA_UINT8 ? Instruction::OPType::MAX : static_cast<Instruction::OPType>(data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.datatype = (data & NA_UINT8) == NA_UINT8 ? Instruction::DataType::MAX : static_cast<Instruction::DataType>(data & NA_UINT8);
-                assert(current_instruction.datatype != Instruction::DataType::MAX);
+                current_instruction->datatype = (data & NA_UINT8) == NA_UINT8 ? Instruction::DataType::MAX : static_cast<Instruction::DataType>(data & NA_UINT8);
+                assert(current_instruction->datatype != Instruction::DataType::MAX);
                 data = data >> 8;
-                current_instruction.opcode = (data & NA_UINT8) == NA_UINT8 ? Instruction::OpcodeType::MAX : static_cast<Instruction::OpcodeType>(data & NA_UINT8);
-                assert(current_instruction.opcode != Instruction::OpcodeType::MAX);
+                current_instruction->opcode = (data & NA_UINT8) == NA_UINT8 ? Instruction::OpcodeType::MAX : static_cast<Instruction::OpcodeType>(data & NA_UINT8);
+                assert(current_instruction->opcode != Instruction::OpcodeType::MAX);
                 break;
             }
             case 1: {
-                current_instruction.condSpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->condSpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.src3RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->src3RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.src2RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->src2RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.src1RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->src1RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.dst2RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->dst2RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.dst1RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->dst1RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.src2SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->src2SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
-                current_instruction.src1SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
+                current_instruction->src1SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
                 break;
             }
             case 2: {
-                current_instruction.baseAddr = data;
-                current_instruction.state = Instruction::Status::Idle;
-                current_instruction.CID = pkt->req->contextId();
-                current_instruction.PC = pkt->req->getPC();
-                current_instruction.src1Ready = current_instruction.src1SpdID == -1 ? true : spd->getReady(current_instruction.src1SpdID);
-                current_instruction.src2Ready = current_instruction.src2SpdID == -1 ? true : spd->getReady(current_instruction.src2SpdID);
-                // assume that we can read from any tile, so invalidate all destinations
-                // Instructions with DST1: stream and indirect load, range loop, ALU
-                current_instruction.dst1Ready = current_instruction.dst1SpdID == -1 ? true : false;
-                // Instructions with DST2: range loop
-                current_instruction.dst2Ready = current_instruction.dst2SpdID == -1 ? true : false;
-                DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction.print());
+                current_instruction->baseAddr = data;
+                current_instruction->state = Instruction::Status::Idle;
+                current_instruction->CID = pkt->req->contextId();
+                current_instruction->PC = pkt->req->getPC();
+                DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction->print());
                 respond_immediately = false;
                 my_outstanding_instruction_pkt = true;
                 // my_instruction_pkt = new Packet(pkt, false, false);
@@ -507,6 +516,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
         DPRINTF(MAAMemPort, "[%d] %02x %s\n", i, pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
     switch (pkt->cmd.toInt()) {
+    case MemCmd::ReadExResp:
     case MemCmd::ReadResp: {
         assert(pkt->getSize() == 64);
         std::vector<uint32_t> data;
@@ -605,7 +615,8 @@ void MAA::MemSidePort::setUnblocked(BlockReason reason) {
                    maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response);
             funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAAMemPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
+            maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();
+            maa->indirectAccessUnits[i].scheduleSendWritePacketEvent();
         }
     }
 }
@@ -636,6 +647,7 @@ void MAA::MemSidePort::allocate() {
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
     }
+    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 void MAA::MAAReqPacketQueue::sendDeferredPacket() {
@@ -650,6 +662,7 @@ MAA::MemSidePort::MemSidePort(const std::string &_name,
     : MAAMemRequestPort(_name, _reqQueue, _snoopRespQueue),
       _reqQueue(*_maa, *this, _snoopRespQueue, _label),
       _snoopRespQueue(*_maa, *this, true, _label), maa(_maa) {
+    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 ///////////////
@@ -778,20 +791,19 @@ void MAA::CacheSidePort::recvReqRetry() {
     setUnblocked(BlockReason::CACHE_FAILED);
 }
 
-bool MAA::CacheSidePort::sendPacket(FuncUnitType func_unit_type,
+bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type,
                                     int func_unit_id,
                                     PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n",
             __func__,
-            func_unit_names[(int)func_unit_type],
+            func_unit_names[func_unit_type],
             func_unit_id,
             pkt->print());
-    assert(funcBlockReasons[(int)func_unit_type][func_unit_id] == BlockReason::NOT_BLOCKED);
     if (blockReason != BlockReason::NOT_BLOCKED) {
         DPRINTF(MAACachePort, "%s Send blocked because of %s...\n", __func__,
                 blockReason == BlockReason::MAX_XBAR_PACKETS ? "MAX_XBAR_PACKETS" : "CACHE_FAILED");
-        funcBlockReasons[(int)func_unit_type][func_unit_id] = blockReason;
+        funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
         return false;
     }
     if (outstandingCacheSidePackets == maxOutstandingCacheSidePackets) {
@@ -799,14 +811,14 @@ bool MAA::CacheSidePort::sendPacket(FuncUnitType func_unit_type,
         DPRINTF(MAACachePort, "%s Send failed because XBAR is full...\n", __func__);
         assert(blockReason == BlockReason::NOT_BLOCKED);
         blockReason = BlockReason::MAX_XBAR_PACKETS;
-        funcBlockReasons[(int)func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
+        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
         return false;
     }
     if (maa->cacheSidePort.sendTimingReq(pkt) == false) {
         // Cache cannot receive a new request
         DPRINTF(MAACachePort, "%s Send failed because cache returned false...\n", __func__);
         blockReason = BlockReason::CACHE_FAILED;
-        funcBlockReasons[(int)func_unit_type][func_unit_id] = BlockReason::CACHE_FAILED;
+        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::CACHE_FAILED;
         return false;
     }
     DPRINTF(MAACachePort, "%s Send is successfull...\n", __func__);
@@ -830,7 +842,7 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
             assert(maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request);
             funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[stream][%d]...\n", __func__, i);
-            maa->streamAccessUnits[i].scheduleExecuteInstructionEvent();
+            maa->streamAccessUnits[i].scheduleSendPacketEvent();
         }
     }
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
@@ -840,7 +852,8 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
                    maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain);
             funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa->indirectAccessUnits[i].scheduleExecuteInstructionEvent();
+            maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();
+            maa->indirectAccessUnits[i].scheduleSendWritePacketEvent();
         }
     }
 }
@@ -857,6 +870,7 @@ void MAA::CacheSidePort::allocate(int _maxOutstandingCacheSidePackets) {
     }
     funcBlockReasons[(int)FuncUnitType::INVALIDATOR] = new BlockReason[1];
     funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
+    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 MAA::CacheSidePort::CacheSidePort(const std::string &_name,
@@ -932,28 +946,36 @@ void MAA::dispatchInstruction() {
     DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
     if (my_outstanding_instruction_pkt) {
         assert(my_instruction_pkt != nullptr);
-        if (ifile->pushInstruction(current_instruction)) {
-            DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, current_instruction.print());
-            if (current_instruction.dst1SpdID != -1) {
-                assert(current_instruction.dst1SpdID != current_instruction.src1SpdID);
-                assert(current_instruction.dst1SpdID != current_instruction.src2SpdID);
-                spd->unsetReady(current_instruction.dst1SpdID);
+        current_instruction->src1Ready = current_instruction->src1SpdID == -1 ? true : spd->getReady(current_instruction->src1SpdID);
+        current_instruction->src2Ready = current_instruction->src2SpdID == -1 ? true : spd->getReady(current_instruction->src2SpdID);
+        current_instruction->condReady = current_instruction->condSpdID == -1 ? true : spd->getReady(current_instruction->condSpdID);
+        // assume that we can read from any tile, so invalidate all destinations
+        // Instructions with DST1: stream and indirect load, range loop, ALU
+        current_instruction->dst1Ready = current_instruction->dst1SpdID == -1 ? true : false;
+        // Instructions with DST2: range loop
+        current_instruction->dst2Ready = current_instruction->dst2SpdID == -1 ? true : false;
+        if (ifile->pushInstruction(*current_instruction)) {
+            DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, current_instruction->print());
+            if (current_instruction->dst1SpdID != -1) {
+                assert(current_instruction->dst1SpdID != current_instruction->src1SpdID);
+                assert(current_instruction->dst1SpdID != current_instruction->src2SpdID);
+                spd->unsetReady(current_instruction->dst1SpdID);
             }
-            if (current_instruction.dst2SpdID != -1) {
-                assert(current_instruction.dst2SpdID != current_instruction.src1SpdID);
-                assert(current_instruction.dst2SpdID != current_instruction.src2SpdID);
-                spd->unsetReady(current_instruction.dst2SpdID);
+            if (current_instruction->dst2SpdID != -1) {
+                assert(current_instruction->dst2SpdID != current_instruction->src1SpdID);
+                assert(current_instruction->dst2SpdID != current_instruction->src2SpdID);
+                spd->unsetReady(current_instruction->dst2SpdID);
             }
-            if (current_instruction.opcode == Instruction::OpcodeType::INDIR_ST ||
-                current_instruction.opcode == Instruction::OpcodeType::INDIR_RMW) {
-                spd->unsetReady(current_instruction.src2SpdID);
+            if (current_instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
+                current_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+                spd->unsetReady(current_instruction->src2SpdID);
             }
             my_instruction_pkt->makeTimingResponse();
             cpuSidePort.schedTimingResp(my_instruction_pkt, clockEdge(Cycles(2)));
             scheduleIssueInstructionEvent(1);
             my_outstanding_instruction_pkt = false;
         } else {
-            DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, current_instruction.print());
+            DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, current_instruction->print());
         }
     }
 }
@@ -1003,5 +1025,13 @@ void MAA::scheduleDispatchInstructionEvent(int latency) {
             reschedule(dispatchInstructionEvent, new_when);
     }
 }
-
+Tick MAA::getClockEdge(Cycles cycles) const {
+    return clockEdge(cycles);
+}
+Cycles MAA::getTicksToCycles(Tick t) const {
+    return ticksToCycles(t);
+}
+Tick MAA::getCyclesToTicks(Cycles c) const {
+    return cyclesToTicks(c);
+}
 } // namespace gem5

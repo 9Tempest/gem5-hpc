@@ -20,7 +20,10 @@ Instruction::Instruction() : baseAddr(0),
                              src2Ready(false),
                              dst1SpdID(-1),
                              dst2SpdID(-1),
+                             dst1Ready(false),
+                             dst2Ready(false),
                              condSpdID(-1),
+                             condReady(false),
                              opcode(OpcodeType::MAX),
                              optype(OPType::MAX),
                              datatype(DataType::MAX),
@@ -125,6 +128,7 @@ Instruction *IF::getReady(FuncUnitType funcUnit) {
                 instructions[i].src2Ready &&
                 instructions[i].dst1Ready &&
                 instructions[i].dst2Ready &&
+                instructions[i].condReady &&
                 instructions[i].state == Instruction::Status::Idle &&
                 instructions[i].funcUnit == funcUnit) {
                 instructions[i].state = Instruction::Status::Service;
@@ -149,6 +153,9 @@ void IF::finishInstruction(Instruction *instruction,
                 if (instructions[i].src2SpdID == dst1SpdID) {
                     instructions[i].src2Ready = true;
                 }
+                if (instructions[i].condSpdID == dst1SpdID) {
+                    instructions[i].condReady = true;
+                }
             }
         }
     }
@@ -160,6 +167,9 @@ void IF::finishInstruction(Instruction *instruction,
                 }
                 if (instructions[i].src2SpdID == dst2SpdID) {
                     instructions[i].src2Ready = true;
+                }
+                if (instructions[i].condSpdID == dst2SpdID) {
+                    instructions[i].condReady = true;
                 }
             }
         }

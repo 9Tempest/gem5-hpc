@@ -12,7 +12,6 @@
 #include "mem/request.hh"
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
-#include "mem/MAA/IF.hh"
 
 #define ADDR_CHANNEL_LEVEL   0
 #define ADDR_RANK_LEVEL      1
@@ -25,6 +24,7 @@ namespace gem5 {
 
 class MAA;
 class IndirectAccessUnit;
+class Instruction;
 
 struct OffsetTableEntry {
     int itr;
@@ -148,29 +148,54 @@ public:
         Decode = 1,
         Fill = 2,
         Drain = 3,
-        Request = 4,
-        Response = 5,
+        Build = 4,
+        Request = 5,
+        Response = 6,
         max
     };
 
 protected:
-    std::string status_names[7] = {
+    std::string status_names[8] = {
         "Idle",
         "Decode",
         "Fill",
         "Drain",
+        "Build",
         "Request",
         "Response",
         "max"};
+    class IndirectPacket {
+    public:
+        PacketPtr packet;
+        bool is_cached;
+        Tick tick;
+        IndirectPacket(PacketPtr _packet, bool _is_cached, Tick _tick)
+            : packet(_packet), is_cached(_is_cached), tick(_tick) {}
+        IndirectPacket(const IndirectPacket &other) {
+            packet = other.packet;
+            is_cached = other.is_cached;
+            tick = other.tick;
+        }
+        bool operator<(const IndirectPacket &rhs) const {
+            return tick < rhs.tick;
+        }
+    };
+    struct CompareByTick {
+        bool operator()(const IndirectPacket &lhs, const IndirectPacket &rhs) const {
+            return lhs.tick < rhs.tick;
+        }
+    };
     int num_row_table_banks;
     int num_tile_elements;
     int num_row_table_rows;
     int num_row_table_entries_per_row;
-    Status state;
+    Status state, prev_state;
     MAA *maa;
     RowTable *row_table;
     OffsetTable *offset_table;
     int dst_tile_id;
+    Cycles rowtable_latency;
+    Cycles cache_snoop_latency;
 
 public:
     IndirectAccessUnit();
@@ -183,9 +208,13 @@ public:
                   int _num_tile_elements,
                   int _num_row_table_rows,
                   int _num_row_table_entries_per_row,
+                  Cycles _rowtable_latency,
+                  Cycles _cache_snoop_latency,
                   MAA *_maa);
     Status getState() const { return state; }
     void scheduleExecuteInstructionEvent(int latency = 0);
+    void scheduleSendReadPacketEvent(int latency = 0);
+    void scheduleSendWritePacketEvent(int latency = 0);
     void setInstruction(Instruction *_instruction);
 
     bool recvData(const Addr addr,
@@ -202,51 +231,49 @@ public:
 
 protected:
     Instruction *my_instruction;
-    PacketPtr my_read_pkt;
-    bool my_outstanding_read_pkt, my_outstanding_read_pkt_snooped;
-    std::list<PacketPtr> my_outstanding_write_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_write_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_read_pkts;
     Request::Flags flags = 0;
     const Addr block_size = 64;
     const Addr word_size = sizeof(uint32_t);
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
     int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;
-    Instruction::OPType my_optype;
-    Instruction::OpcodeType my_opcode;
-    Instruction::DataType my_datatype;
     int my_expected_responses;
     int my_received_responses;
     std::vector<int> my_sorted_indices;
     bool *my_row_table_req_sent;
-    bool my_all_row_table_req_sent;
-    bool my_is_block_cached;
-    int my_last_row_table_sent;
     std::vector<int> my_row_table_bank_order;
     int my_i, my_row_table_idx;
 
-    Addr my_translated_physical_address;
-    Addr my_translated_block_physical_address;
-    bool translation_done;
+    bool my_translation_done;
+    Addr my_translated_addr;
     int my_indirect_id;
+    Tick my_SPD_read_finish_tick;
+    Tick my_SPD_write_finish_tick;
+    Tick my_RT_access_finish_tick;
 
-    void translatePacket();
-    void checkAllRowTablesSent();
+    Addr translatePacket(Addr vaddr);
+    bool checkAllRowTablesSent();
     int getRowTableIdx(int channel, int rank, int bankgroup);
     void executeInstruction();
-    bool checkOutstandingPackets(bool check_write = true, bool check_read = true);
     EventFunctionWrapper executeInstructionEvent;
+    EventFunctionWrapper sendReadPacketEvent;
+    EventFunctionWrapper sendWritePacketEvent;
+    void check_reset();
+    bool scheduleNextExecution(bool force = false);
+    bool scheduleNextSendRead();
+    bool scheduleNextSendWrite();
 
 public:
-    void createMyReadPacket();
+    void createReadPacket(Addr addr, int latency, bool is_cached = true);
     bool sendOutstandingReadPacket();
-    bool sendOutstandingWritePacket(bool call_execute = false);
+    bool sendOutstandingWritePacket();
 
     // struct IndirectAccessUnitStats : public statistics::Group {
-    //     IndirectAccessUnitStats(MAA &m);
+    //     IndirectAccessUnitStats(statistics::Group *parent);
 
     //     void regStats() override;
-
-    //     const MAA &maa;
 
     //     /** Number of instructions. */
     //     statistics::Scalar numInstRD;
@@ -254,7 +281,17 @@ public:
     //     statistics::Scalar numInstRMW;
     //     statistics::Scalar numInst;
 
-    //     /** Number of instructions. */
+    //     /** Cycles of instructions. */
+    //     statistics::Scalar cyclesRD;
+    //     statistics::Scalar cyclesWR;
+    //     statistics::Scalar cyclesRMW;
+    //     statistics::Scalar cycles;
+
+    //     /** Average cycles per instruction. */
+    //     statistics::Formula avgCPIRD;
+    //     statistics::Formula avgCPIWR;
+    //     statistics::Formula avgCPIRMW;
+    //     statistics::Formula avgCPI;
 
     // } stats;
 };

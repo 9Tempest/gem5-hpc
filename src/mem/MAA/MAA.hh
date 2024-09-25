@@ -10,7 +10,6 @@
 
 #include "base/trace.hh"
 #include "base/types.hh"
-#include "debug/MAAPort.hh"
 #include "mem/cache/tags/base.hh"
 #include "mem/packet.hh"
 #include "mem/packet_queue.hh"
@@ -20,17 +19,19 @@
 #include "sim/clocked_object.hh"
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
-#include "mem/MAA/IF.hh"
-#include "mem/MAA/SPD.hh"
-#include "mem/MAA/StreamAccess.hh"
-#include "mem/MAA/IndirectAccess.hh"
-#include "mem/MAA/Invalidator.hh"
-#include "mem/MAA/ALU.hh"
-#include "mem/MAA/RangeFuser.hh"
 
 namespace gem5 {
 
 struct MAAParams;
+class IF;
+class RF;
+class SPD;
+class StreamAccessUnit;
+class IndirectAccessUnit;
+class Invalidator;
+class ALUUnit;
+class RangeFuserUnit;
+class Instruction;
 
 /**
  * A basic cache interface. Implements some common functions for speed.
@@ -236,7 +237,7 @@ class MAA : public ClockedObject {
         void setUnblocked(BlockReason reason);
 
     public:
-        bool sendPacket(FuncUnitType func_unit_type,
+        bool sendPacket(uint8_t func_unit_type,
                         int func_unit_id,
                         PacketPtr pkt);
         void allocate(int _maxOutstandingCacheSidePackets);
@@ -374,7 +375,9 @@ public:
     unsigned int num_alu_units;
     unsigned int num_row_table_rows;
     unsigned int num_row_table_entries_per_row;
-    Instruction current_instruction;
+    Cycles rowtable_latency;
+    Cycles cache_snoop_latency;
+    Instruction *current_instruction;
     RequestorID requestorId;
 
 public:
@@ -399,6 +402,9 @@ public:
                            int dst2SpdID = -1);
     void setDstReady(Instruction *instruction, int dstSpdID);
     bool sentMemSidePacket(PacketPtr pkt);
+    Tick getClockEdge(Cycles cycles = Cycles(0)) const;
+    Cycles getTicksToCycles(Tick t) const;
+    Tick getCyclesToTicks(Cycles c) const;
 
 protected:
     PacketPtr my_instruction_pkt;

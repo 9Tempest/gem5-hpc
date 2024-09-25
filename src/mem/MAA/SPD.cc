@@ -1,6 +1,9 @@
 #include "mem/MAA/SPD.hh"
+#include "base/trace.hh"
 #include "mem/MAA/MAA.hh"
+#include "base/types.hh"
 #include "debug/SPD.hh"
+#include "sim/cur_tick.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -14,17 +17,9 @@ namespace gem5 {
 // TILE
 //
 ///////////////
-uint32_t TILE::getData(int element_id) {
-    assert((0 <= element_id) && (element_id < num_tile_elements));
-    return data[element_id];
-}
 uint8_t *TILE::getDataPtr(int element_id) {
     assert((0 <= element_id) && (element_id < num_tile_elements));
     return (uint8_t *)(&data[element_id]);
-}
-void TILE::setData(int element_id, uint32_t _data) {
-    assert((0 <= element_id) && (element_id < num_tile_elements));
-    this->data[element_id] = _data;
 }
 uint16_t TILE::getReady() {
     return ready;
@@ -60,17 +55,47 @@ TILE::~TILE() {
 // SPD
 //
 ///////////////
-uint32_t SPD::getData(int tile_id, int element_id) {
-    assert((0 <= tile_id) && (tile_id < num_tiles));
-    return tiles[tile_id].getData(element_id);
+Cycles SPD::getDataLatency(int num_accesses) {
+    int min_busy_port = 0;
+    Tick min_busy_until = read_port_busy_until[0];
+    for (int i = 0; i < num_read_ports; i++) {
+        if (read_port_busy_until[i] < min_busy_until) {
+            min_busy_until = read_port_busy_until[i];
+            min_busy_port = i;
+        }
+    }
+    if (read_port_busy_until[min_busy_port] < curTick()) {
+        read_port_busy_until[min_busy_port] = curTick();
+    }
+    read_port_busy_until[min_busy_port] += maa->getCyclesToTicks(Cycles(read_latency * num_accesses));
+    DPRINTF(SPD, "%s: read_port_busy_until[%d] = %lu\n", __func__, min_busy_port, read_port_busy_until[min_busy_port]);
+    panic_if(read_port_busy_until[min_busy_port] < curTick(),
+             "Scheduled read at %lu, but current tick is %lu!\n",
+             read_port_busy_until[min_busy_port], curTick());
+    return maa->getTicksToCycles(read_port_busy_until[min_busy_port] - curTick());
 }
 uint8_t *SPD::getDataPtr(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     return tiles[tile_id].getDataPtr(element_id);
 }
-void SPD::setData(int tile_id, int element_id, uint32_t _data) {
-    assert((0 <= tile_id) && (tile_id < num_tiles));
-    tiles[tile_id].setData(element_id, _data);
+Cycles SPD::setDataLatency(int num_accesses) {
+    int min_busy_port = 0;
+    Tick min_busy_until = write_port_busy_until[0];
+    for (int i = 0; i < num_write_ports; i++) {
+        if (write_port_busy_until[i] < min_busy_until) {
+            min_busy_until = write_port_busy_until[i];
+            min_busy_port = i;
+        }
+    }
+    if (write_port_busy_until[min_busy_port] < curTick()) {
+        write_port_busy_until[min_busy_port] = curTick();
+    }
+    write_port_busy_until[min_busy_port] += maa->getCyclesToTicks(Cycles(write_latency * num_accesses));
+    panic_if(write_port_busy_until[min_busy_port] < curTick(),
+             "Scheduled write at %lu, but current tick is %lu!\n",
+             write_port_busy_until[min_busy_port], curTick());
+    DPRINTF(SPD, "%s: write_port_busy_until[%d] = %lu\n", __func__, min_busy_port, write_port_busy_until[min_busy_port]);
+    return maa->getTicksToCycles(write_port_busy_until[min_busy_port] - curTick());
 }
 uint16_t SPD::getReady(int tile_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
@@ -95,12 +120,31 @@ void SPD::setSize(int tile_id, uint16_t size) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     tiles[tile_id].setSize(size);
 }
-SPD::SPD(unsigned int _num_tiles, unsigned int _num_tile_elements)
+SPD::SPD(MAA *_maa,
+         unsigned int _num_tiles,
+         unsigned int _num_tile_elements,
+         Cycles _read_latency,
+         Cycles _write_latency,
+         int _num_read_ports,
+         int _num_write_ports)
     : num_tiles(_num_tiles),
-      num_tile_elements(_num_tile_elements) {
+      num_tile_elements(_num_tile_elements),
+      read_latency(_read_latency),
+      write_latency(_write_latency),
+      num_read_ports(_num_read_ports),
+      num_write_ports(_num_write_ports),
+      maa(_maa) {
     tiles = new TILE[num_tiles];
     for (int i = 0; i < num_tiles; i++) {
         tiles[i].allocate(num_tile_elements);
+    }
+    read_port_busy_until = new Tick[num_read_ports];
+    write_port_busy_until = new Tick[num_write_ports];
+    for (int i = 0; i < num_read_ports; i++) {
+        read_port_busy_until[i] = curTick();
+    }
+    for (int i = 0; i < num_write_ports; i++) {
+        write_port_busy_until[i] = curTick();
     }
 }
 SPD::~SPD() {
@@ -113,17 +157,9 @@ SPD::~SPD() {
 // RF
 //
 ///////////////
-uint32_t RF::getData(int reg_id) {
-    assert((0 <= reg_id) && (reg_id < num_regs));
-    return data[reg_id];
-}
 uint8_t *RF::getDataPtr(int reg_id) {
     assert((0 <= reg_id) && (reg_id < num_regs));
     return (uint8_t *)(&data[reg_id]);
-}
-void RF::setData(int reg_id, uint32_t _data) {
-    assert((0 <= reg_id) && (reg_id < num_regs));
-    this->data[reg_id] = _data;
 }
 RF::RF(unsigned int _num_regs) : num_regs(_num_regs) {
     data = new uint32_t[num_regs];
@@ -133,5 +169,4 @@ RF::~RF() {
     assert(data != nullptr);
     delete[] data;
 }
-
 } // namespace gem5

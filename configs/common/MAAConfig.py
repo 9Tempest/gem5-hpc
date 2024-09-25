@@ -39,6 +39,27 @@ def _get_maa_opts(options):
     if hasattr(options, "maa_num_row_table_entries_per_row"):
         opts["num_row_table_entries_per_row"] = getattr(options, "maa_num_row_table_entries_per_row")
     
+    if hasattr(options, "maa_spd_read_latency"):
+        opts["spd_read_latency"] = getattr(options, "maa_spd_read_latency")
+
+    if hasattr(options, "maa_spd_write_latency"):
+        opts["spd_write_latency"] = getattr(options, "maa_spd_write_latency")
+
+    if hasattr(options, "maa_num_spd_read_ports"):
+        opts["num_spd_read_ports"] = getattr(options, "maa_num_spd_read_ports")
+
+    if hasattr(options, "maa_num_spd_write_ports"):
+        opts["num_spd_write_ports"] = getattr(options, "maa_num_spd_write_ports")
+    
+    if hasattr(options, "maa_rowtable_latency"):
+        opts["rowtable_latency"] = getattr(options, "maa_rowtable_latency")
+    
+    if hasattr(options, "maa_ALU_lane_latency"):
+        opts["ALU_lane_latency"] = getattr(options, "maa_ALU_lane_latency")
+
+    if hasattr(options, "maa_num_ALU_lanes"):
+        opts["num_ALU_lanes"] = getattr(options, "maa_num_ALU_lanes")
+    
     addr_ranges = []
     start = options.mem_size
 
@@ -88,13 +109,14 @@ def get_maa_address(options):
     return start_cacheable_addr, size_cacheable_addr, start_noncacheable_addr, size_noncacheable_addr
 
 def config_maa(options, system):
+    assert(options.l3cache)
     opts = _get_maa_opts(options)
+    opts["cache_snoop_latency"] = system.l3.tag_latency
     system.maa = SharedMAA(clk_domain=system.cpu_clk_domain, **opts)
 
     # CPU side is derived by the memory side of the memory bus
     system.maa.cpu_side = system.membus.mem_side_ports
     # LLC side derives the cpu side of the L3 bus
-    assert(options.l3cache)
     
     # Increasing LLC side packets to accommodate the MAA routing table
     max_routing_table_size = (1 if "num_stream_access_units" not in opts else opts["num_stream_access_units"])

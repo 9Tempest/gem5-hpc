@@ -13,6 +13,7 @@ namespace gem5 {
 Invalidator::Invalidator()
     : executeInstructionEvent([this] { executeInstruction(); }, name()) {
     cl_status = nullptr;
+    my_instruction = nullptr;
 }
 Invalidator::~Invalidator() {
     if (cl_status != nullptr)
@@ -141,7 +142,7 @@ void Invalidator::createMyPacket() {
 }
 bool Invalidator::sendOutstandingPacket() {
     DPRINTF(MAAInvalidator, "%s: trying sending %s\n", __func__, my_pkt->print());
-    if (maa->cacheSidePort.sendPacket(FuncUnitType::INVALIDATOR,
+    if (maa->cacheSidePort.sendPacket((uint8_t)FuncUnitType::INVALIDATOR,
                                       0,
                                       my_pkt) == false) {
         DPRINTF(MAAInvalidator, "%s: send failed, leaving execution...\n", __func__);

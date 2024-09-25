@@ -5,12 +5,12 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
-
-#include "mem/MAA/IF.hh"
+#include "sim/system.hh"
 
 namespace gem5 {
 
 class MAA;
+class Instruction;
 
 class ALUUnit {
 public:
@@ -18,14 +18,16 @@ public:
         Idle = 0,
         Decode = 1,
         Work = 2,
+        Finish = 3,
         max
     };
 
 protected:
-    std::string status_names[4] = {
+    std::string status_names[5] = {
         "Idle",
         "Decode",
         "Work",
+        "Finish",
         "max"};
     Status state;
     MAA *maa;
@@ -33,7 +35,7 @@ protected:
 public:
     ALUUnit();
 
-    void allocate(MAA *_maa);
+    void allocate(MAA *_maa, Cycles _ALU_lane_latency, int _num_ALU_lanes);
 
     Status getState() const { return state; }
 
@@ -47,9 +49,8 @@ protected:
     int my_src2_reg_int32;
     float my_src2_reg_float32;
     int my_max;
-    Instruction::OPType my_optype;
-    Instruction::OpcodeType my_opcode;
-    Instruction::DataType my_datatype;
+    Cycles ALU_lane_latency;
+    int num_ALU_lanes;
 
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
