@@ -143,6 +143,10 @@ def addNoISAOptions(parser):
         help="type of memory to use",
     )
     parser.add_argument(
+        "--ramulator-config",
+        help="ramulator configuration file",
+    )
+    parser.add_argument(
         "--mem-channels",
         type=int,
         default=1,

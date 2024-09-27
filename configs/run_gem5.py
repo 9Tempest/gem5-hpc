@@ -3,6 +3,7 @@ import os
 from threading import Thread, Lock
 
 parallelism = 24
+GEM5_DIR = "/home/arkhadem/gem5-hpc"
 
 tasks = []
 lock = Lock()
@@ -24,8 +25,6 @@ def workerthread(my_tid):
             print("T[{}]: executing a new task: {}".format(my_tid, task))
             os.system(task)
 
-# tasks.append(f"./build/ramulator2 -c \"{str(base_config)}\" > {location}/{file}.txt 2>&1")
-
 parser = argparse.ArgumentParser(description='Run gem5.')
 parser.add_argument('--cmd', type=str, help='Path to the cmd.', required=True)
 parser.add_argument('--options', type=str, help='options to the cmd', default="0")
@@ -37,25 +36,6 @@ args = parser.parse_args()
 
 FAST_SIM_TYPE = False if (args.fast == None or args.fast == False) else True
 cpu_type = "X86O3CPU"
-# cpu_type = "AtomicSimpleCPU"
-# core_num = 4
-# mem_size = "16GB"
-# sys_clock = "3.0GHz"  #DN
-# l1d_size = "48kB"
-# l1d_assoc = 12
-# l1d_hwp_type = "StridePrefetcher"  #DN
-# l1d_mshrs = 16
-# l1i_size = "32kB"
-# l1i_assoc = 8
-# l1i_hwp_type = "StridePrefetcher"  #DN
-# l1i_mshrs = 16
-# l2_size = "1280kB"
-# l2_assoc = 20
-# l2_hwp_type = "StridePrefetcher"  #DN
-# l2_mshrs = 32
-# l3_size = "6MB"
-# l3_assoc = 48
-# l3_mshrs = 256
 core_num = 4
 mem_size = "16GB"
 sys_clock = "3.2GHz"  #DN
@@ -78,6 +58,7 @@ cpu_buffer_enlarge_factor = 1
 cpu_register_enlarge_factor = 1
 cpu_width_enlarge_factor = 1
 mem_type = "Ramulator2"
+ramulator_config = f"{GEM5_DIR}/ext/ramulator2/ramulator2/example_gem5_config.yaml"
 mem_channels = 1
 cmd = args.cmd
 options = args.options
@@ -92,7 +73,7 @@ if out_dir[-1] == "/":
 
 def add_command(cpu_buffer_enlarge_factor, cpu_register_enlarge_factor, cpu_width_enlarge_factor):
     m5out_addr = f"{out_dir}/CPU-{cpu_type}/BUFFER-{cpu_buffer_enlarge_factor}/REGISTER-{cpu_register_enlarge_factor}/WIDTH-{cpu_width_enlarge_factor}"
-    COMMAND = "time /home/arkhadem/gem5-hpc/build/X86/gem5."
+    COMMAND = "time {GEM5_DIR}/build/X86/gem5."
     if FAST_SIM_TYPE:
         COMMAND += "fast "
     else:
@@ -100,7 +81,7 @@ def add_command(cpu_buffer_enlarge_factor, cpu_register_enlarge_factor, cpu_widt
         if debug_type != None:
             COMMAND += f"--debug-flags={debug_type} "
     COMMAND += f"--outdir={m5out_addr} "
-    COMMAND += "/home/arkhadem/gem5-hpc/configs/deprecated/example/se.py "
+    COMMAND += f"{GEM5_DIR}/configs/deprecated/example/se.py "
     COMMAND += f"--cpu-type {cpu_type} "
     COMMAND += f"-n {core_num} "
     COMMAND += f"--cpu-buffer-enlarge-factor={cpu_buffer_enlarge_factor} "
@@ -128,6 +109,8 @@ def add_command(cpu_buffer_enlarge_factor, cpu_register_enlarge_factor, cpu_widt
     COMMAND += f"--l3_mshrs={l3_mshrs} "
     COMMAND += "--cacheline_size=64 "
     COMMAND += f"--mem-type {mem_type} "
+    if mem_type == "Ramulator2":
+        COMMAND += f"--ramulator-config {ramulator_config} "
     COMMAND += f"--mem-channels {mem_channels} "
     COMMAND += f"--cmd {cmd} "
     COMMAND += f"--options \"{options}\" "

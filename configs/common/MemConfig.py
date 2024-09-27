@@ -136,8 +136,11 @@ def config_mem(options, system):
     # Must have either mem_type or nvm_type or both
     opt_mem_type = getattr(options, "mem_type", None)
     opt_nvm_type = getattr(options, "nvm_type", None)
+    opt_ramulator_config = getattr(options, "ramulator_config", None)
     if not opt_mem_type and not opt_nvm_type:
         fatal("Must have option for either mem-type or nvm-type, or both")
+    if opt_mem_type == "Ramulator2" and not opt_ramulator_config:
+        fatal("Must have option for ramulator_config when mem-type is Ramulator2")
 
     # Optional options
     opt_tlm_memory = getattr(options, "tlm_memory", None)
@@ -251,7 +254,8 @@ def config_mem(options, system):
                 mem_ctrl = None
                 if issubclass(intf, Ramulator2):
                     mem_ctrl = dram_intf
-                    mem_ctrl.config_path = "/home/arkhadem/gem5-hpc/ext/ramulator2/ramulator2/example_gem5_config.yaml"
+                    mem_ctrl.config_path = opt_ramulator_config
+                    print(f"Configuring Ramulator2 with {opt_ramulator_config}")
                     mem_ctrl.enlarge_buffer_factor = options.cpu_buffer_enlarge_factor
                 else:
                     mem_ctrl = dram_intf.controller()

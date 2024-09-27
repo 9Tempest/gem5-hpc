@@ -77,7 +77,6 @@
 #define M5OP_WORKLOAD         0x70
 #define M5OP_ADD_MEM_REGION   0x80
 #define M5OP_CLEAR_MEM_REGION 0x81
-// #define M5OP_MAA_LOAD         0x80
 
 #define M5OP_FOREACH                                 \
     M5OP(m5_arm, M5OP_ARM)                           \
@@ -108,7 +107,6 @@
     M5OP(m5_workload, M5OP_WORKLOAD)                 \
     M5OP(m5_add_mem_region, M5OP_ADD_MEM_REGION)     \
     M5OP(m5_clear_mem_region, M5OP_CLEAR_MEM_REGION)
-// M5OP(m5_MAA_load, M5OP_MAA_LOAD)
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b
 #define M5OP_MERGE_TOKENS(a, b)   M5OP_MERGE_TOKENS_I(a, b)

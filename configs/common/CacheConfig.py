@@ -156,7 +156,6 @@ def config_3L_cache(options, system):
         icache = icache_class(**_get_cache_opts("l1i", options))
         dcache = dcache_class(**_get_cache_opts("l1d", options))
         l2cache = l2_cache_class(**_get_cache_opts("l2", options))
-        # maa = PrivateMAA()
 
         if options.cpu_buffer_enlarge_factor != 1:
             icache.mshrs = icache.mshrs * options.cpu_buffer_enlarge_factor
@@ -182,8 +181,6 @@ def config_3L_cache(options, system):
         system.cpu[i].addTwoLevelCacheHierarchy(
             icache, dcache, l2cache, iwalkcache, dwalkcache
         )
-
-        # system.cpu[i].addMAA(maa)
 
         system.cpu[i].createInterruptController()
         system.cpu[i].connectAllPorts(
