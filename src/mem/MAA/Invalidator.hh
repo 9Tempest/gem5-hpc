@@ -61,7 +61,7 @@ protected:
     Addr my_last_block_addr = 0;
     Addr my_base_addr;
     const Addr block_size = 64;
-    Request::Flags flags = 0;
+    Request::Flags flags = Request::INVALIDATE;
     PacketPtr my_pkt;
 };
 } // namespace gem5

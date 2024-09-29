@@ -283,6 +283,13 @@ void StreamAccessUnit::createReadPacket(Addr addr, int latency) {
     my_outstanding_read_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(latency))));
     DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, my_pkt->print(), latency);
 }
+void StreamAccessUnit::createReadPacketEvict(Addr addr) {
+    /**** Packet generation ****/
+    RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
+    PacketPtr my_pkt = new Packet(real_req, MemCmd::CleanEvict);
+    my_outstanding_read_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(0))));
+    DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, my_pkt->print(), 0);
+}
 bool StreamAccessUnit::sendOutstandingReadPacket() {
     DPRINTF(MAAStream, "S[%d] %s: sending %d outstanding read packets...\n", my_stream_id, __func__, my_outstanding_read_pkts.size());
     while (my_outstanding_read_pkts.empty() == false) {
@@ -301,6 +308,9 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
         } else {
             my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
         }
+    }
+    if (my_received_responses == my_sent_requests) {
+        scheduleNextExecution();
     }
     return true;
 }
@@ -325,7 +335,9 @@ bool StreamAccessUnit::recvData(const Addr addr,
         my_RT_access_finish_tick = maa->getClockEdge(access_rt_latency);
     else
         my_RT_access_finish_tick += maa->getCyclesToTicks(access_rt_latency);
-    if (was_request_table_full || my_received_responses == my_sent_requests) {
+    createReadPacketEvict(addr);
+    scheduleNextSend();
+    if (was_request_table_full) {
         scheduleNextExecution();
     }
     return true;

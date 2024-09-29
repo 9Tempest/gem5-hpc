@@ -202,7 +202,7 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, false)) {
                     panic_if(received, "Received multiple responses for the same request\n");
                 }
             }
@@ -822,7 +822,8 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type,
         return false;
     }
     DPRINTF(MAACachePort, "%s Send is successfull...\n", __func__);
-    outstandingCacheSidePackets++;
+    if (pkt->needsResponse() && !pkt->cacheResponding())
+        outstandingCacheSidePackets++;
     return true;
 }
 

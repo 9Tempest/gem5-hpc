@@ -168,12 +168,14 @@ protected:
     public:
         PacketPtr packet;
         bool is_cached;
+        bool is_snoop;
         Tick tick;
-        IndirectPacket(PacketPtr _packet, bool _is_cached, Tick _tick)
-            : packet(_packet), is_cached(_is_cached), tick(_tick) {}
+        IndirectPacket(PacketPtr _packet, bool _is_cached, bool _is_snoop, Tick _tick)
+            : packet(_packet), is_cached(_is_cached), is_snoop(_is_snoop), tick(_tick) {}
         IndirectPacket(const IndirectPacket &other) {
             packet = other.packet;
             is_cached = other.is_cached;
+            is_snoop = other.is_snoop;
             tick = other.tick;
         }
         bool operator<(const IndirectPacket &rhs) const {
@@ -266,7 +268,8 @@ protected:
     bool scheduleNextSendWrite();
 
 public:
-    void createReadPacket(Addr addr, int latency, bool is_cached = true);
+    void createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop);
+    void createReadPacketEvict(Addr addr);
     bool sendOutstandingReadPacket();
     bool sendOutstandingWritePacket();
 

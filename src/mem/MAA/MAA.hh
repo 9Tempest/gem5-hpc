@@ -124,7 +124,7 @@ class MAA : public ClockedObject {
          *
          * @return always true
          */
-        bool isSnooping() const { return false; }
+        bool isSnooping() const { return true; }
     };
 
     /**

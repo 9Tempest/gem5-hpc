@@ -130,6 +130,7 @@ protected:
     bool my_translation_done;
 
     void createReadPacket(Addr addr, int latency);
+    void createReadPacketEvict(Addr addr);
     bool sendOutstandingReadPacket();
     Addr translatePacket(Addr vaddr);
     void executeInstruction();
