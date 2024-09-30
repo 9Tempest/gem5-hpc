@@ -46,19 +46,13 @@ void ALUUnit::executeInstruction() {
         my_src1_tile = my_instruction->src1SpdID;
         my_src2_tile = my_instruction->src2SpdID;
         my_max = maa->spd->getSize(my_src1_tile);
+        my_word_size = my_instruction->getWordSize();
         panic_if(my_src2_tile != -1 && my_max != maa->spd->getSize(my_src2_tile),
                  "%s: src1 size(%d) != src2 size(%d)!\n",
                  __func__, my_max, maa->spd->getSize(my_src2_tile));
         panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
                  "%s: src1 size(%d) != cond size(%d)!\n",
                  __func__, my_max, maa->spd->getSize(my_cond_tile));
-        if (my_instruction->datatype == Instruction::DataType::INT32_TYPE) {
-            my_src2_reg_int32 = maa->rf->getData<int32_t>(my_instruction->src1RegID);
-        } else if (my_instruction->datatype == Instruction::DataType::FLOAT32_TYPE) {
-            my_src2_reg_float32 = maa->rf->getData<float>(my_instruction->src1RegID);
-        } else {
-            assert(false);
-        }
 
         // Setting the state of the instruction and ALU unit
         DPRINTF(MAAALU, "%s: state set to work for request %s!\n", __func__, my_instruction->print());
@@ -77,51 +71,103 @@ void ALUUnit::executeInstruction() {
             }
             if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, i) != 0) {
                 switch (my_instruction->datatype) {
+                case Instruction::DataType::UINT32_TYPE: {
+                    uint32_t src1 = maa->spd->getData<uint32_t>(my_src1_tile, i);
+                    num_spd_read_accesses++;
+                    uint32_t src2;
+                    if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+                        src2 = maa->rf->getData<uint32_t>(my_instruction->src1RegID);
+                    } else {
+                        src2 = maa->spd->getData<uint32_t>(my_src2_tile, i);
+                        num_spd_read_accesses++;
+                    }
+                    uint32_t result;
+                    switch (my_instruction->optype) {
+                    case Instruction::OPType::ADD_OP:
+                        result = src1 + src2;
+                        break;
+                    case Instruction::OPType::SUB_OP:
+                        result = src1 - src2;
+                        break;
+                    case Instruction::OPType::MUL_OP:
+                        result = src1 * src2;
+                        break;
+                    case Instruction::OPType::DIV_OP:
+                        result = src1 / src2;
+                        break;
+                    case Instruction::OPType::MIN_OP:
+                        result = std::min(src1, src2);
+                        break;
+                    case Instruction::OPType::MAX_OP:
+                        result = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::GT_OP:
+                        result = src1 > src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::GTE_OP:
+                        result = src1 >= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LT_OP:
+                        result = src1 < src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LTE_OP:
+                        result = src1 <= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::EQ_OP:
+                        result = src1 == src2 ? 1 : 0;
+                        break;
+                    default:
+                        assert(false);
+                    }
+                    num_spd_write_accesses++;
+                    maa->spd->setData<uint32_t>(my_dst_tile, i, result);
+                    break;
+                }
                 case Instruction::DataType::INT32_TYPE: {
                     int32_t src1 = maa->spd->getData<int32_t>(my_src1_tile, i);
                     num_spd_read_accesses++;
                     int32_t src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
-                        src2 = my_src2_reg_int32;
+                        src2 = maa->rf->getData<int32_t>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<int32_t>(my_src2_tile, i);
                         num_spd_read_accesses++;
                     }
-                    int32_t result_signed;
-                    uint32_t result_unsigned;
+                    int32_t result_INT32;
+                    uint32_t result_UINT32;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
-                        result_signed = src1 + src2;
+                        result_INT32 = src1 + src2;
                         break;
                     case Instruction::OPType::SUB_OP:
-                        result_signed = src1 - src2;
+                        result_INT32 = src1 - src2;
                         break;
                     case Instruction::OPType::MUL_OP:
-                        result_signed = src1 * src2;
+                        result_INT32 = src1 * src2;
                         break;
                     case Instruction::OPType::DIV_OP:
-                        result_signed = src1 / src2;
+                        result_INT32 = src1 / src2;
                         break;
                     case Instruction::OPType::MIN_OP:
-                        result_signed = std::min(src1, src2);
+                        result_INT32 = std::min(src1, src2);
                         break;
                     case Instruction::OPType::MAX_OP:
-                        result_signed = std::max(src1, src2);
+                        result_INT32 = std::max(src1, src2);
                         break;
                     case Instruction::OPType::GT_OP:
-                        result_unsigned = src1 > src2 ? 1 : 0;
+                        result_UINT32 = src1 > src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::GTE_OP:
-                        result_unsigned = src1 >= src2 ? 1 : 0;
+                        result_UINT32 = src1 >= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LT_OP:
-                        result_unsigned = src1 < src2 ? 1 : 0;
+                        result_UINT32 = src1 < src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LTE_OP:
-                        result_unsigned = src1 <= src2 ? 1 : 0;
+                        result_UINT32 = src1 <= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::EQ_OP:
-                        result_unsigned = src1 == src2 ? 1 : 0;
+                        result_UINT32 = src1 == src2 ? 1 : 0;
                         break;
                     default:
                         assert(false);
@@ -132,9 +178,9 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LT_OP ||
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
-                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_unsigned);
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
                     } else {
-                        maa->spd->setData<int32_t>(my_dst_tile, i, result_signed);
+                        maa->spd->setData<int32_t>(my_dst_tile, i, result_INT32);
                     }
                     break;
                 }
@@ -143,46 +189,46 @@ void ALUUnit::executeInstruction() {
                     num_spd_read_accesses++;
                     float src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
-                        src2 = my_src2_reg_float32;
+                        src2 = maa->rf->getData<float>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<float>(my_src2_tile, i);
                         num_spd_read_accesses++;
                     }
-                    float result_float;
-                    uint32_t result_unsigned;
+                    float result_FLOAT32;
+                    uint32_t result_UINT32;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
-                        result_float = src1 + src2;
+                        result_FLOAT32 = src1 + src2;
                         break;
                     case Instruction::OPType::SUB_OP:
-                        result_float = src1 - src2;
+                        result_FLOAT32 = src1 - src2;
                         break;
                     case Instruction::OPType::MUL_OP:
-                        result_float = src1 * src2;
+                        result_FLOAT32 = src1 * src2;
                         break;
                     case Instruction::OPType::DIV_OP:
-                        result_float = src1 / src2;
+                        result_FLOAT32 = src1 / src2;
                         break;
                     case Instruction::OPType::MIN_OP:
-                        result_float = std::min(src1, src2);
+                        result_FLOAT32 = std::min(src1, src2);
                         break;
                     case Instruction::OPType::MAX_OP:
-                        result_float = std::max(src1, src2);
+                        result_FLOAT32 = std::max(src1, src2);
                         break;
                     case Instruction::OPType::GT_OP:
-                        result_unsigned = src1 > src2 ? 1 : 0;
+                        result_UINT32 = src1 > src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::GTE_OP:
-                        result_unsigned = src1 >= src2 ? 1 : 0;
+                        result_UINT32 = src1 >= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LT_OP:
-                        result_unsigned = src1 < src2 ? 1 : 0;
+                        result_UINT32 = src1 < src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LTE_OP:
-                        result_unsigned = src1 <= src2 ? 1 : 0;
+                        result_UINT32 = src1 <= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::EQ_OP:
-                        result_unsigned = src1 == src2 ? 1 : 0;
+                        result_UINT32 = src1 == src2 ? 1 : 0;
                         break;
                     default:
                         assert(false);
@@ -193,9 +239,192 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LT_OP ||
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
-                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_unsigned);
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
                     } else {
-                        maa->spd->setData<float>(my_dst_tile, i, result_float);
+                        maa->spd->setData<float>(my_dst_tile, i, result_FLOAT32);
+                    }
+                    break;
+                }
+                case Instruction::DataType::UINT64_TYPE: {
+                    uint64_t src1 = maa->spd->getData<uint64_t>(my_src1_tile, i);
+                    num_spd_read_accesses++;
+                    uint64_t src2;
+                    if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+                        src2 = maa->rf->getData<uint64_t>(my_instruction->src1RegID);
+                    } else {
+                        src2 = maa->spd->getData<uint64_t>(my_src2_tile, i);
+                        num_spd_read_accesses++;
+                    }
+                    uint64_t result_UINT64;
+                    uint32_t result_UINT32;
+                    switch (my_instruction->optype) {
+                    case Instruction::OPType::ADD_OP:
+                        result_UINT64 = src1 + src2;
+                        break;
+                    case Instruction::OPType::SUB_OP:
+                        result_UINT64 = src1 - src2;
+                        break;
+                    case Instruction::OPType::MUL_OP:
+                        result_UINT64 = src1 * src2;
+                        break;
+                    case Instruction::OPType::DIV_OP:
+                        result_UINT64 = src1 / src2;
+                        break;
+                    case Instruction::OPType::MIN_OP:
+                        result_UINT64 = std::min(src1, src2);
+                        break;
+                    case Instruction::OPType::MAX_OP:
+                        result_UINT64 = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::GT_OP:
+                        result_UINT32 = src1 > src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::GTE_OP:
+                        result_UINT32 = src1 >= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LT_OP:
+                        result_UINT32 = src1 < src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LTE_OP:
+                        result_UINT32 = src1 <= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::EQ_OP:
+                        result_UINT32 = src1 == src2 ? 1 : 0;
+                        break;
+                    default:
+                        assert(false);
+                    }
+                    num_spd_write_accesses++;
+                    if (my_instruction->optype == Instruction::OPType::GT_OP ||
+                        my_instruction->optype == Instruction::OPType::GTE_OP ||
+                        my_instruction->optype == Instruction::OPType::LT_OP ||
+                        my_instruction->optype == Instruction::OPType::LTE_OP ||
+                        my_instruction->optype == Instruction::OPType::EQ_OP) {
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                    } else {
+                        maa->spd->setData<uint64_t>(my_dst_tile, i, result_UINT64);
+                    }
+                    break;
+                }
+                case Instruction::DataType::INT64_TYPE: {
+                    int64_t src1 = maa->spd->getData<int64_t>(my_src1_tile, i);
+                    num_spd_read_accesses++;
+                    int64_t src2;
+                    if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+                        src2 = maa->rf->getData<int64_t>(my_instruction->src1RegID);
+                    } else {
+                        src2 = maa->spd->getData<int64_t>(my_src2_tile, i);
+                        num_spd_read_accesses++;
+                    }
+                    int64_t result_INT64;
+                    uint32_t result_UINT32;
+                    switch (my_instruction->optype) {
+                    case Instruction::OPType::ADD_OP:
+                        result_INT64 = src1 + src2;
+                        break;
+                    case Instruction::OPType::SUB_OP:
+                        result_INT64 = src1 - src2;
+                        break;
+                    case Instruction::OPType::MUL_OP:
+                        result_INT64 = src1 * src2;
+                        break;
+                    case Instruction::OPType::DIV_OP:
+                        result_INT64 = src1 / src2;
+                        break;
+                    case Instruction::OPType::MIN_OP:
+                        result_INT64 = std::min(src1, src2);
+                        break;
+                    case Instruction::OPType::MAX_OP:
+                        result_INT64 = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::GT_OP:
+                        result_UINT32 = src1 > src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::GTE_OP:
+                        result_UINT32 = src1 >= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LT_OP:
+                        result_UINT32 = src1 < src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LTE_OP:
+                        result_UINT32 = src1 <= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::EQ_OP:
+                        result_UINT32 = src1 == src2 ? 1 : 0;
+                        break;
+                    default:
+                        assert(false);
+                    }
+                    num_spd_write_accesses++;
+                    if (my_instruction->optype == Instruction::OPType::GT_OP ||
+                        my_instruction->optype == Instruction::OPType::GTE_OP ||
+                        my_instruction->optype == Instruction::OPType::LT_OP ||
+                        my_instruction->optype == Instruction::OPType::LTE_OP ||
+                        my_instruction->optype == Instruction::OPType::EQ_OP) {
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                    } else {
+                        maa->spd->setData<int64_t>(my_dst_tile, i, result_INT64);
+                    }
+                    break;
+                }
+                case Instruction::DataType::FLOAT64_TYPE: {
+                    double src1 = maa->spd->getData<double>(my_src1_tile, i);
+                    num_spd_read_accesses++;
+                    double src2;
+                    if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+                        src2 = maa->rf->getData<double>(my_instruction->src1RegID);
+                    } else {
+                        src2 = maa->spd->getData<double>(my_src2_tile, i);
+                        num_spd_read_accesses++;
+                    }
+                    double result_FLOAT64;
+                    uint32_t result_UINT32;
+                    switch (my_instruction->optype) {
+                    case Instruction::OPType::ADD_OP:
+                        result_FLOAT64 = src1 + src2;
+                        break;
+                    case Instruction::OPType::SUB_OP:
+                        result_FLOAT64 = src1 - src2;
+                        break;
+                    case Instruction::OPType::MUL_OP:
+                        result_FLOAT64 = src1 * src2;
+                        break;
+                    case Instruction::OPType::DIV_OP:
+                        result_FLOAT64 = src1 / src2;
+                        break;
+                    case Instruction::OPType::MIN_OP:
+                        result_FLOAT64 = std::min(src1, src2);
+                        break;
+                    case Instruction::OPType::MAX_OP:
+                        result_FLOAT64 = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::GT_OP:
+                        result_UINT32 = src1 > src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::GTE_OP:
+                        result_UINT32 = src1 >= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LT_OP:
+                        result_UINT32 = src1 < src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::LTE_OP:
+                        result_UINT32 = src1 <= src2 ? 1 : 0;
+                        break;
+                    case Instruction::OPType::EQ_OP:
+                        result_UINT32 = src1 == src2 ? 1 : 0;
+                        break;
+                    default:
+                        assert(false);
+                    }
+                    num_spd_write_accesses++;
+                    if (my_instruction->optype == Instruction::OPType::GT_OP ||
+                        my_instruction->optype == Instruction::OPType::GTE_OP ||
+                        my_instruction->optype == Instruction::OPType::LT_OP ||
+                        my_instruction->optype == Instruction::OPType::LTE_OP ||
+                        my_instruction->optype == Instruction::OPType::EQ_OP) {
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                    } else {
+                        maa->spd->setData<double>(my_dst_tile, i, result_FLOAT64);
                     }
                     break;
                 }
@@ -223,6 +452,9 @@ void ALUUnit::executeInstruction() {
         my_instruction->state = Instruction::Status::Finish;
         state = Status::Idle;
         maa->spd->setReady(my_dst_tile);
+        if (my_word_size == 8) {
+            maa->spd->setReady(my_dst_tile + 1);
+        }
         maa->spd->setSize(my_dst_tile, my_max);
         maa->finishInstruction(my_instruction, my_dst_tile);
         my_instruction = nullptr;

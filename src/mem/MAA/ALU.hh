@@ -46,9 +46,8 @@ public:
 protected:
     Instruction *my_instruction;
     int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
-    int my_src2_reg_int32;
-    float my_src2_reg_float32;
     int my_max;
+    int my_word_size;
     Cycles ALU_lane_latency;
     int num_ALU_lanes;
 

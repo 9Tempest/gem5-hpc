@@ -179,6 +179,7 @@ void StreamAccessUnit::executeInstruction() {
         my_min = maa->rf->getData<int>(my_instruction->src1RegID);
         my_max = maa->rf->getData<int>(my_instruction->src2RegID);
         my_stride = maa->rf->getData<int>(my_instruction->src3RegID);
+        my_word_size = my_instruction->getWordSize();
 
         // Initialization
         my_i = my_min;
@@ -209,7 +210,7 @@ void StreamAccessUnit::executeInstruction() {
                 num_spd_read_accesses++;
             }
             if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_idx) != 0) {
-                Addr vaddr = my_base_addr + word_size * my_i;
+                Addr vaddr = my_base_addr + my_word_size * my_i;
                 Addr block_vaddr = addrBlockAlign(vaddr, block_size);
                 if (block_vaddr != my_last_block_vaddr) {
                     if (my_last_block_vaddr != 0) {
@@ -220,7 +221,7 @@ void StreamAccessUnit::executeInstruction() {
                     my_last_block_vaddr = block_vaddr;
                 }
                 Addr paddr = translatePacket(block_vaddr);
-                uint16_t word_id = (vaddr - block_vaddr) / word_size;
+                uint16_t word_id = (vaddr - block_vaddr) / my_word_size;
                 if (request_table->add_entry(my_idx, paddr, word_id) == false) {
                     DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
                             my_stream_id, my_idx, block_vaddr, paddr, word_id);
@@ -266,6 +267,9 @@ void StreamAccessUnit::executeInstruction() {
         state = Status::Idle;
         maa->spd->setSize(my_dst_tile, my_idx);
         maa->spd->setReady(my_dst_tile);
+        if (my_word_size == 8) {
+            maa->spd->setReady(my_dst_tile + 1);
+        }
         maa->finishInstruction(my_instruction, my_dst_tile);
         my_instruction = nullptr;
         request_table->check_reset();
@@ -315,19 +319,26 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
     return true;
 }
 bool StreamAccessUnit::recvData(const Addr addr,
-                                std::vector<uint32_t> data,
-                                std::vector<uint16_t> wids) {
+                                uint8_t *dataptr) {
     bool was_request_table_full = request_table->is_full();
     std::vector<RequestTableEntry> entries = request_table->get_entries(addr);
     if (entries.empty()) {
         DPRINTF(MAAStream, "S[%d] %s: no entries found for addr(0x%lx)\n", my_stream_id, __func__, addr);
         return false;
     }
-    assert(data.size() == 64 / word_size);
     DPRINTF(MAAStream, "S[%d] %s: %d entry found for addr(0x%lx)\n", my_stream_id, __func__, entries.size(), addr);
+    uint32_t *dataptr_u32_typed = (uint32_t *)dataptr;
+    uint64_t *dataptr_u64_typed = (uint64_t *)dataptr;
     for (auto entry : entries) {
-        DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %d\n", my_stream_id, __func__, my_dst_tile, entry.itr, data[entry.wid]);
-        maa->spd->setData(my_dst_tile, entry.itr, data[entry.wid]);
+        int itr = entry.itr;
+        int wid = entry.wid;
+        if (my_word_size == 4) {
+            DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %u\n", my_stream_id, __func__, my_dst_tile, itr, dataptr_u32_typed[wid]);
+            maa->spd->setData<uint32_t>(my_dst_tile, itr, dataptr_u32_typed[wid]);
+        } else {
+            DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %lu\n", my_stream_id, __func__, my_dst_tile, itr, dataptr_u64_typed[wid]);
+            maa->spd->setData<uint64_t>(my_dst_tile, itr, dataptr_u64_typed[wid]);
+        }
     }
     my_received_responses++;
     Cycles access_rt_latency = maa->spd->setDataLatency(entries.size());

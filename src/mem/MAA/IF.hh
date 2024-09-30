@@ -73,13 +73,21 @@ public:
         "LTE",
         "EQ"};
     enum class DataType : uint8_t {
-        INT32_TYPE = 0,
-        FLOAT32_TYPE = 1,
+        UINT32_TYPE = 0,
+        INT32_TYPE = 1,
+        FLOAT32_TYPE = 2,
+        UINT64_TYPE = 3,
+        INT64_TYPE = 4,
+        FLOAT64_TYPE = 5,
         MAX
     };
-    std::string datatype_names[2] = {
+    std::string datatype_names[6] = {
+        "UINT32",
         "INT32",
-        "FLOAT32"};
+        "FLOAT32",
+        "UINT64",
+        "INT64",
+        "FLOAT64"};
     enum class Status : uint8_t {
         Idle = 0,
         Service = 1,
@@ -114,6 +122,20 @@ public:
     int if_id;
     Instruction();
     std::string print() const;
+    int getWordSize() {
+        switch (datatype) {
+        case DataType::UINT32_TYPE:
+        case DataType::INT32_TYPE:
+        case DataType::FLOAT32_TYPE:
+            return 4;
+        case DataType::UINT64_TYPE:
+        case DataType::INT64_TYPE:
+        case DataType::FLOAT64_TYPE:
+            return 8;
+        default:
+            return 0;
+        }
+    }
 };
 
 class IF {

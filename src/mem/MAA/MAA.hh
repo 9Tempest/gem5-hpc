@@ -414,6 +414,66 @@ protected:
     EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;
     void scheduleIssueInstructionEvent(int latency = 0);
     void scheduleDispatchInstructionEvent(int latency = 0);
+
+public:
+    struct MAAStats : public statistics::Group {
+        MAAStats(statistics::Group *parent, int num_indirect_access_units);
+
+        /** Number of instructions. */
+        statistics::Scalar numInst_INDRD;
+        statistics::Scalar numInst_INDWR;
+        statistics::Scalar numInst_INDRMW;
+        statistics::Scalar numInst;
+
+        /** Cycles of instructions. */
+        statistics::Scalar cycles_INDRD;
+        statistics::Scalar cycles_INDWR;
+        statistics::Scalar cycles_INDRMW;
+        statistics::Scalar cycles;
+
+        /** Average cycles per instruction. */
+        statistics::Formula avgCPI_INDRD;
+        statistics::Formula avgCPI_INDWR;
+        statistics::Formula avgCPI_INDRMW;
+        statistics::Formula avgCPI;
+
+        /** Row-Table Statistics. */
+        std::vector<statistics::Scalar *> IND_NumInsts;
+        std::vector<statistics::Scalar *> IND_NumWordsInserted;
+        std::vector<statistics::Scalar *> IND_NumCacheLineInserted;
+        std::vector<statistics::Scalar *> IND_NumRowsInserted;
+        std::vector<statistics::Scalar *> IND_NumDrains;
+        std::vector<statistics::Formula *> IND_AvgWordsPerCacheLine;
+        std::vector<statistics::Formula *> IND_AvgCacheLinesPerRow;
+        std::vector<statistics::Formula *> IND_AvgRowsPerInst;
+        std::vector<statistics::Formula *> IND_AvgDrainsPerInst;
+
+        /** Cycles of stages. */
+        std::vector<statistics::Scalar *> IND_CyclesFill;
+        std::vector<statistics::Scalar *> IND_CyclesDrain;
+        std::vector<statistics::Scalar *> IND_CyclesBuild;
+        std::vector<statistics::Scalar *> IND_CyclesRequest;
+        std::vector<statistics::Formula *> IND_AvgCyclesFillPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesDrainPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesBuildPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesRequestPerInst;
+
+        /** Load accesses. */
+        std::vector<statistics::Scalar *> IND_LoadsCacheHitResponding;
+        std::vector<statistics::Scalar *> IND_LoadsCacheHitAccessing;
+        std::vector<statistics::Scalar *> IND_LoadsMemAccessing;
+        std::vector<statistics::Formula *> IND_AvgLoadsCacheHitRespondingPerInst;
+        std::vector<statistics::Formula *> IND_AvgLoadsCacheHitAccessingPerInst;
+        std::vector<statistics::Formula *> IND_AvgLoadsMemAccessingPerInst;
+
+        /** Store accesses. */
+        std::vector<statistics::Scalar *> IND_StoresMemAccessing;
+        std::vector<statistics::Formula *> IND_AvgStoresMemAccessingPerInst;
+
+        /** Evict accesses. */
+        std::vector<statistics::Scalar *> IND_Evicts;
+        std::vector<statistics::Formula *> IND_AvgEvictssPerInst;
+    } stats;
 };
 /**
  * Returns the address of the closest aligned fixed-size block to the given

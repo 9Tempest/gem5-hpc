@@ -44,7 +44,9 @@ public:
             delete[] entries_valid;
         }
     }
-    void allocate(int _num_tile_elements);
+    void allocate(int _my_indirect_id,
+                  int _num_tile_elements,
+                  IndirectAccessUnit *_indir_access);
     void insert(int itr, int wid, int last_itr);
     std::vector<OffsetTableEntry> get_entry_recv(int first_itr);
     void reset();
@@ -52,6 +54,8 @@ public:
     OffsetTableEntry *entries;
     bool *entries_valid;
     int num_tile_elements;
+    IndirectAccessUnit *indir_access;
+    int my_indirect_id;
 };
 
 class RowTableEntry {
@@ -60,7 +64,6 @@ public:
         Addr addr;
         int first_itr;
         int last_itr;
-        bool is_cached;
     };
     RowTableEntry() {
         entries = nullptr;
@@ -84,9 +87,8 @@ public:
                 int wid);
     void reset();
     void check_reset();
-    bool get_entry_send(Addr &addr, bool &is_block_cached);
-    std::vector<OffsetTableEntry> get_entry_recv(Addr addr,
-                                                 bool is_block_cached);
+    bool get_entry_send(Addr &addr);
+    std::vector<OffsetTableEntry> get_entry_recv(Addr addr);
     bool all_entries_received();
     OffsetTable *offset_table;
     Addr Grow_addr;
@@ -120,13 +122,10 @@ public:
                 Addr addr,
                 int itr,
                 int wid);
-    bool get_entry_send(Addr &addr,
-                        bool &is_block_cached);
-    bool get_entry_send_first_row(Addr &addr,
-                                  bool &is_block_cached);
+    bool get_entry_send(Addr &addr);
+    bool get_entry_send_first_row(Addr &addr);
     std::vector<OffsetTableEntry> get_entry_recv(Addr Grow_addr,
-                                                 Addr addr,
-                                                 bool is_block_cached);
+                                                 Addr addr);
 
     void reset();
     void check_reset();
@@ -192,7 +191,6 @@ protected:
     int num_row_table_rows;
     int num_row_table_entries_per_row;
     Status state, prev_state;
-    MAA *maa;
     RowTable *row_table;
     OffsetTable *offset_table;
     int dst_tile_id;
@@ -200,6 +198,7 @@ protected:
     Cycles cache_snoop_latency;
 
 public:
+    MAA *maa;
     IndirectAccessUnit();
     ~IndirectAccessUnit() {
         if (row_table != nullptr) {
@@ -221,15 +220,12 @@ public:
 
     bool recvData(const Addr addr,
                   uint8_t *dataptr,
-                  std::vector<uint32_t> data,
-                  std::vector<uint16_t> wids,
                   bool is_block_cached);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
     void finish(const Fault &fault, const RequestPtr &req,
                 ThreadContext *tc, BaseMMU::Mode mode) override;
-    bool checkBlockCached(Addr physical_addr);
 
 protected:
     Instruction *my_instruction;
@@ -237,7 +233,7 @@ protected:
     std::multiset<IndirectPacket, CompareByTick> my_outstanding_read_pkts;
     Request::Flags flags = 0;
     const Addr block_size = 64;
-    const Addr word_size = sizeof(uint32_t);
+    int my_word_size = -1;
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
     int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;
@@ -254,6 +250,11 @@ protected:
     Tick my_SPD_read_finish_tick;
     Tick my_SPD_write_finish_tick;
     Tick my_RT_access_finish_tick;
+    Tick my_decode_start_tick;
+    Tick my_fill_start_tick;
+    Tick my_drain_start_tick;
+    Tick my_build_start_tick;
+    Tick my_request_start_tick;
 
     Addr translatePacket(Addr vaddr);
     bool checkAllRowTablesSent();
@@ -272,31 +273,6 @@ public:
     void createReadPacketEvict(Addr addr);
     bool sendOutstandingReadPacket();
     bool sendOutstandingWritePacket();
-
-    // struct IndirectAccessUnitStats : public statistics::Group {
-    //     IndirectAccessUnitStats(statistics::Group *parent);
-
-    //     void regStats() override;
-
-    //     /** Number of instructions. */
-    //     statistics::Scalar numInstRD;
-    //     statistics::Scalar numInstWR;
-    //     statistics::Scalar numInstRMW;
-    //     statistics::Scalar numInst;
-
-    //     /** Cycles of instructions. */
-    //     statistics::Scalar cyclesRD;
-    //     statistics::Scalar cyclesWR;
-    //     statistics::Scalar cyclesRMW;
-    //     statistics::Scalar cycles;
-
-    //     /** Average cycles per instruction. */
-    //     statistics::Formula avgCPIRD;
-    //     statistics::Formula avgCPIWR;
-    //     statistics::Formula avgCPIRMW;
-    //     statistics::Formula avgCPI;
-
-    // } stats;
 };
 } // namespace gem5
 

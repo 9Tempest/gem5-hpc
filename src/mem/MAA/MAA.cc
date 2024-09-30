@@ -55,7 +55,8 @@ MAA::MAA(const MAAParams &p)
       my_instruction_pkt(nullptr),
       my_outstanding_instruction_pkt(false),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
-      dispatchInstructionEvent([this] { dispatchInstruction(); }, name()) {
+      dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
+      stats(this, p.num_indirect_access_units) {
 
     requestorId = p.system->getRequestorId(this);
     spd = new SPD(this,
@@ -189,20 +190,15 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     case MemCmd::ReadExResp:
     case MemCmd::ReadResp: {
         assert(pkt->getSize() == 64);
-        std::vector<uint32_t> data;
-        std::vector<uint16_t> wid;
         for (int i = 0; i < 64; i += 4) {
-            if (pkt->req->getByteEnable()[i] == true) {
-                data.push_back(*(pkt->getPtr<uint32_t>() + i / 4));
-                wid.push_back(i / 4);
-            }
+            panic_if(pkt->req->getByteEnable()[i] == false, "Byte enable [%d] is not set for the read response\n", i);
         }
         bool received = false;
         for (int i = 0; i < num_indirect_access_units; i++) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, false)) {
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
                     panic_if(received, "Received multiple responses for the same request\n");
                 }
             }
@@ -210,7 +206,7 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
         for (int i = 0; i < num_stream_access_units; i++) {
             if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
                 streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), data, wid),
+                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
                          "Received multiple responses for the same request\n");
             }
         }
@@ -265,20 +261,30 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         assert(pkt->isMaskedWrite() == false);
         switch (address_range.getType()) {
         case AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE: {
-            assert(pkt->getSize() == 4);
             Addr offset = address_range.getOffset();
             int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+            panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
             int element_id = offset % (num_tile_elements * sizeof(uint32_t));
-            assert(element_id % sizeof(uint32_t) == 0);
-            element_id /= sizeof(uint32_t);
-            uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %d\n", __func__, tile_id, element_id, data);
-            spd->setData(tile_id, element_id, data);
+            if (pkt->getSize() == 4) {
+                assert(element_id % sizeof(uint32_t) == 0);
+                element_id /= sizeof(uint32_t);
+                uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
+                int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
+                float data_FLOAT = pkt->getPtr<float>()[0];
+                DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %u/%d/%f\n", __func__, tile_id, element_id, data_UINT32, data_INT32, data_FLOAT);
+                spd->setData<uint32_t>(tile_id, element_id, data_UINT32);
+            } else {
+                assert(element_id % sizeof(uint64_t) == 0);
+                element_id /= sizeof(uint64_t);
+                uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
+                int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
+                double data_DOUBLE = pkt->getPtr<double>()[0];
+                DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %lu/%ld/%lf\n", __func__, tile_id, element_id, data_UINT64, data_INT64, data_DOUBLE);
+                spd->setData<uint64_t>(tile_id, element_id, data_UINT64);
+            }
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->setDataLatency(1)));
             break;
         }
         case AddressRangeType::Type::SCALAR_RANGE: {
@@ -286,14 +292,23 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             int element_id = offset % (num_regs * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
-            uint32_t data = pkt->getPtr<uint32_t>()[0];
-            DPRINTF(MAACpuPort, "%s: REG[%d] = %d\n", __func__, element_id, data);
-            rf->setData(element_id, data);
+            panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
+            if (pkt->getSize() == 4) {
+                uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
+                int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
+                float data_FLOAT = pkt->getPtr<float>()[0];
+                DPRINTF(MAACpuPort, "%s: REG[%d] = %u/%d/%f\n", __func__, element_id, data_UINT32, data_INT32, data_FLOAT);
+                rf->setData<uint32_t>(element_id, data_UINT32);
+            } else {
+                uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
+                int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
+                double data_DOUBLE = pkt->getPtr<double>()[0];
+                DPRINTF(MAACpuPort, "%s: REG[%d] = %lu/%ld/%lf\n", __func__, element_id, data_UINT64, data_INT64, data_DOUBLE);
+                rf->setData<uint64_t>(element_id, data_UINT64);
+            }
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
             break;
         }
         case AddressRangeType::Type::INSTRUCTION_RANGE: {
@@ -358,7 +373,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->needsResponse());
             if (respond_immediately) {
                 pkt->makeTimingResponse();
-                cpuSidePort.schedTimingResp(pkt, clockEdge(Cycles(2)));
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
             }
             break;
         }
@@ -386,9 +401,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
             break;
         }
         case AddressRangeType::Type::SPD_READY_RANGE: {
@@ -401,13 +414,11 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
             break;
         }
         case AddressRangeType::Type::SCALAR_RANGE: {
-            assert(pkt->getSize() == sizeof(uint32_t));
+            panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
             Addr offset = address_range.getOffset();
             int element_id = offset % (num_regs * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
@@ -416,9 +427,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
             break;
         }
         default: {
@@ -445,9 +454,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            Cycles lat = Cycles(2);
-            Tick request_time = clockEdge(lat);
-            cpuSidePort.schedTimingResp(pkt, request_time);
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->getDataLatency(1)));
             invalidator->read(tile_id, element_id);
             break;
         }
@@ -532,7 +539,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
             if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                 indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, false)) {
+                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
                     panic_if(received, "Received multiple responses for the same request\n");
                 }
             }
@@ -540,7 +547,7 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
         for (int i = 0; i < num_stream_access_units; i++) {
             if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
                 streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), data, wid),
+                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
                          "Received multiple responses for the same request\n");
             }
         }
@@ -697,7 +704,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
             for (int i = 0; i < num_stream_access_units; i++) {
                 if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
                     streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                    if (streamAccessUnits[i].recvData(pkt->getAddr(), data, wid)) {
+                    if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>())) {
                         panic_if(received, "Received multiple responses for the same request\n");
                         received = true;
                     }
@@ -709,7 +716,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
                 if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
                     indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), data, wid, true)) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true)) {
                         panic_if(received, "Received multiple responses for the same request\n");
                     }
                 }
@@ -972,7 +979,7 @@ void MAA::dispatchInstruction() {
                 spd->unsetReady(current_instruction->src2SpdID);
             }
             my_instruction_pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(my_instruction_pkt, clockEdge(Cycles(2)));
+            cpuSidePort.schedTimingResp(my_instruction_pkt, getClockEdge(Cycles(1)));
             scheduleIssueInstructionEvent(1);
             my_outstanding_instruction_pkt = false;
         } else {
@@ -984,12 +991,6 @@ void MAA::finishInstruction(Instruction *instruction,
                             int dst1SpdID,
                             int dst2SpdID) {
     DPRINTF(MAAController, "%s: %s finishing!\n", __func__, instruction->print());
-    if (dst1SpdID != -1) {
-        spd->setReady(dst1SpdID);
-    }
-    if (dst2SpdID != -1) {
-        spd->setReady(dst2SpdID);
-    }
     ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
     scheduleIssueInstructionEvent();
     scheduleDispatchInstructionEvent();
@@ -1034,5 +1035,97 @@ Cycles MAA::getTicksToCycles(Tick t) const {
 }
 Tick MAA::getCyclesToTicks(Cycles c) const {
     return cyclesToTicks(c);
+}
+#define MAKE_INDIRECT_STAT_NAME(name) \
+    (std::string("I") + std::to_string(indirect_id) + "_" + std::string(name)).c_str()
+
+MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units)
+    : statistics::Group(parent),
+      ADD_STAT(numInst_INDRD, statistics::units::Count::get(), "number of indirect read instructions"),
+      ADD_STAT(numInst_INDWR, statistics::units::Count::get(), "number of indirect write instructions"),
+      ADD_STAT(numInst_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instructions"),
+      ADD_STAT(numInst, statistics::units::Count::get(), "total number of instructions"),
+      ADD_STAT(cycles_INDRD, statistics::units::Count::get(), "number of indirect read instruction cycles"),
+      ADD_STAT(cycles_INDWR, statistics::units::Count::get(), "number of indirect write instruction cycles"),
+      ADD_STAT(cycles_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instruction cycles"),
+      ADD_STAT(cycles, statistics::units::Count::get(), "total number of instruction cycles"),
+      ADD_STAT(avgCPI_INDRD, statistics::units::Count::get(), "average CPI for indirect read instructions"),
+      ADD_STAT(avgCPI_INDWR, statistics::units::Count::get(), "average CPI for indirect write instructions"),
+      ADD_STAT(avgCPI_INDRMW, statistics::units::Count::get(), "average CPI for indirect read-modify-write instructions"),
+      ADD_STAT(avgCPI, statistics::units::Count::get(), "average CPI for all instructions") {
+
+    numInst_INDRD.flags(statistics::nozero);
+    numInst_INDWR.flags(statistics::nozero);
+    numInst_INDRMW.flags(statistics::nozero);
+    numInst.flags(statistics::nozero);
+    cycles_INDRD.flags(statistics::nozero);
+    cycles_INDWR.flags(statistics::nozero);
+    cycles_INDRMW.flags(statistics::nozero);
+    cycles.flags(statistics::nozero);
+
+    avgCPI_INDRD = cycles_INDRD / numInst_INDRD;
+    avgCPI_INDWR = cycles_INDWR / numInst_INDWR;
+    avgCPI_INDRMW = cycles_INDRMW / numInst_INDRMW;
+    avgCPI = cycles / numInst;
+
+    for (int indirect_id = 0; indirect_id < num_indirect_access_units; indirect_id++) {
+        IND_NumInsts.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumInsts"), statistics::units::Count::get(), "number of instructions"));
+        IND_NumWordsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumWordsInserted"), statistics::units::Count::get(), "number of words inserted to the row table"));
+        IND_NumCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumCacheLineInserted"), statistics::units::Count::get(), "number of cachelines inserted to the row table"));
+        IND_NumRowsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumRowsInserted"), statistics::units::Count::get(), "number of rows inserted to the row table"));
+        IND_NumDrains.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumDrains"), statistics::units::Count::get(), "number of drains due to row table full"));
+        IND_AvgWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgWordsPerCacheLine"), statistics::units::Count::get(), "average number of words per cacheline"));
+        IND_AvgCacheLinesPerRow.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCacheLinesPerRow"), statistics::units::Count::get(), "average number of cachelines per row"));
+        IND_AvgRowsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgRowsPerInst"), statistics::units::Count::get(), "average number of rows per indirect instruction"));
+        IND_AvgDrainsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgDrainsPerInst"), statistics::units::Count::get(), "average number of drains per indirect instruction"));
+        IND_CyclesFill.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesFill"), statistics::units::Count::get(), "number of cycles in the FILL stage"));
+        IND_CyclesDrain.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesDrain"), statistics::units::Count::get(), "number of cycles in the DRAIN stage"));
+        IND_CyclesBuild.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesBuild"), statistics::units::Count::get(), "number of cycles in the BUILD stage"));
+        IND_CyclesRequest.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesRequest"), statistics::units::Count::get(), "number of cycles in the REQUEST stage"));
+        IND_AvgCyclesFillPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesFillPerInst"), statistics::units::Count::get(), "average number of cycles in the FILL stage per indirect instruction"));
+        IND_AvgCyclesDrainPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesDrainPerInst"), statistics::units::Count::get(), "average number of cycles in the DRAIN stage per indirect instruction"));
+        IND_AvgCyclesBuildPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesBuildPerInst"), statistics::units::Count::get(), "average number of cycles in the BUILD stage per indirect instruction"));
+        IND_AvgCyclesRequestPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesRequestPerInst"), statistics::units::Count::get(), "average number of cycles in the REQUEST stage per indirect instruction"));
+        IND_LoadsCacheHitResponding.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitResponding"), statistics::units::Count::get(), "number of loads hit in cache in the M/O state, responding back"));
+        IND_LoadsCacheHitAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitAccessing"), statistics::units::Count::get(), "number of loads hit in cache in the E/S state, reaccessed cache"));
+        IND_LoadsMemAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsMemAccessing"), statistics::units::Count::get(), "number of loads miss in cache, accessed from memory"));
+        IND_AvgLoadsCacheHitRespondingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitRespondingPerInst"), statistics::units::Count::get(), "average number of loads hit in cache in the M/O state per indirect instruction"));
+        IND_AvgLoadsCacheHitAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitAccessingPerInst"), statistics::units::Count::get(), "average number of loads hit in cache in the E/S state per indirect instruction"));
+        IND_AvgLoadsMemAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsMemAccessingPerInst"), statistics::units::Count::get(), "average number of loads miss in cache per indirect instruction"));
+        IND_StoresMemAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_StoresMemAccessing"), statistics::units::Count::get(), "number of writes accessed from memory"));
+        IND_AvgStoresMemAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgStoresMemAccessingPerInst"), statistics::units::Count::get(), "average number of writes accessed from memory per indirect instruction"));
+        IND_Evicts.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_Evicts"), statistics::units::Count::get(), "number of evict accesses to the CPU side port"));
+        IND_AvgEvictssPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgEvictssPerInst"), statistics::units::Count::get(), "average number of evict accesses to the CPU side port per indirect instruction"));
+
+        (*IND_NumWordsInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumCacheLineInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumRowsInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumDrains[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesFill[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesDrain[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesBuild[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesRequest[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsCacheHitResponding[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsCacheHitAccessing[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsMemAccessing[indirect_id]).flags(statistics::nozero);
+        (*IND_StoresMemAccessing[indirect_id]).flags(statistics::nozero);
+        (*IND_Evicts[indirect_id]).flags(statistics::nozero);
+
+        (*IND_AvgWordsPerCacheLine[indirect_id]) = (*IND_NumWordsInserted[indirect_id]) / (*IND_NumCacheLineInserted[indirect_id]);
+        (*IND_AvgCacheLinesPerRow[indirect_id]) = (*IND_NumCacheLineInserted[indirect_id]) / (*IND_NumRowsInserted[indirect_id]);
+        (*IND_AvgRowsPerInst[indirect_id]) = (*IND_NumRowsInserted[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgDrainsPerInst[indirect_id]) = (*IND_NumDrains[indirect_id]) / (*IND_NumInsts[indirect_id]);
+
+        (*IND_AvgCyclesFillPerInst[indirect_id]) = (*IND_CyclesFill[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgCyclesDrainPerInst[indirect_id]) = (*IND_CyclesDrain[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgCyclesBuildPerInst[indirect_id]) = (*IND_CyclesBuild[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgCyclesRequestPerInst[indirect_id]) = (*IND_CyclesRequest[indirect_id]) / (*IND_NumInsts[indirect_id]);
+
+        (*IND_AvgLoadsCacheHitRespondingPerInst[indirect_id]) = (*IND_LoadsCacheHitResponding[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgLoadsCacheHitAccessingPerInst[indirect_id]) = (*IND_LoadsCacheHitAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgLoadsMemAccessingPerInst[indirect_id]) = (*IND_LoadsMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgStoresMemAccessingPerInst[indirect_id]) = (*IND_StoresMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgEvictssPerInst[indirect_id]) = (*IND_Evicts[indirect_id]) / (*IND_NumInsts[indirect_id]);
+    }
 }
 } // namespace gem5

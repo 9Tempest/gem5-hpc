@@ -47,12 +47,13 @@ protected:
     void executeInstruction();
     void createMyPacket();
     bool sendOutstandingPacket();
-    int get_cl_id(int tile_id, int element_id);
+    int get_cl_id(int tile_id, int element_id, int word_size);
     int num_tiles, num_tile_elements;
     MAA *maa;
     CLStatus *cl_status;
     int total_cls;
     Instruction *my_instruction;
+    int my_word_size;
     EventFunctionWrapper executeInstructionEvent;
     Status state;
     int my_dst_tile, my_i, my_total_invalidations_sent;

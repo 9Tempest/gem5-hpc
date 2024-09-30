@@ -63,13 +63,13 @@ def _get_maa_opts(options):
     addr_ranges = []
     start = options.mem_size
 
-    # scratchpad data (cacheable) (4 bytes each)
     SPD_data_size = opts["num_tiles"] * opts["num_tile_elements"] * 4
+
+    # scratchpad data (cacheable) (4 bytes each)
     addr_ranges.append(AddrRange(start=start, size=SPD_data_size))
     start = addr_ranges[-1].end
 
     # scratchpad data (noncacheable) (4 bytes each)
-    SPD_data_size = opts["num_tiles"] * opts["num_tile_elements"] * 4
     addr_ranges.append(AddrRange(start=start, size=SPD_data_size))
     start = addr_ranges[-1].end
 
@@ -94,6 +94,15 @@ def _get_maa_opts(options):
     start = addr_ranges[-1].end
 
     opts["addr_ranges"] = addr_ranges
+
+    return opts
+
+def _get_cache_opts(level, options):
+    opts = {}
+
+    size_attr = f"{level}_size"
+    if hasattr(options, size_attr):
+        opts["size"] = getattr(options, size_attr)
 
     return opts
 
@@ -125,8 +134,16 @@ def config_maa(options, system):
     max_routing_table_size = max(512, max_routing_table_size)
     print(f"MAA max routing table size: {max_routing_table_size}")
     system.maa.max_outstanding_cache_side_packets = max_routing_table_size
-
     system.tol3bus.max_routing_table_size = max_routing_table_size
+
+    # Increasing snoop filter size to accommodate all LLC and MAA's SPD cachelines
+    SPD_data_size = opts["num_tiles"] * opts["num_tile_elements"] * 4
+    system.tol3bus.snoop_filter.max_capacity = _get_cache_opts("l3", options)["size"]
+    system.membus.snoop_filter.max_capacity = _get_cache_opts("l3", options)["size"]
+    system.tol3bus.snoop_filter.max_capacity += SPD_data_size
+    system.membus.snoop_filter.max_capacity += SPD_data_size
+    print(f"MAA max snoop filter capacity: {system.tol3bus.snoop_filter.max_capacity}")
+    
     system.maa.cache_side = system.tol3bus.cpu_side_ports
     # Memory side derives the cpu side of the memory bus
     system.maa.mem_side = system.membusnc.cpu_side_ports

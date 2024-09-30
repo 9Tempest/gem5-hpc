@@ -35,13 +35,13 @@ void Invalidator::allocate(int _num_tiles,
     my_instruction = nullptr;
     state = Status::Idle;
 }
-int Invalidator::get_cl_id(int tile_id, int element_id) {
-    return (int)(((tile_id * num_tile_elements + element_id) * sizeof(uint32_t)) / 64);
+int Invalidator::get_cl_id(int tile_id, int element_id, int word_size) {
+    return (int)((tile_id * num_tile_elements * 4 + element_id * word_size) / 64);
 }
 void Invalidator::read(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
-    int cl_id = get_cl_id(tile_id, element_id);
+    int cl_id = get_cl_id(tile_id, element_id, 4);
     cl_status[cl_id] = CLStatus::Cached;
     DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: cached\n",
             __func__,
@@ -69,6 +69,17 @@ void Invalidator::executeInstruction() {
         panic_if(my_instruction->dst1Ready && my_instruction->dst2Ready,
                  "Both dst1 and dst2 are ready!\n");
         my_dst_tile = my_instruction->dst1Ready == false ? my_instruction->dst1SpdID : my_instruction->dst2SpdID;
+        if ((my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR ||
+             my_instruction->opcode == Instruction::OpcodeType::ALU_VECTOR) &&
+            (my_instruction->optype == Instruction::OPType::GT_OP ||
+             my_instruction->optype == Instruction::OPType::GTE_OP ||
+             my_instruction->optype == Instruction::OPType::LT_OP ||
+             my_instruction->optype == Instruction::OPType::LTE_OP ||
+             my_instruction->optype == Instruction::OPType::EQ_OP)) {
+            my_word_size = 4;
+        } else {
+            my_word_size = my_instruction->getWordSize();
+        }
 
         // Initialization
         my_i = 0;
@@ -91,7 +102,7 @@ void Invalidator::executeInstruction() {
             }
         }
         for (; my_i < num_tile_elements; my_i++) {
-            int cl_id = get_cl_id(my_dst_tile, my_i);
+            int cl_id = get_cl_id(my_dst_tile, my_i, my_word_size);
             if (cl_status[cl_id] == CLStatus::Cached) {
                 DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: cached, invalidating\n",
                         __func__,
@@ -155,7 +166,7 @@ bool Invalidator::sendOutstandingPacket() {
 void Invalidator::recvData(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
-    int cl_id = get_cl_id(tile_id, element_id);
+    int cl_id = get_cl_id(tile_id, element_id, 4);
     cl_status[cl_id] = CLStatus::Uncached;
     DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: uncached\n",
             __func__,

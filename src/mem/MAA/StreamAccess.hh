@@ -103,8 +103,7 @@ public:
     void scheduleExecuteInstructionEvent(int latency = 0);
     void scheduleSendPacketEvent(int latency = 0);
     bool recvData(const Addr addr,
-                  std::vector<uint32_t> data,
-                  std::vector<uint16_t> wids);
+                  uint8_t *dataptr);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
@@ -115,7 +114,6 @@ protected:
     Instruction *my_instruction;
     Request::Flags flags = 0;
     const Addr block_size = 64;
-    const Addr word_size = sizeof(uint32_t);
     int my_i;
     int my_idx;
     Addr my_base_addr, my_last_block_vaddr;
@@ -125,6 +123,7 @@ protected:
     Tick my_SPD_read_finish_tick;
     Tick my_SPD_write_finish_tick;
     Tick my_RT_access_finish_tick;
+    int my_word_size;
 
     Addr my_translated_addr;
     bool my_translation_done;

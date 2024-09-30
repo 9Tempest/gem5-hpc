@@ -9,6 +9,7 @@
 #include "sim/cur_tick.hh"
 #include <cassert>
 #include <cstdint>
+#include <string>
 
 #ifndef TRACING_ON
 #define TRACING_ON 1
@@ -21,8 +22,12 @@ namespace gem5 {
 // OFFSET TABLE
 //
 ///////////////
-void OffsetTable::allocate(int _num_tile_elements) {
+void OffsetTable::allocate(int _my_indirect_id,
+                           int _num_tile_elements,
+                           IndirectAccessUnit *_indir_access) {
+    my_indirect_id = _my_indirect_id;
     num_tile_elements = _num_tile_elements;
+    indir_access = _indir_access;
     entries = new OffsetTableEntry[num_tile_elements];
     entries_valid = new bool[num_tile_elements];
     for (int i = 0; i < num_tile_elements; i++) {
@@ -39,6 +44,7 @@ void OffsetTable::insert(int itr, int wid, int last_itr) {
     if (last_itr != -1) {
         entries[last_itr].next_itr = itr;
     }
+    (*indir_access->maa->stats.IND_NumWordsInserted[my_indirect_id])++;
 }
 std::vector<OffsetTableEntry> OffsetTable::get_entry_recv(int first_itr) {
     std::vector<OffsetTableEntry> result;
@@ -121,13 +127,13 @@ bool RowTableEntry::insert(Addr addr,
     entries[free_entry_id].addr = addr;
     entries[free_entry_id].first_itr = itr;
     entries[free_entry_id].last_itr = itr;
-    entries[free_entry_id].is_cached = true; // indir_access->checkBlockCached(addr);
     entries_valid[free_entry_id] = true;
     offset_table->insert(itr, wid, -1);
     DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: new entry %d [addr(0x%lx)] inserted!\n",
             my_indirect_id, my_table_id, my_table_row_id, __func__,
             free_entry_id,
             addr);
+    (*indir_access->maa->stats.IND_NumCacheLineInserted[my_indirect_id])++;
     return true;
 }
 void RowTableEntry::check_reset() {
@@ -144,13 +150,11 @@ void RowTableEntry::reset() {
     }
     last_sent_entry_id = 0;
 }
-bool RowTableEntry::get_entry_send(Addr &addr,
-                                   bool &is_block_cached) {
+bool RowTableEntry::get_entry_send(Addr &addr) {
     assert(last_sent_entry_id <= num_row_table_entries_per_row);
     for (; last_sent_entry_id < num_row_table_entries_per_row; last_sent_entry_id++) {
         if (entries_valid[last_sent_entry_id] == true) {
             addr = entries[last_sent_entry_id].addr;
-            is_block_cached = entries[last_sent_entry_id].is_cached;
             DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: sending entry %d [addr(0x%lx)]!\n",
                     my_indirect_id, my_table_id, my_table_row_id, __func__,
                     last_sent_entry_id, addr);
@@ -160,14 +164,12 @@ bool RowTableEntry::get_entry_send(Addr &addr,
     }
     return false;
 }
-std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr,
-                                                            bool is_block_cached) {
+std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr) {
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             entries_valid[i] = false;
             DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d received, setting to invalid!\n",
                     my_indirect_id, my_table_id, my_table_row_id, __func__, i);
-            // assert(entries[i].is_cached == is_block_cached);
             return offset_table->get_entry_recv(entries[i].first_itr);
         }
     }
@@ -256,6 +258,7 @@ bool RowTable::insert(Addr Grow_addr,
     entries[free_row_id].Grow_addr = Grow_addr;
     assert(entries[free_row_id].insert(addr, itr, wid) == true);
     entries_valid[free_row_id] = true;
+    (*indir_access->maa->stats.IND_NumRowsInserted[my_indirect_id])++;
     return true;
 }
 float RowTable::getAverageEntriesPerRow() {
@@ -285,12 +288,11 @@ void RowTable::reset() {
     }
     last_sent_row_id = 0;
 }
-bool RowTable::get_entry_send(Addr &addr,
-                              bool &is_block_cached) {
+bool RowTable::get_entry_send(Addr &addr) {
     assert(last_sent_row_id <= num_row_table_rows);
     for (; last_sent_row_id < num_row_table_rows; last_sent_row_id++) {
         if (entries_valid[last_sent_row_id] &&
-            entries[last_sent_row_id].get_entry_send(addr, is_block_cached)) {
+            entries[last_sent_row_id].get_entry_send(addr)) {
             DPRINTF(MAAIndirect, "I[%d] T[%d] %s: row %d retuned!\n", my_indirect_id, my_table_id, __func__, last_sent_row_id);
             return true;
         }
@@ -298,11 +300,10 @@ bool RowTable::get_entry_send(Addr &addr,
     last_sent_row_id = 0;
     return false;
 }
-bool RowTable::get_entry_send_first_row(Addr &addr,
-                                        bool &is_block_cached) {
+bool RowTable::get_entry_send_first_row(Addr &addr) {
     // This function must be called only when blocked b/c of not entry available
     assert(entries_valid[0]);
-    if (entries[0].get_entry_send(addr, is_block_cached)) {
+    if (entries[0].get_entry_send(addr)) {
         DPRINTF(MAAIndirect, "I[%d] T[%d] %s: retuned addr(0x%lx)!\n",
                 my_indirect_id, my_table_id, __func__, addr);
         return true;
@@ -311,8 +312,7 @@ bool RowTable::get_entry_send_first_row(Addr &addr,
     return false;
 }
 std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
-                                                       Addr addr,
-                                                       bool is_block_cached) {
+                                                       Addr addr) {
     std::vector<OffsetTableEntry> results;
     for (int i = 0; i < num_row_table_rows; i++) {
         if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
@@ -322,7 +322,7 @@ std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
                     __func__,
                     Grow_addr,
                     i);
-            std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr, is_block_cached);
+            std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr);
             results.insert(results.begin(), result.begin(), result.end());
             if (entries[i].all_entries_received()) {
                 DPRINTF(MAAIndirect, "I[%d] T[%d] %s: all R[%d] entries received, setting to invalid!\n",
@@ -363,7 +363,7 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
     rowtable_latency = _rowtable_latency;
     cache_snoop_latency = _cache_snoop_latency;
     offset_table = new OffsetTable();
-    offset_table->allocate(num_tile_elements);
+    offset_table->allocate(my_indirect_id, num_tile_elements, this);
     row_table = new RowTable[num_row_table_banks];
     my_row_table_req_sent = new bool[num_row_table_banks];
     for (int i = 0; i < num_row_table_banks; i++) {
@@ -399,6 +399,11 @@ void IndirectAccessUnit::check_reset() {
              my_outstanding_write_pkts.size());
     panic_if(my_outstanding_read_pkts.size() != 0, "Outstanding read packets: %d!\n",
              my_outstanding_read_pkts.size());
+    panic_if(my_decode_start_tick != 0, "Decode start tick is not 0: %lu!\n", my_decode_start_tick);
+    panic_if(my_fill_start_tick != 0, "Fill start tick is not 0: %lu!\n", my_fill_start_tick);
+    panic_if(my_drain_start_tick != 0, "Drain start tick is not 0: %lu!\n", my_drain_start_tick);
+    panic_if(my_build_start_tick != 0, "Build start tick is not 0: %lu!\n", my_build_start_tick);
+    panic_if(my_request_start_tick != 0, "Request start tick is not 0: %lu!\n", my_request_start_tick);
 }
 bool IndirectAccessUnit::scheduleNextExecution(bool force) {
     Tick finish_tick = std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick);
@@ -453,9 +458,21 @@ void IndirectAccessUnit::executeInstruction() {
         my_dst_tile = my_instruction->dst1SpdID;
         my_cond_tile = my_instruction->condSpdID;
         my_max = maa->spd->getSize(my_idx_tile);
+        my_word_size = my_instruction->getWordSize();
         panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
                  "I[%d] %s: idx size(%d) != cond size(%d)!\n",
                  my_indirect_id, __func__, my_max, maa->spd->getSize(my_cond_tile));
+        maa->stats.numInst++;
+        (*maa->stats.IND_NumInsts[my_indirect_id])++;
+        if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+            maa->stats.numInst_INDRD++;
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST) {
+            maa->stats.numInst_INDWR++;
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+            maa->stats.numInst_INDRMW++;
+        } else {
+            assert(false);
+        }
 
         // Initialization
         my_virtual_addr = 0;
@@ -472,6 +489,11 @@ void IndirectAccessUnit::executeInstruction() {
         my_SPD_read_finish_tick = curTick();
         my_SPD_write_finish_tick = curTick();
         my_RT_access_finish_tick = curTick();
+        my_decode_start_tick = curTick();
+        my_fill_start_tick = 0;
+        my_drain_start_tick = 0;
+        my_build_start_tick = 0;
+        my_request_start_tick = 0;
 
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
@@ -488,6 +510,14 @@ void IndirectAccessUnit::executeInstruction() {
         if (scheduleNextExecution()) {
             break;
         }
+        if (my_fill_start_tick == 0) {
+            my_fill_start_tick = curTick();
+        }
+        if (my_request_start_tick != 0) {
+            panic_if(prev_state != Status::Request, "I[%d] %s: prev_state(%s) != Request!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesRequest[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_request_start_tick);
+            my_request_start_tick = 0;
+        }
         for (; my_i < my_max; my_i++) {
             if (my_cond_tile != -1) {
                 num_spd_read_accesses++;
@@ -495,13 +525,13 @@ void IndirectAccessUnit::executeInstruction() {
             if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_i) != 0) {
                 uint32_t idx = maa->spd->getData<uint32_t>(my_idx_tile, my_i);
                 num_spd_read_accesses++;
-                Addr vaddr = my_base_addr + word_size * idx;
+                Addr vaddr = my_base_addr + my_word_size * idx;
                 Addr block_vaddr = addrBlockAlign(vaddr, block_size);
                 Addr paddr = translatePacket(block_vaddr);
                 Addr block_paddr = addrBlockAlign(paddr, block_size);
                 DPRINTF(MAAIndirect, "I[%d] %s: idx = %u, addr = 0x%lx!\n",
                         my_indirect_id, __func__, idx, block_paddr);
-                uint16_t wid = (vaddr - block_vaddr) / word_size;
+                uint16_t wid = (vaddr - block_vaddr) / my_word_size;
                 std::vector<int> addr_vec = maa->map_addr(block_paddr);
                 Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
                 my_row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL]);
@@ -521,6 +551,7 @@ void IndirectAccessUnit::executeInstruction() {
                     scheduleNextExecution(true);
                     prev_state = Status::Fill;
                     state = Status::Drain;
+                    (*maa->stats.IND_NumDrains[my_indirect_id])++;
                     return;
                 }
             }
@@ -542,15 +573,21 @@ void IndirectAccessUnit::executeInstruction() {
         if (scheduleNextExecution()) {
             break;
         }
+        if (my_drain_start_tick == 0) {
+            my_drain_start_tick = curTick();
+        }
+        if (my_fill_start_tick != 0) {
+            panic_if(prev_state != Status::Fill, "I[%d] %s: prev_state(%s) != Fill!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesFill[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_fill_start_tick);
+            my_fill_start_tick = 0;
+        }
         int num_rowtable_accesses = 0;
         Addr addr;
-        bool is_cached;
-        while (row_table[my_row_table_idx].get_entry_send_first_row(addr, is_cached)) {
-            DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx], is_cached[%s]!\n",
-                    my_indirect_id, __func__, my_row_table_idx, addr, is_cached ? "T" : "F");
+        while (row_table[my_row_table_idx].get_entry_send_first_row(addr)) {
+            DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n",
+                    my_indirect_id, __func__, my_row_table_idx, addr);
             my_expected_responses++;
             num_rowtable_accesses++;
-            /********Changed********/
             createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: drain completed, going to the request state...\n", my_indirect_id, __func__);
@@ -567,10 +604,17 @@ void IndirectAccessUnit::executeInstruction() {
         if (scheduleNextExecution()) {
             break;
         }
+        if (my_build_start_tick == 0) {
+            my_build_start_tick = curTick();
+        }
+        if (my_fill_start_tick != 0) {
+            panic_if(prev_state != Status::Fill, "I[%d] %s: prev_state(%s) != Fill!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesFill[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_fill_start_tick);
+            my_fill_start_tick = 0;
+        }
         int last_row_table_sent = 0;
         int num_rowtable_accesses = 0;
         Addr addr;
-        bool is_cached;
         while (true) {
             if (checkAllRowTablesSent()) {
                 break;
@@ -580,9 +624,9 @@ void IndirectAccessUnit::executeInstruction() {
                 assert(row_table_idx < num_row_table_banks);
                 DPRINTF(MAAIndirect, "I[%d] %s: Checking row table bank[%d]!\n", my_indirect_id, __func__, row_table_idx);
                 if (my_row_table_req_sent[row_table_idx] == false) {
-                    if (row_table[row_table_idx].get_entry_send(addr, is_cached)) {
-                        DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx], is_cached[%s]!\n",
-                                my_indirect_id, __func__, row_table_idx, addr, is_cached ? "T" : "F");
+                    if (row_table[row_table_idx].get_entry_send(addr)) {
+                        DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n",
+                                my_indirect_id, __func__, row_table_idx, addr);
                         my_expected_responses++;
                         num_rowtable_accesses++;
                         createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
@@ -619,6 +663,19 @@ void IndirectAccessUnit::executeInstruction() {
         if (scheduleNextExecution()) {
             break;
         }
+        if (my_request_start_tick == 0) {
+            my_request_start_tick = curTick();
+        }
+        if (my_drain_start_tick != 0) {
+            panic_if(prev_state != Status::Drain, "I[%d] %s: prev_state(%s) != Drain!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesDrain[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_drain_start_tick);
+            my_drain_start_tick = 0;
+        }
+        if (my_build_start_tick != 0) {
+            panic_if(prev_state != Status::Build, "I[%d] %s: prev_state(%s) != Build!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesBuild[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_build_start_tick);
+            my_build_start_tick = 0;
+        }
         panic_if(my_received_responses != my_expected_responses, "I[%d] %s: received_responses(%d) != sent_requests(%d)!\n",
                  my_indirect_id, __func__, my_received_responses, my_expected_responses);
         if (prev_state == Status::Drain) {
@@ -642,15 +699,35 @@ void IndirectAccessUnit::executeInstruction() {
         panic_if(scheduleNextSendWrite(), "I[%d] %s: Sending writes is not completed!\n", my_indirect_id, __func__);
         DPRINTF(MAAIndirect, "I[%d] %s: state set to finish for request %s!\n", my_indirect_id, __func__, my_instruction->print());
         my_instruction->state = Instruction::Status::Finish;
+        if (my_request_start_tick != 0) {
+            panic_if(prev_state != Status::Request, "I[%d] %s: prev_state(%s) != Request!\n", my_indirect_id, __func__, status_names[(int)prev_state]);
+            (*maa->stats.IND_CyclesRequest[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_request_start_tick);
+            my_request_start_tick = 0;
+        }
+        Cycles total_cycles = maa->getTicksToCycles(curTick() - my_decode_start_tick);
+        maa->stats.cycles += total_cycles;
+        my_decode_start_tick = 0;
         prev_state = Status::max;
         state = Status::Idle;
         check_reset();
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
             maa->spd->setReady(my_dst_tile);
+            if (my_word_size == 8) {
+                maa->spd->setReady(my_dst_tile + 1);
+            }
             maa->finishInstruction(my_instruction, my_dst_tile);
+            maa->stats.cycles_INDRD += total_cycles;
         } else {
             maa->spd->setReady(my_src_tile);
+            if (my_word_size == 8) {
+                maa->spd->setReady(my_src_tile + 1);
+            }
             maa->finishInstruction(my_instruction);
+            if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST) {
+                maa->stats.cycles_INDWR += total_cycles;
+            } else {
+                maa->stats.cycles_INDRMW += total_cycles;
+            }
         }
         my_instruction = nullptr;
         break;
@@ -671,28 +748,6 @@ int IndirectAccessUnit::getRowTableIdx(int channel, int rank, int bankgroup) {
     return (channel * maa->m_org[ADDR_RANK_LEVEL] * 2) +
            (rank * 2) +
            (bankgroup % 2);
-}
-bool IndirectAccessUnit::checkBlockCached(Addr physical_addr) {
-    RequestPtr real_req = std::make_shared<Request>(physical_addr,
-                                                    block_size,
-                                                    flags,
-                                                    maa->requestorId);
-    PacketPtr curr_pkt = new Packet(real_req, MemCmd::CleanEvict);
-    curr_pkt->setExpressSnoop();
-    curr_pkt->headerDelay = curr_pkt->payloadDelay = 0;
-    DPRINTF(MAAIndirect, "I[%d] %s: sending snoop of %s\n", my_indirect_id, __func__, curr_pkt->print());
-    maa->cpuSidePort.sendTimingSnoopReq(curr_pkt);
-    // assert(curr_pkt->satisfied() == false);
-    DPRINTF(MAAIndirect, "I[%d] %s: Snoop of %s returned with cache responding (%s), has sharers (%s), had writable (%s), satisfied (%s), is block cached (%s)\n",
-            my_indirect_id,
-            __func__,
-            curr_pkt->print(),
-            curr_pkt->cacheResponding() ? "True" : "False",
-            curr_pkt->hasSharers() ? "True" : "False",
-            curr_pkt->responderHadWritable() ? "True" : "False",
-            curr_pkt->satisfied() ? "True" : "False",
-            curr_pkt->isBlockCached() ? "True" : "False");
-    return curr_pkt->isBlockCached();
 }
 void IndirectAccessUnit::createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop) {
     /**** Packet generation ****/
@@ -743,13 +798,16 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
             my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
             if (read_pkt.packet->cacheResponding() == true) {
                 DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
+                (*maa->stats.IND_LoadsCacheHitResponding[my_indirect_id])++;
             } else if (read_pkt.packet->hasSharers() == true) {
                 DPRINTF(MAAIndirect, "I[%d] %s: There's a cache in the E/S state will respond, creating again and sending to cache\n", my_indirect_id, __func__);
                 panic_if(read_pkt.packet->needsWritable(), "I[%d] %s: packet needs writable!\n", my_indirect_id, __func__);
-                createReadPacket(read_pkt.packet->getAddr(), 0, true, false); // cache_snoop_latency
+                createReadPacket(read_pkt.packet->getAddr(), 0, true, false);
+                (*maa->stats.IND_LoadsCacheHitAccessing[my_indirect_id])++;
             } else {
                 DPRINTF(MAAIndirect, "I[%d] %s: no cache responds (I), creating again and sending to memory\n", my_indirect_id, __func__);
-                createReadPacket(read_pkt.packet->getAddr(), 0, false, false); // cache_snoop_latency
+                createReadPacket(read_pkt.packet->getAddr(), 0, false, false);
+                (*maa->stats.IND_LoadsMemAccessing[my_indirect_id])++;
             }
             // We can continue sending the next packets anyway
         } else if (read_pkt.is_cached) {
@@ -810,17 +868,13 @@ bool IndirectAccessUnit::sendOutstandingWritePacket() {
 }
 bool IndirectAccessUnit::recvData(const Addr addr,
                                   uint8_t *dataptr,
-                                  std::vector<uint32_t> data,
-                                  std::vector<uint16_t> wids,
                                   bool is_block_cached) {
     std::vector addr_vec = maa->map_addr(addr);
     Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
     int row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL],
                                        addr_vec[ADDR_RANK_LEVEL],
                                        addr_vec[ADDR_BANKGROUP_LEVEL]);
-    std::vector<OffsetTableEntry> entries = row_table[row_table_idx].get_entry_recv(Grow_addr,
-                                                                                    addr,
-                                                                                    is_block_cached);
+    std::vector<OffsetTableEntry> entries = row_table[row_table_idx].get_entry_recv(Grow_addr, addr);
     DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), Grow(x%lx) from T[%d]!\n",
             my_indirect_id, __func__, entries.size(),
             addr, Grow_addr, row_table_idx);
@@ -828,11 +882,9 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         return false;
     }
     uint8_t new_data[block_size];
+    uint32_t *dataptr_u32_typed = (uint32_t *)dataptr;
+    uint64_t *dataptr_u64_typed = (uint64_t *)dataptr;
     std::memcpy(new_data, dataptr, block_size);
-    assert(wids.size() == block_size / word_size);
-    for (int i = 0; i < block_size / word_size; i++) {
-        assert(wids[i] == i);
-    }
     int num_recv_spd_read_accesses = 0;
     int num_recv_spd_write_accesses = 0;
     int num_recv_rt_accesses = entries.size();
@@ -842,35 +894,76 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         DPRINTF(MAAIndirect, "I[%d] %s: itr (%d) wid (%d) matched!\n", my_indirect_id, __func__, itr, wid);
         switch (my_instruction->opcode) {
         case Instruction::OpcodeType::INDIR_LD: {
-            maa->spd->setData<uint32_t>(my_dst_tile, itr, data[wid]);
+            if (my_word_size == 4) {
+                maa->spd->setData<uint32_t>(my_dst_tile, itr, dataptr_u32_typed[wid]);
+            } else {
+                maa->spd->setData<uint64_t>(my_dst_tile, itr, dataptr_u64_typed[wid]);
+            }
             num_recv_spd_write_accesses++;
             break;
         }
         case Instruction::OpcodeType::INDIR_ST: {
-            ((uint32_t *)new_data)[wid] = maa->spd->getData<uint32_t>(my_src_tile, itr);
+            if (my_word_size == 4) {
+                ((uint32_t *)new_data)[wid] = maa->spd->getData<uint32_t>(my_src_tile, itr);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
+                        my_indirect_id, __func__, wid, my_src_tile, itr, ((float *)new_data)[wid]);
+            } else {
+                ((uint64_t *)new_data)[wid] = maa->spd->getData<uint64_t>(my_src_tile, itr);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
+                        my_indirect_id, __func__, wid, my_src_tile, itr, ((double *)new_data)[wid]);
+            }
             num_recv_spd_read_accesses++;
-            DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
-                    my_indirect_id, __func__, wid, my_src_tile, itr, ((float *)new_data)[wid]);
             break;
         }
         case Instruction::OpcodeType::INDIR_RMW: {
+            num_recv_spd_read_accesses++;
             switch (my_instruction->datatype) {
+            case Instruction::DataType::UINT32_TYPE: {
+                uint32_t word_data = maa->spd->getData<uint32_t>(my_src_tile, itr);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%u) += SPD[%d][%d] (%u) = %u!\n",
+                        my_indirect_id, __func__, wid, ((uint32_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint32_t *)new_data)[wid] + word_data);
+                ((uint32_t *)new_data)[wid] += word_data;
+                break;
+            }
             case Instruction::DataType::INT32_TYPE: {
                 int32_t word_data = maa->spd->getData<int32_t>(my_src_tile, itr);
-                num_recv_spd_read_accesses++;
                 assert(my_instruction->optype == Instruction::OPType::ADD_OP);
                 DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%d) += SPD[%d][%d] (%d) = %d!\n",
-                        my_indirect_id, __func__, wid, ((int *)new_data)[wid], my_src_tile, itr, word_data, ((int *)new_data)[wid] + word_data);
+                        my_indirect_id, __func__, wid, ((int32_t *)new_data)[wid], my_src_tile, itr, word_data, ((int32_t *)new_data)[wid] + word_data);
                 ((int32_t *)new_data)[wid] += word_data;
                 break;
             }
             case Instruction::DataType::FLOAT32_TYPE: {
                 float word_data = maa->spd->getData<float>(my_src_tile, itr);
-                num_recv_spd_read_accesses++;
                 assert(my_instruction->optype == Instruction::OPType::ADD_OP);
                 DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%f) += SPD[%d][%d] (%f) = %f!\n",
                         my_indirect_id, __func__, wid, ((float *)new_data)[wid], my_src_tile, itr, word_data, ((float *)new_data)[wid] + word_data);
                 ((float *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::UINT64_TYPE: {
+                uint64_t word_data = maa->spd->getData<uint64_t>(my_src_tile, itr);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lu) += SPD[%d][%d] (%lu) = %lu!\n",
+                        my_indirect_id, __func__, wid, ((uint64_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint64_t *)new_data)[wid] + word_data);
+                ((uint64_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::INT64_TYPE: {
+                int64_t word_data = maa->spd->getData<int64_t>(my_src_tile, itr);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%ld) += SPD[%d][%d] (%ld) = %ld!\n",
+                        my_indirect_id, __func__, wid, ((int64_t *)new_data)[wid], my_src_tile, itr, word_data, ((int64_t *)new_data)[wid] + word_data);
+                ((int64_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::FLOAT64_TYPE: {
+                double word_data = maa->spd->getData<double>(my_src_tile, itr);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lf) += SPD[%d][%d] (%lf) = %lf!\n",
+                        my_indirect_id, __func__, wid, ((double *)new_data)[wid], my_src_tile, itr, word_data, ((double *)new_data)[wid] + word_data);
+                ((double *)new_data)[wid] += word_data;
                 break;
             }
             default:
@@ -900,17 +993,23 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
         write_pkt->allocate();
         write_pkt->setData(new_data);
-        for (int i = 0; i < block_size / word_size; i++) {
-            DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = %f!\n",
-                    my_indirect_id, __func__, i, write_pkt->getPtr<float>()[i]);
+        for (int i = 0; i < block_size / my_word_size; i++) {
+            if (my_word_size == 4)
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = %f!\n",
+                        my_indirect_id, __func__, i, write_pkt->getPtr<float>()[i]);
+            else
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = %f!\n",
+                        my_indirect_id, __func__, i, write_pkt->getPtr<double>()[i]);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles\n", my_indirect_id, __func__, write_pkt->print(), total_latency);
         my_outstanding_write_pkts.insert(IndirectAccessUnit::IndirectPacket(write_pkt, false, false, maa->getClockEdge(Cycles(total_latency))));
+        (*maa->stats.IND_StoresMemAccessing[my_indirect_id])++;
         scheduleNextSendWrite();
     } else {
         my_received_responses++;
         if (is_block_cached) {
             createReadPacketEvict(addr);
+            (*maa->stats.IND_Evicts[my_indirect_id])++;
             scheduleNextSendRead();
         } else {
             if (my_received_responses == my_expected_responses) {
@@ -994,348 +1093,26 @@ void IndirectAccessUnit::scheduleSendWritePacketEvent(int latency) {
     }
 }
 
-// IndirectAccessUnit::IndirectAccessUnitStats::IndirectAccessUnitStats(statistics::Group *parent)
-//     : statistics::Group(parent),
-//       ADD_STAT(numInstRD, statistics::units::Count::get(),
-//                "number of INDIRECT_LD instructions"),
-//       ADD_STAT(numInstWR, statistics::units::Count::get(),
-//                "number of INDIRECT_ST instructions"),
-//       ADD_STAT(numInstRMW, statistics::units::Count::get(),
-//                "number of INDIRECT_RMW instructions"),
-//       ADD_STAT(numInst, statistics::units::Count::get(),
-//                "number of instructions"),
-//       ADD_STAT(cyclesRD, statistics::units::Count::get(),
-//                "number of INDIRECT_LD cycles"),
-//       ADD_STAT(cyclesWR, statistics::units::Count::get(),
-//                "number of INDIRECT_ST cycles"),
-//       ADD_STAT(cyclesRMW, statistics::units::Count::get(),
-//                "number of INDIRECT_RMW cycles"),
-//       ADD_STAT(cycles, statistics::units::Count::get(),
-//                "number of cycles") {
-//     using namespace statistics;
-//     avgCPIRD = cyclesRD / numInstRD;
-//     avgCPIWR = cyclesWR / numInstWR;
-//     avgCPIRMW = cyclesRMW / numInstRMW;
-//     avgCPI = cycles / numInst;
-// }
-
-// void IndirectAccessUnit::IndirectAccessUnitStats::regStats() {
-//     using namespace statistics;
-
-//     statistics::Group::regStats();
-
-//     System *system = cache.system;
-//     const auto max_requestors = system->maxRequestors();
-
-//     for (auto &cs : cmd)
-//         cs->regStatsFromParent();
-
-//     for (int idx = 0; idx < MAX_CMD_REGIONS; ++idx) {
-//         for (auto &cs : cmdRegions[idx])
-//             cs->regStatsFromParent();
-//     }
-
-// // These macros make it easier to sum the right subset of commands and
-// // to change the subset of commands that are considered "demand" vs
-// // "non-demand"
-// #define SUM_DEMAND(s)                                           \
-//     (cmd[MemCmd::ReadReq]->s + cmd[MemCmd::WriteReq]->s +       \
-//      cmd[MemCmd::WriteLineReq]->s + cmd[MemCmd::ReadExReq]->s + \
-//      cmd[MemCmd::ReadCleanReq]->s + cmd[MemCmd::ReadSharedReq]->s)
-
-// #define SUM_DEMAND_REGION(s)                                                            \
-//     (cmdRegions[idx][MemCmd::ReadReq]->s + cmdRegions[idx][MemCmd::WriteReq]->s +       \
-//      cmdRegions[idx][MemCmd::WriteLineReq]->s + cmdRegions[idx][MemCmd::ReadExReq]->s + \
-//      cmdRegions[idx][MemCmd::ReadCleanReq]->s + cmdRegions[idx][MemCmd::ReadSharedReq]->s)
-
-// // should writebacks be included here?  prior code was inconsistent...
-// #define SUM_NON_DEMAND(s)                                    \
-//     (cmd[MemCmd::SoftPFReq]->s + cmd[MemCmd::HardPFReq]->s + \
-//      cmd[MemCmd::SoftPFExReq]->s)
-
-// #define SUM_NON_DEMAND_REGION(s)                                                     \
-//     (cmdRegions[idx][MemCmd::SoftPFReq]->s + cmdRegions[idx][MemCmd::HardPFReq]->s + \
-//      cmdRegions[idx][MemCmd::SoftPFExReq]->s)
-
-//     for (int idx = 0; idx < MAX_CMD_REGIONS + 1; ++idx) {
-//         // printf("Registering demandHits\n");
-//         (*demandHits[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandHits[idx]) = SUM_DEMAND(hits);
-//         } else {
-//             (*demandHits[idx]) = SUM_DEMAND_REGION(hits);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandHits[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallHits\n");
-//         (*overallHits[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallHits[idx]) = (*demandHits[idx]) + SUM_NON_DEMAND(hits);
-//         } else {
-//             (*overallHits[idx]) = (*demandHits[idx]) + SUM_NON_DEMAND_REGION(hits);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallHits[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMisses\n");
-//         (*demandMisses[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandMisses[idx]) = SUM_DEMAND(misses);
-//         } else {
-//             (*demandMisses[idx]) = SUM_DEMAND_REGION(misses);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMisses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMisses\n");
-//         (*overallMisses[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMisses[idx]) = (*demandMisses[idx]) + SUM_NON_DEMAND(misses);
-//         } else {
-//             (*overallMisses[idx]) = (*demandMisses[idx]) + SUM_NON_DEMAND_REGION(misses);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMisses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMissLatency\n");
-//         (*demandMissLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandMissLatency[idx]) = SUM_DEMAND(missLatency);
-//         } else {
-//             (*demandMissLatency[idx]) = SUM_DEMAND_REGION(missLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMissLatency\n");
-//         (*overallMissLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMissLatency[idx]) = (*demandMissLatency[idx]) + SUM_NON_DEMAND(missLatency);
-//         } else {
-//             (*overallMissLatency[idx]) = (*demandMissLatency[idx]) + SUM_NON_DEMAND_REGION(missLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandHitLatency\n");
-//         (*demandHitLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandHitLatency[idx]) = SUM_DEMAND(hitLatency);
-//         } else {
-//             (*demandHitLatency[idx]) = SUM_DEMAND_REGION(hitLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandHitLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallHitLatency\n");
-//         (*overallHitLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallHitLatency[idx]) = (*demandHitLatency[idx]) + SUM_NON_DEMAND(hitLatency);
-//         } else {
-//             (*overallHitLatency[idx]) = (*demandHitLatency[idx]) + SUM_NON_DEMAND_REGION(hitLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallHitLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandAccesses\n");
-//         (*demandAccesses[idx]).flags(total | nozero | nonan);
-//         (*demandAccesses[idx]) = (*demandHits[idx]) + (*demandMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandAccesses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallAccesses\n");
-//         (*overallAccesses[idx]).flags(total | nozero | nonan);
-//         (*overallAccesses[idx]) = (*overallHits[idx]) + (*overallMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallAccesses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMissRate\n");
-//         (*demandMissRate[idx]).flags(total | nozero | nonan);
-//         (*demandMissRate[idx]) = (*demandMisses[idx]) / (*demandAccesses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMissRate[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMissRate\n");
-//         (*overallMissRate[idx]).flags(total | nozero | nonan);
-//         (*overallMissRate[idx]) = (*overallMisses[idx]) / (*overallAccesses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMissRate[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandAvgMissLatency\n");
-//         (*demandAvgMissLatency[idx]).flags(total | nozero | nonan);
-//         (*demandAvgMissLatency[idx]) = (*demandMissLatency[idx]) / (*demandMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandAvgMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallAvgMissLatency\n");
-//         (*overallAvgMissLatency[idx]).flags(total | nozero | nonan);
-//         (*overallAvgMissLatency[idx]) = (*overallMissLatency[idx]) / (*overallMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallAvgMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering blockedCycles\n");
-//         (*blockedCycles[idx]).init(NUM_BLOCKED_CAUSES).flags(total | nozero | nonan);
-//         (*blockedCycles[idx]).subname(Blocked_NoMSHRs, "no_mshrs").subname(Blocked_NoTargets, "no_targets");
-
-//         // printf("Registering blockedCauses\n");
-//         (*blockedCauses[idx]).init(NUM_BLOCKED_CAUSES).flags(total | nozero | nonan);
-//         (*blockedCauses[idx]).subname(Blocked_NoMSHRs, "no_mshrs").subname(Blocked_NoTargets, "no_targets");
-
-//         // printf("Registering avgBlocked\n");
-//         (*avgBlocked[idx]).flags(total | nozero | nonan);
-//         (*avgBlocked[idx]).subname(Blocked_NoMSHRs, "no_mshrs").subname(Blocked_NoTargets, "no_targets");
-//         (*avgBlocked[idx]) = (*blockedCycles[idx]) / (*blockedCauses[idx]);
-
-//         // printf("Registering writebacks\n");
-//         (*writebacks[idx]).init(max_requestors).flags(total | nozero | nonan);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*writebacks[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMshrHits\n");
-//         (*demandMshrHits[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandMshrHits[idx]) = SUM_DEMAND(mshrHits);
-//         } else {
-//             (*demandMshrHits[idx]) = SUM_DEMAND_REGION(mshrHits);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMshrHits[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrHits\n");
-//         (*overallMshrHits[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMshrHits[idx]) = (*demandMshrHits[idx]) + SUM_NON_DEMAND(mshrHits);
-//         } else {
-//             (*overallMshrHits[idx]) = (*demandMshrHits[idx]) + SUM_NON_DEMAND_REGION(mshrHits);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrHits[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMshrMisses\n");
-//         (*demandMshrMisses[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandMshrMisses[idx]) = SUM_DEMAND(mshrMisses);
-//         } else {
-//             (*demandMshrMisses[idx]) = SUM_DEMAND_REGION(mshrMisses);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMshrMisses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrMisses\n");
-//         (*overallMshrMisses[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMshrMisses[idx]) = (*demandMshrMisses[idx]) + SUM_NON_DEMAND(mshrMisses);
-//         } else {
-//             (*overallMshrMisses[idx]) = (*demandMshrMisses[idx]) + SUM_NON_DEMAND_REGION(mshrMisses);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrMisses[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMshrMissLatency\n");
-//         (*demandMshrMissLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*demandMshrMissLatency[idx]) = SUM_DEMAND(mshrMissLatency);
-//         } else {
-//             (*demandMshrMissLatency[idx]) = SUM_DEMAND_REGION(mshrMissLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMshrMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrMissLatency\n");
-//         (*overallMshrMissLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMshrMissLatency[idx]) = (*demandMshrMissLatency[idx]) + SUM_NON_DEMAND(mshrMissLatency);
-//         } else {
-//             (*overallMshrMissLatency[idx]) = (*demandMshrMissLatency[idx]) + SUM_NON_DEMAND_REGION(mshrMissLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrUncacheable\n");
-//         (*overallMshrUncacheable[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMshrUncacheable[idx]) = SUM_DEMAND(mshrUncacheable) + SUM_NON_DEMAND(mshrUncacheable);
-//         } else {
-//             (*overallMshrUncacheable[idx]) = SUM_DEMAND_REGION(mshrUncacheable) + SUM_NON_DEMAND_REGION(mshrUncacheable);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrUncacheable[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrUncacheableLatency\n");
-//         (*overallMshrUncacheableLatency[idx]).flags(total | nozero | nonan);
-//         if (idx == MAX_CMD_REGIONS) {
-//             (*overallMshrUncacheableLatency[idx]) = SUM_DEMAND(mshrUncacheableLatency) + SUM_NON_DEMAND(mshrUncacheableLatency);
-//         } else {
-//             (*overallMshrUncacheableLatency[idx]) = SUM_DEMAND_REGION(mshrUncacheableLatency) + SUM_NON_DEMAND_REGION(mshrUncacheableLatency);
-//         }
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrUncacheableLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandMshrMissRate\n");
-//         (*demandMshrMissRate[idx]).flags(total | nozero | nonan);
-//         (*demandMshrMissRate[idx]) = (*demandMshrMisses[idx]) / (*demandAccesses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandMshrMissRate[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallMshrMissRate\n");
-//         (*overallMshrMissRate[idx]).flags(total | nozero | nonan);
-//         (*overallMshrMissRate[idx]) = (*overallMshrMisses[idx]) / (*overallAccesses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallMshrMissRate[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering demandAvgMshrMissLatency\n");
-//         (*demandAvgMshrMissLatency[idx]).flags(total | nozero | nonan);
-//         (*demandAvgMshrMissLatency[idx]) = (*demandMshrMissLatency[idx]) / (*demandMshrMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*demandAvgMshrMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallAvgMshrMissLatency\n");
-//         (*overallAvgMshrMissLatency[idx]).flags(total | nozero | nonan);
-//         (*overallAvgMshrMissLatency[idx]) = (*overallMshrMissLatency[idx]) / (*overallMshrMisses[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallAvgMshrMissLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering overallAvgMshrUncacheableLatency\n");
-//         (*overallAvgMshrUncacheableLatency[idx]).flags(total | nozero | nonan);
-//         (*overallAvgMshrUncacheableLatency[idx]) = (*overallMshrUncacheableLatency[idx]) / (*overallMshrUncacheable[idx]);
-//         for (int i = 0; i < max_requestors; i++) {
-//             (*overallAvgMshrUncacheableLatency[idx]).subname(i, system->getRequestorName(i));
-//         }
-
-//         // printf("Registering replacements\n");
-//         (*replacements[idx]).flags(nozero | nonan);
-//         // printf("Registering dataExpansions\n");
-//         (*dataExpansions[idx]).flags(nozero | nonan);
-//         // printf("Registering dataContractions\n");
-//         (*dataContractions[idx]).flags(nozero | nonan);
-//     }
+// bool IndirectAccessUnit::checkBlockCached(Addr physical_addr) {
+//     RequestPtr real_req = std::make_shared<Request>(physical_addr,
+//                                                     block_size,
+//                                                     flags,
+//                                                     maa->requestorId);
+//     PacketPtr curr_pkt = new Packet(real_req, MemCmd::CleanEvict);
+//     curr_pkt->setExpressSnoop();
+//     curr_pkt->headerDelay = curr_pkt->payloadDelay = 0;
+//     DPRINTF(MAAIndirect, "I[%d] %s: sending snoop of %s\n", my_indirect_id, __func__, curr_pkt->print());
+//     maa->cpuSidePort.sendTimingSnoopReq(curr_pkt);
+//     // assert(curr_pkt->satisfied() == false);
+//     DPRINTF(MAAIndirect, "I[%d] %s: Snoop of %s returned with cache responding (%s), has sharers (%s), had writable (%s), satisfied (%s), is block cached (%s)\n",
+//             my_indirect_id,
+//             __func__,
+//             curr_pkt->print(),
+//             curr_pkt->cacheResponding() ? "True" : "False",
+//             curr_pkt->hasSharers() ? "True" : "False",
+//             curr_pkt->responderHadWritable() ? "True" : "False",
+//             curr_pkt->satisfied() ? "True" : "False",
+//             curr_pkt->isBlockCached() ? "True" : "False");
+//     return curr_pkt->isBlockCached();
 // }
 } // namespace gem5
