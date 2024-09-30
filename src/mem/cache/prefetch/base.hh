@@ -59,56 +59,55 @@
 #include "sim/clocked_object.hh"
 #include "sim/probe/probe.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 struct BasePrefetcherParams;
 class ProbeManager;
 class System;
 
-namespace prefetch
-{
+namespace prefetch {
 
-class Base : public ClockedObject
-{
-    class PrefetchListener : public ProbeListenerArgBase<CacheAccessProbeArg>
-    {
-      public:
+class Base : public ClockedObject {
+    class PrefetchListener : public ProbeListenerArgBase<CacheAccessProbeArg> {
+    public:
         PrefetchListener(Base &_parent, ProbeManager *pm,
                          const std::string &name, bool _isFill = false,
-                         bool _miss = false)
+                         bool _miss = false, bool l1_req = false, bool l1_resp = false)
             : ProbeListenerArgBase(pm, name),
-              parent(_parent), isFill(_isFill), miss(_miss) {}
+              parent(_parent), isFill(_isFill), miss(_miss),
+              l1_req(l1_req), l1_resp(l1_resp) {}
         void notify(const CacheAccessProbeArg &arg) override;
-      protected:
+
+    protected:
         Base &parent;
         const bool isFill;
         const bool miss;
+
+        const bool l1_req;
+        const bool l1_resp;
     };
 
     using EvictionInfo = CacheDataUpdateProbeArg;
 
-    class PrefetchEvictListener : public ProbeListenerArgBase<EvictionInfo>
-    {
-      public:
+    class PrefetchEvictListener : public ProbeListenerArgBase<EvictionInfo> {
+    public:
         PrefetchEvictListener(Base &_parent, ProbeManager *pm,
                               const std::string &name)
             : ProbeListenerArgBase(pm, name), parent(_parent) {}
         void notify(const EvictionInfo &info) override;
-      protected:
+
+    protected:
         Base &parent;
     };
 
     std::vector<ProbeListener *> listeners;
 
-  public:
-
+public:
     /**
      * Class containing the information needed by the prefetch to train and
      * generate new prefetch requests.
      */
-    class PrefetchInfo
-    {
+    class PrefetchInfo {
         /** The address used to train and generate prefetches */
         Addr address;
         /** The program counter that generated this address. */
@@ -127,25 +126,29 @@ class Base : public ClockedObject
         Addr paddress;
         /** Whether this event comes from a cache miss */
         bool cacheMiss;
+        /** ContexID of the pc */
+        ContextID cID;
         /** Pointer to the associated request data */
         uint8_t *data;
 
-      public:
+    public:
         /**
          * Obtains the address value of this Prefetcher address.
          * @return the addres value.
          */
-        Addr getAddr() const
-        {
+        Addr getAddr() const {
             return address;
+        }
+
+        void setAddr(Addr _addr) {
+            address = _addr;
         }
 
         /**
          * Returns true if the address targets the secure memory space.
          * @return true if the address targets the secure memory space.
          */
-        bool isSecure() const
-        {
+        bool isSecure() const {
             return secure;
         }
 
@@ -153,8 +156,7 @@ class Base : public ClockedObject
          * Returns the program counter that generated this request.
          * @return the pc value
          */
-        Addr getPC() const
-        {
+        Addr getPC() const {
             assert(hasPC());
             return pc;
         }
@@ -163,17 +165,20 @@ class Base : public ClockedObject
          * Returns true if the associated program counter is valid
          * @return true if the program counter has a valid value
          */
-        bool hasPC() const
-        {
+        bool hasPC() const {
             return validPC;
+        }
+
+        void setPC(Addr pc_in) {
+            pc = pc_in;
+            validPC = true;
         }
 
         /**
          * Gets the requestor ID that generated this address
          * @return the requestor ID that generated this address
          */
-        RequestorID getRequestorId() const
-        {
+        RequestorID getRequestorId() const {
             return requestorId;
         }
 
@@ -181,8 +186,7 @@ class Base : public ClockedObject
          * Gets the size of the request triggering this event
          * @return the size in bytes of the request triggering this event
          */
-        unsigned int getSize() const
-        {
+        unsigned int getSize() const {
             return size;
         }
 
@@ -191,8 +195,7 @@ class Base : public ClockedObject
          * request
          * @return true if the request causing this event is a write request
          */
-        bool isWrite() const
-        {
+        bool isWrite() const {
             return write;
         }
 
@@ -200,8 +203,7 @@ class Base : public ClockedObject
          * Gets the physical address of the request
          * @return physical address of the request
          */
-        Addr getPaddr() const
-        {
+        Addr getPaddr() const {
             return paddress;
         }
 
@@ -209,9 +211,12 @@ class Base : public ClockedObject
          * Check if this event comes from a cache miss
          * @result true if this event comes from a cache miss
          */
-        bool isCacheMiss() const
-        {
+        bool isCacheMiss() const {
             return cacheMiss;
+        }
+
+        ContextID getcID() const {
+            return cID;
         }
 
         /**
@@ -221,20 +226,19 @@ class Base : public ClockedObject
          */
         template <typename T>
         inline T
-        get(ByteOrder endian) const
-        {
+        get(ByteOrder endian) const {
             if (data == nullptr) {
                 panic("PrefetchInfo::get called with a request with no data.");
             }
             switch (endian) {
-                case ByteOrder::big:
-                    return betoh(*(T*)data);
+            case ByteOrder::big:
+                return betoh(*(T *)data);
 
-                case ByteOrder::little:
-                    return letoh(*(T*)data);
+            case ByteOrder::little:
+                return letoh(*(T *)data);
 
-                default:
-                    panic("Illegal byte order in PrefetchInfo::get()\n");
+            default:
+                panic("Illegal byte order in PrefetchInfo::get()\n");
             };
         }
 
@@ -243,10 +247,9 @@ class Base : public ClockedObject
          * @param pfi PrefetchInfo to compare against
          * @return True if this object and the provided one are equal
          */
-        bool sameAddr(PrefetchInfo const &pfi) const
-        {
+        bool sameAddr(PrefetchInfo const &pfi) const {
             return this->getAddr() == pfi.getAddr() &&
-                this->isSecure() == pfi.isSecure();
+                   this->isSecure() == pfi.isSecure();
         }
 
         /**
@@ -266,18 +269,23 @@ class Base : public ClockedObject
          */
         PrefetchInfo(PrefetchInfo const &pfi, Addr addr);
 
-        ~PrefetchInfo()
-        {
+        /**
+         * Fake PrefetchInfo in order to triggering prefetch 
+         * by cache refill
+         */
+        PrefetchInfo(Addr addr, Addr pc, RequestorID requestorID, ContextID cID);
+
+        ~PrefetchInfo() {
             delete[] data;
         }
     };
 
-  protected:
-
+protected:
     // PARAMETERS
+    CacheAccessor *cache_accessor;
 
     /** Pointer to the parent system. */
-    System* system;
+    System *system;
 
     /** Pointer to the parent cache's probe manager. */
     ProbeManager *probeManager;
@@ -337,8 +345,7 @@ class Base : public ClockedObject
     Addr pageOffset(Addr a) const;
     /** Build the address of the i-th block inside the page */
     Addr pageIthBlockAddress(Addr page, uint32_t i) const;
-    struct StatGroup : public statistics::Group
-    {
+    struct StatGroup : public statistics::Group {
         StatGroup(statistics::Group *parent);
         statistics::Scalar demandMshrMisses;
         statistics::Scalar pfIssued;
@@ -374,14 +381,18 @@ class Base : public ClockedObject
     uint64_t usefulPrefetches;
 
     /** Registered mmu for address translations */
-    BaseMMU * mmu;
+    BaseMMU *mmu;
 
-  public:
+public:
     Base(const BasePrefetcherParams &p);
     virtual ~Base() = default;
 
     virtual void
     setParentInfo(System *sys, ProbeManager *pm, unsigned blk_size);
+
+    void setCacheAccessor(CacheAccessor *ca) {
+        cache_accessor = ca;
+    }
 
     /**
      * Notify prefetcher of cache access (may be any access or just
@@ -391,44 +402,46 @@ class Base : public ClockedObject
     notify(const CacheAccessProbeArg &acc, const PrefetchInfo &pfi) = 0;
 
     /** Notify prefetcher of cache fill */
-    virtual void notifyFill(const CacheAccessProbeArg &acc)
-    {}
+    virtual void notifyFill(const CacheAccessProbeArg &acc) {}
+
+    virtual void notifyFill(const CacheAccessProbeArg &acc, const u_int8_t *data_ptr) {}
+
+    // Probe AddrReq to L1 for prefetch detection
+    virtual void notifyL1Req(const CacheAccessProbeArg &acc) {}
+    // Probe DataResp from L1 for prefetch detection
+    virtual void notifyL1Resp(const CacheAccessProbeArg &acc) {}
 
     /** Notify prefetcher of cache eviction */
-    virtual void notifyEvict(const EvictionInfo &info)
-    {}
+    virtual void notifyEvict(const EvictionInfo &info) {}
 
     virtual PacketPtr getPacket() = 0;
 
     virtual Tick nextPrefetchReadyTime() const = 0;
 
+    void prefetchHit(const CacheAccessProbeArg &acc, bool miss);
+
     void
-    prefetchUnused()
-    {
+    prefetchUnused() {
         prefetchStats.pfUnused++;
     }
 
     void
-    incrDemandMhsrMisses()
-    {
+    incrDemandMhsrMisses() {
         prefetchStats.demandMshrMisses++;
     }
 
     void
-    pfHitInCache()
-    {
+    pfHitInCache() {
         prefetchStats.pfHitInCache++;
     }
 
     void
-    pfHitInMSHR()
-    {
+    pfHitInMSHR() {
         prefetchStats.pfHitInMSHR++;
     }
 
     void
-    pfHitInWB()
-    {
+    pfHitInWB() {
         prefetchStats.pfHitInWB++;
     }
 
@@ -449,7 +462,8 @@ class Base : public ClockedObject
      * @param obj The SimObject pointer to listen from
      * @param name The probe name
      */
-    void addEventProbe(SimObject *obj, const char *name);
+    void addEventProbe(SimObject *obj, const char *name, bool isFill, bool isMiss,
+                       bool l1_req, bool l1_resp);
 
     /**
      * Add a BaseMMU object to be used whenever a translation is needed.

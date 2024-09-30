@@ -147,8 +147,16 @@ protected:
      */
     PCTable *allocateNewContext(int context);
 
+    /**
+     * Call for advanced function when ready to issue stride prefetch.
+     * It should do nothing for StridePrefetcher itself.
+    */
+    virtual void callReadytoIssue(const PrefetchInfo &pfi) {};
+
 public:
     Stride(const StridePrefetcherParams &p);
+
+    bool checkStride(Addr addr) const;
 
     void calculatePrefetch(const PrefetchInfo &pfi,
                            std::vector<AddrPriority> &addresses,

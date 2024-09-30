@@ -514,4 +514,8 @@ Packet::getHtmTransactionUid() const {
     return htmTransactionUid;
 }
 
+bool Packet::validData() const {
+    return flags.isSet(STATIC_DATA | DYNAMIC_DATA);
+}
+
 } // namespace gem5

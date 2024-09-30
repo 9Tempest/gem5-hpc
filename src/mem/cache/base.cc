@@ -53,6 +53,7 @@
 #include "debug/CacheRepl.hh"
 #include "debug/CacheVerbose.hh"
 #include "debug/HWPrefetch.hh"
+#include "debug/RequestSlot.hh"
 #include "mem/cache/compressors/base.hh"
 #include "mem/cache/mshr.hh"
 #include "mem/cache/prefetch/base.hh"
@@ -125,8 +126,10 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
     tempBlock = new TempCacheBlk(blkSize);
 
     tags->tagsInit();
-    if (prefetcher)
+    if (prefetcher) {
         prefetcher->setParentInfo(system, getProbeManager(), getBlockSize());
+        prefetcher->setCacheAccessor(&accessor);
+    }
 
     fatal_if(compressor && !dynamic_cast<CompressedTags *>(tags),
              "The tags of compressed cache %s must derive from CompressedTags",
@@ -431,18 +434,23 @@ void BaseCache::recvTimingReq(PacketPtr pkt) {
 
     if (satisfied) {
         // notify before anything else as later handleTimingReqHit might turn
-        // the packet in a response
+        // the packet in a responseC
         ppHit->notify(CacheAccessProbeArg(pkt, accessor));
 
         if (prefetcher && blk && blk->wasPrefetched()) {
             DPRINTF(Cache, "Hit on prefetch for addr %#x (%s)\n",
                     pkt->getAddr(), pkt->isSecure() ? "s" : "ns");
+            prefetcher->prefetchHit(CacheAccessProbeArg(pkt, accessor), false);
             blk->clearPrefetched();
         }
 
         handleTimingReqHit(pkt, blk, request_time);
     } else {
         handleTimingReqMiss(pkt, blk, forward_time, request_time);
+
+        if (prefetcher) {
+            prefetcher->prefetchHit(CacheAccessProbeArg(pkt, accessor), true);
+        }
 
         ppMiss->notify(CacheAccessProbeArg(pkt, accessor));
     }
@@ -535,7 +543,7 @@ void BaseCache::recvTimingResp(PacketPtr pkt) {
         const bool allocate = (writeAllocator && mshr->wasWholeLineWrite) ? writeAllocator->allocate() : mshr->allocOnFill();
         blk = handleFill(pkt, blk, writebacks, allocate);
         assert(blk != nullptr);
-        ppFill->notify(CacheAccessProbeArg(pkt, accessor));
+        // ppFill->notify(CacheAccessProbeArg(pkt, accessor));
     }
 
     // Don't want to promote the Locked RMW Read until
@@ -876,6 +884,13 @@ BaseCache::getNextQueueEntry() {
                                     "dropped.\n",
                         pf_addr);
                 prefetcher->pfHitInCache();
+
+                CacheBlk *try_cache_blk = getCacheBlk(pf_addr, false);
+
+                if (try_cache_blk != nullptr && try_cache_blk->data) {
+                    prefetcher->notifyFill(CacheAccessProbeArg(pkt, accessor), try_cache_blk->data);
+                }
+
                 // free the request and packet
                 delete pkt;
             } else if (mshrQueue.findMatch(pf_addr, pkt->isSecure())) {
@@ -1344,6 +1359,7 @@ bool BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
         assert(!pkt->needsResponse());
 
         updateBlockData(blk, pkt, has_old_data);
+        ppFill->notify(CacheAccessProbeArg(pkt, accessor));
         DPRINTF(Cache, "%s new state is %s\n", __func__, blk->print());
         incHitCount(pkt);
 
@@ -2486,6 +2502,8 @@ void BaseCache::regProbePoints() {
     ppMiss = new ProbePointArg<CacheAccessProbeArg>(this->getProbeManager(), "Miss");
     ppFill = new ProbePointArg<CacheAccessProbeArg>(this->getProbeManager(), "Fill");
     ppDataUpdate = new ProbePointArg<CacheDataUpdateProbeArg>(this->getProbeManager(), "Data Update");
+    ppL1Req = new ProbePointArg<CacheAccessProbeArg>(this->getProbeManager(), "Request");
+    ppL1Resp = new ProbePointArg<CacheAccessProbeArg>(this->getProbeManager(), "Response");
 }
 
 ///////////////
@@ -2519,6 +2537,8 @@ bool BaseCache::CpuSidePort::tryTiming(PacketPtr pkt) {
 
 bool BaseCache::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     assert(pkt->isRequest());
+
+    cache.ppL1Req->notify(CacheAccessProbeArg(pkt, cache.accessor));
 
     if (cache.system->bypassCaches()) {
         // Just forward the packet if caches are disabled.

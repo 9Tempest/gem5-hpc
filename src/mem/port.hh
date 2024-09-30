@@ -58,8 +58,7 @@
 #include "mem/protocol/timing.hh"
 #include "sim/port.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
 class SimObject;
 
@@ -74,51 +73,46 @@ class ResponsePort;
  * of the Packet. The stack in the TracingExtension holds the name of the
  * ports that the Packet has passed through.
  */
-class TracingExtension : public gem5::Extension<Packet, TracingExtension>
-{
- public:
-   TracingExtension() = default;
-   TracingExtension(const std::stack<std::string>& q) { trace_ = q; }
+class TracingExtension : public gem5::Extension<Packet, TracingExtension> {
+public:
+    TracingExtension() = default;
+    TracingExtension(const std::stack<std::string> &q) { trace_ = q; }
 
-   std::unique_ptr<ExtensionBase> clone() const override
-   {
-       return std::make_unique<TracingExtension>(trace_);
-   }
+    std::unique_ptr<ExtensionBase> clone() const override {
+        return std::make_unique<TracingExtension>(trace_);
+    }
 
-   void
-   add(std::string request_port, std::string response_port, gem5::Addr addr)
-   {
-       trace_.push(request_port + csprintf(" addr=%#llx", addr));
-       trace_.push(response_port);
-   }
+    void
+    add(std::string request_port, std::string response_port, gem5::Addr addr) {
+        trace_.push(request_port + csprintf(" addr=%#llx", addr));
+        trace_.push(response_port);
+    }
 
-   void
-   remove()
-   {
-       trace_.pop();  // Remove the response port name.
-       trace_.pop();  // Remove the request port name.
-   }
+    void
+    remove() {
+        trace_.pop(); // Remove the response port name.
+        trace_.pop(); // Remove the request port name.
+    }
 
-   bool empty() { return trace_.empty(); }
-   std::stack<std::string>& getTrace() { return trace_; }
-   std::string getTraceInString()
-   {
-       std::stringstream port_trace;
-       std::stack<std::string> copy_stack = trace_;
-       port_trace << "Port trace of the Packet (" << std::endl
-                  << "[Destination] ";
-       while (!copy_stack.empty()) {
-           if (copy_stack.size() == 1)
-               port_trace << "[Source] ";
-           port_trace << copy_stack.top() << std::endl;
-           copy_stack.pop();
-       }
-       port_trace << ")";
-       return port_trace.str();
-   }
+    bool empty() { return trace_.empty(); }
+    std::stack<std::string> &getTrace() { return trace_; }
+    std::string getTraceInString() {
+        std::stringstream port_trace;
+        std::stack<std::string> copy_stack = trace_;
+        port_trace << "Port trace of the Packet (" << std::endl
+                   << "[Destination] ";
+        while (!copy_stack.empty()) {
+            if (copy_stack.size() == 1)
+                port_trace << "[Source] ";
+            port_trace << copy_stack.top() << std::endl;
+            copy_stack.pop();
+        }
+        port_trace << ")";
+        return port_trace.str();
+    }
 
-  private:
-   std::stack<std::string> trace_;
+private:
+    std::stack<std::string> trace_;
 };
 
 /**
@@ -131,24 +125,22 @@ class TracingExtension : public gem5::Extension<Packet, TracingExtension>
  * The three protocols are atomic, timing, and functional, each with its own
  * header file.
  */
-class RequestPort: public Port, public AtomicRequestProtocol,
-    public TimingRequestProtocol, public FunctionalRequestProtocol
-{
+class RequestPort : public Port, public AtomicRequestProtocol, public TimingRequestProtocol, public FunctionalRequestProtocol {
     friend class ResponsePort;
 
-  private:
+private:
     ResponsePort *_responsePort;
 
-  protected:
+protected:
     SimObject &owner;
 
-  public:
+public:
     [[deprecated("RequestPort ownership is deprecated. "
                  "Owner should now be registered in derived classes.")]]
-    RequestPort(const std::string& name, SimObject* _owner,
-                PortID id=InvalidPortID);
+    RequestPort(const std::string &name, SimObject *_owner,
+                PortID id = InvalidPortID);
 
-    RequestPort(const std::string& name, PortID id=InvalidPortID);
+    RequestPort(const std::string &name, PortID id = InvalidPortID);
 
     virtual ~RequestPort();
 
@@ -185,7 +177,7 @@ class RequestPort: public Port, public AtomicRequestProtocol,
      */
     void printAddr(Addr a);
 
-  public:
+public:
     /* The atomic protocol. */
 
     /**
@@ -211,7 +203,7 @@ class RequestPort: public Port, public AtomicRequestProtocol,
      */
     Tick sendAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor);
 
-  public:
+public:
     /* The functional protocol. */
 
     /**
@@ -236,9 +228,9 @@ class RequestPort: public Port, public AtomicRequestProtocol,
      *        passing the request further downstream.
      */
     void sendMemBackdoorReq(const MemBackdoorReq &req,
-            MemBackdoorPtr &backdoor);
+                            MemBackdoorPtr &backdoor);
 
-  public:
+public:
     /* The timing protocol. */
 
     /**
@@ -286,7 +278,7 @@ class RequestPort: public Port, public AtomicRequestProtocol,
      */
     virtual void sendRetryResp();
 
-  protected:
+protected:
     /**
      * Called to receive an address range change from the peer response
      * port. The default implementation ignores the change and does
@@ -294,44 +286,39 @@ class RequestPort: public Port, public AtomicRequestProtocol,
      * needs to be aware of the address ranges, e.g. in an
      * interconnect component like a bus.
      */
-    virtual void recvRangeChange() { }
+    virtual void recvRangeChange() {}
 
     /**
      * Default implementations.
      */
     Tick
-    recvAtomicSnoop(PacketPtr pkt) override
-    {
+    recvAtomicSnoop(PacketPtr pkt) override {
         panic("%s was not expecting an atomic snoop request\n", name());
         return 0;
     }
 
     void
-    recvFunctionalSnoop(PacketPtr pkt) override
-    {
+    recvFunctionalSnoop(PacketPtr pkt) override {
         panic("%s was not expecting a functional snoop request\n", name());
     }
 
     void
-    recvTimingSnoopReq(PacketPtr pkt) override
-    {
+    recvTimingSnoopReq(PacketPtr pkt) override {
         panic("%s was not expecting a timing snoop request.\n", name());
     }
 
     void
-    recvRetrySnoopResp() override
-    {
+    recvRetrySnoopResp() override {
         panic("%s was not expecting a snoop retry.\n", name());
     }
 
-  private:
+private:
     void addTrace(PacketPtr pkt) const;
     void removeTrace(PacketPtr pkt) const;
 };
 
-class [[deprecated]] MasterPort : public RequestPort
-{
-  public:
+class [[deprecated]] MasterPort : public RequestPort {
+public:
     using RequestPort::RequestPort;
 };
 
@@ -344,26 +331,24 @@ class [[deprecated]] MasterPort : public RequestPort
  * The three protocols are atomic, timing, and functional, each with its own
  * header file.
  */
-class ResponsePort : public Port, public AtomicResponseProtocol,
-    public TimingResponseProtocol, public FunctionalResponseProtocol
-{
+class ResponsePort : public Port, public AtomicResponseProtocol, public TimingResponseProtocol, public FunctionalResponseProtocol {
     friend class RequestPort;
 
-  private:
-    RequestPort* _requestPort;
+private:
+    RequestPort *_requestPort;
 
     bool defaultBackdoorWarned;
 
-  protected:
-    SimObject& owner;
+protected:
+    SimObject &owner;
 
-  public:
+public:
     [[deprecated("ResponsePort ownership is deprecated. "
                  "Owner should now be registered in derived classes.")]]
-    ResponsePort(const std::string& name, SimObject* _owner,
-                 PortID id=InvalidPortID);
+    ResponsePort(const std::string &name, SimObject *_owner,
+                 PortID id = InvalidPortID);
 
-    ResponsePort(const std::string& name, PortID id=InvalidPortID);
+    ResponsePort(const std::string &name, PortID id = InvalidPortID);
 
     virtual ~ResponsePort();
 
@@ -394,7 +379,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
     void unbind() override {}
     void bind(Port &peer) override {}
 
-  public:
+public:
     /* The atomic protocol. */
 
     /**
@@ -407,8 +392,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * @return Estimated latency of access.
      */
     Tick
-    sendAtomicSnoop(PacketPtr pkt)
-    {
+    sendAtomicSnoop(PacketPtr pkt) {
         try {
             return AtomicResponseProtocol::sendSnoop(_requestPort, pkt);
         } catch (UnboundPortException) {
@@ -416,7 +400,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
         }
     }
 
-  public:
+public:
     /* The functional protocol. */
 
     /**
@@ -427,8 +411,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * @param pkt Snoop packet to send.
      */
     void
-    sendFunctionalSnoop(PacketPtr pkt) const
-    {
+    sendFunctionalSnoop(PacketPtr pkt) const {
         try {
             FunctionalResponseProtocol::sendSnoop(_requestPort, pkt);
         } catch (UnboundPortException) {
@@ -436,7 +419,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
         }
     }
 
-  public:
+public:
     /* The timing protocol. */
 
     /**
@@ -450,9 +433,8 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      *
      * @return If the send was successful or not.
     */
-    bool
-    sendTimingResp(PacketPtr pkt)
-    {
+    virtual bool
+    sendTimingResp(PacketPtr pkt) {
         try {
             _requestPort->removeTrace(pkt);
             bool succ = TimingResponseProtocol::sendResp(_requestPort, pkt);
@@ -472,8 +454,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * @param pkt Packet to send.
      */
     void
-    sendTimingSnoopReq(PacketPtr pkt)
-    {
+    sendTimingSnoopReq(PacketPtr pkt) {
         try {
             TimingResponseProtocol::sendSnoopReq(_requestPort, pkt);
         } catch (UnboundPortException) {
@@ -486,8 +467,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * sendTimingReq to this response port and failed.
      */
     void
-    sendRetryReq()
-    {
+    sendRetryReq() {
         try {
             TimingResponseProtocol::sendRetryReq(_requestPort);
         } catch (UnboundPortException) {
@@ -500,8 +480,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * sendTimingSnoopResp to this response port and failed.
      */
     void
-    sendRetrySnoopResp()
-    {
+    sendRetrySnoopResp() {
         try {
             TimingResponseProtocol::sendRetrySnoopResp(_requestPort);
         } catch (UnboundPortException) {
@@ -509,7 +488,7 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
         }
     }
 
-  protected:
+protected:
     /**
      * Called by the request port to unbind. Should never be called
      * directly.
@@ -520,37 +499,33 @@ class ResponsePort : public Port, public AtomicResponseProtocol,
      * Called by the request port to bind. Should never be called
      * directly.
      */
-    void responderBind(RequestPort& request_port);
+    void responderBind(RequestPort &request_port);
 
     /**
      * Default implementations.
      */
     Tick recvAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor) override;
     void recvMemBackdoorReq(const MemBackdoorReq &req,
-            MemBackdoorPtr &backdoor) override;
+                            MemBackdoorPtr &backdoor) override;
 
     bool
-    tryTiming(PacketPtr pkt) override
-    {
+    tryTiming(PacketPtr pkt) override {
         panic("%s was not expecting a %s\n", name(), __func__);
     }
 
     bool
-    recvTimingSnoopResp(PacketPtr pkt) override
-    {
+    recvTimingSnoopResp(PacketPtr pkt) override {
         panic("%s was not expecting a timing snoop response\n", name());
     }
 };
 
-class [[deprecated]] SlavePort : public ResponsePort
-{
-  public:
+class [[deprecated]] SlavePort : public ResponsePort {
+public:
     using ResponsePort::ResponsePort;
 };
 
 inline Tick
-RequestPort::sendAtomic(PacketPtr pkt)
-{
+RequestPort::sendAtomic(PacketPtr pkt) {
     try {
         addTrace(pkt);
         Tick tick = AtomicRequestProtocol::send(_responsePort, pkt);
@@ -562,8 +537,7 @@ RequestPort::sendAtomic(PacketPtr pkt)
 }
 
 inline Tick
-RequestPort::sendAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor)
-{
+RequestPort::sendAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor) {
     try {
         addTrace(pkt);
         Tick tick = AtomicRequestProtocol::sendBackdoor(_responsePort,
@@ -576,8 +550,7 @@ RequestPort::sendAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &backdoor)
 }
 
 inline void
-RequestPort::sendFunctional(PacketPtr pkt) const
-{
+RequestPort::sendFunctional(PacketPtr pkt) const {
     try {
         addTrace(pkt);
         FunctionalRequestProtocol::send(_responsePort, pkt);
@@ -589,19 +562,17 @@ RequestPort::sendFunctional(PacketPtr pkt) const
 
 inline void
 RequestPort::sendMemBackdoorReq(const MemBackdoorReq &req,
-        MemBackdoorPtr &backdoor)
-{
+                                MemBackdoorPtr &backdoor) {
     try {
         return FunctionalRequestProtocol::sendMemBackdoorReq(
-                _responsePort, req, backdoor);
+            _responsePort, req, backdoor);
     } catch (UnboundPortException) {
         reportUnbound();
     }
 }
 
 inline bool
-RequestPort::sendTimingReq(PacketPtr pkt)
-{
+RequestPort::sendTimingReq(PacketPtr pkt) {
     try {
         addTrace(pkt);
         bool succ = TimingRequestProtocol::sendReq(_responsePort, pkt);
@@ -614,8 +585,7 @@ RequestPort::sendTimingReq(PacketPtr pkt)
 }
 
 inline bool
-RequestPort::tryTiming(PacketPtr pkt) const
-{
+RequestPort::tryTiming(PacketPtr pkt) const {
     try {
         return TimingRequestProtocol::trySend(_responsePort, pkt);
     } catch (UnboundPortException) {
@@ -624,8 +594,7 @@ RequestPort::tryTiming(PacketPtr pkt) const
 }
 
 inline bool
-RequestPort::sendTimingSnoopResp(PacketPtr pkt)
-{
+RequestPort::sendTimingSnoopResp(PacketPtr pkt) {
     try {
         return TimingRequestProtocol::sendSnoopResp(_responsePort, pkt);
     } catch (UnboundPortException) {
@@ -634,8 +603,7 @@ RequestPort::sendTimingSnoopResp(PacketPtr pkt)
 }
 
 inline void
-RequestPort::sendRetryResp()
-{
+RequestPort::sendRetryResp() {
     try {
         TimingRequestProtocol::sendRetryResp(_responsePort);
     } catch (UnboundPortException) {

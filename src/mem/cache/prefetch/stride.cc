@@ -108,6 +108,17 @@ Stride::allocateNewContext(int context) {
     return &(insertion_result.first->second);
 }
 
+bool Stride::checkStride(Addr addr) const {
+    for (auto it = pcTables.begin(); it != pcTables.end(); ++it) {
+        StrideEntry *entry = it->second.findEntry(addr, false);
+
+        if (entry && entry->confidence.calcSaturation() >= threshConf) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Stride::calculatePrefetch(const PrefetchInfo &pfi,
                                std::vector<AddrPriority> &addresses,
                                const CacheAccessor &cache) {
@@ -158,6 +169,8 @@ void Stride::calculatePrefetch(const PrefetchInfo &pfi,
         if (entry->confidence.calcSaturation() < threshConf) {
             return;
         }
+
+        callReadytoIssue(pfi);
 
         // Generate up to degree prefetches
         for (int d = 1; d <= degree; d++) {
