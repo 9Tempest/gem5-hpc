@@ -210,6 +210,18 @@ def addNoISAOptions(parser):
     parser.add_argument("--l3_mshrs", type=int, default=64)
     parser.add_argument("--cacheline_size", type=int, default=64)
 
+    parser.add_argument("--maa", action="store_true")
+    parser.add_argument("--maa_num_tiles", type=int, default=32, help="Number of SPD tiles")
+    parser.add_argument("--maa_num_tile_elements", type=int, default=1024, help="Number of elements in each tile")
+    parser.add_argument("--maa_num_regs", type=int, default=32, help="Number of 32-bit scalar registers")
+    parser.add_argument("--maa_num_instructions", type=int, default=32, help="Number of instructions in the instruction file")
+    parser.add_argument("--maa_num_stream_access_units", type=int, default=1, help="Number of stream access units")
+    parser.add_argument("--maa_num_indirect_access_units", type=int, default=1, help="Number of indirect access units")
+    parser.add_argument("--maa_num_range_units", type=int, default=1, help="Number of range units")
+    parser.add_argument("--maa_num_alu_units", type=int, default=1, help="Number of alu units")
+    parser.add_argument("--maa_num_row_table_rows", type=int, default=64, help="Number of rows in each row table bank")
+    parser.add_argument("--maa_num_row_table_entries_per_row", type=int, default=16, help="Number of row table entries (bursts) per row table row")
+
     # Enable Ruby
     parser.add_argument("--ruby", action="store_true")
 

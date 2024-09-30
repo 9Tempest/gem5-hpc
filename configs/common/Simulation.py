@@ -44,6 +44,7 @@ from os.path import join as joinpath
 from common import (
     CpuConfig,
     ObjectList,
+    MAAConfig
 )
 
 import m5
@@ -471,7 +472,6 @@ def repeatSwitch(testsys, repeat_switch_cpu_list, maxtick, switch_freq):
             exit_event = m5.simulate(maxtick - m5.curTick())
             return exit_event
 
-
 def run(options, root, testsys, cpu_class):
     if options.checkpoint_dir:
         cptdir = options.checkpoint_dir
@@ -724,6 +724,22 @@ def run(options, root, testsys, cpu_class):
     root.apply_config(options.param)
     m5.instantiate(checkpoint_dir)
 
+    workloads = []
+    if options.maa:
+        assert(len(testsys.mem_ctrls) == 1)
+        testsys.maa.addRamulatorInstance(testsys.mem_ctrls[0])
+
+        start_cacheable_addr, size_cacheable_addr, start_noncacheable_addr, size_noncacheable_addr = MAAConfig.get_maa_address(options)
+        for cpu_id in range(len(testsys.cpu)):
+            for workload_id in range(len(testsys.cpu[cpu_id].workload)):
+                if testsys.cpu[cpu_id].workload[workload_id] not in workloads:
+                    workloads.append(testsys.cpu[cpu_id].workload[workload_id])
+                    print(f"{cpu_id} {workload_id} {testsys.cpu[cpu_id].workload[workload_id]}")
+                    print(testsys.cpu[cpu_id])
+                    print(testsys.cpu[cpu_id].workload[workload_id])
+                    print(testsys.cpu[cpu_id].workload[workload_id].map)
+                    testsys.cpu[cpu_id].workload[workload_id].map(start_cacheable_addr, start_cacheable_addr, size_cacheable_addr, True)
+                    testsys.cpu[cpu_id].workload[workload_id].map(start_noncacheable_addr, start_noncacheable_addr, size_noncacheable_addr, False)
     # Initialization is complete.  If we're not in control of simulation
     # (that is, if we're a slave simulator acting as a component in another
     #  'master' simulator) then we're done here.  The other simulator will

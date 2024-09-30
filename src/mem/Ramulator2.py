@@ -10,5 +10,3 @@ class Ramulator2(AbstractMemory):
   port = ResponsePort("The port for receiving memory requests and sending responses")
   config_path = Param.String("Path to the DRAMSys configuration")
   enlarge_buffer_factor = Param.Int(1, "Factor to enlarge the buffer size")
-
-  

@@ -283,6 +283,20 @@ Ramulator2::MemorySystemPort::MemorySystemPort(const std::string &_name,
                                                Ramulator2 &_ramulator2)
     : ResponsePort(_name), ramulator2(_ramulator2) {}
 
+void Ramulator2::getAddrMapData(std::vector<int> &m_org,
+                                std::vector<int> &m_addr_bits,
+                                int &m_num_levels,
+                                int &m_tx_offset,
+                                int &m_col_bits_idx,
+                                int &m_row_bits_idx) {
+    ramulator2_memorysystem->getAddrMapData(m_org,
+                                            m_addr_bits,
+                                            m_num_levels,
+                                            m_tx_offset,
+                                            m_col_bits_idx,
+                                            m_row_bits_idx);
+}
+
 } // namespace memory
 } // namespace gem5
 

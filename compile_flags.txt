@@ -1,0 +1,3 @@
+-Isrc/
+-Iext/ramulator2/
+-Ibuild/X86/

@@ -160,8 +160,7 @@ class BaseCPU(ClockedObject):
 
     icache_port = RequestPort("Instruction Port")
     dcache_port = RequestPort("Data Port")
-    # maa_port = RequestPort("MAA Port")
-    _cached_ports = ["icache_port", "dcache_port"] #, "maa_port"]
+    _cached_ports = ["icache_port", "dcache_port"]
 
     _uncached_interrupt_response_ports = []
     _uncached_interrupt_request_ports = []
@@ -222,10 +221,6 @@ class BaseCPU(ClockedObject):
         self.toL2Bus.mem_side_ports = self.l2cache.cpu_side
         self._cached_ports = ["l2cache.mem_side"]
     
-    # def addMAA(self, maa):
-    #     self.maa = maa
-    #     self._cached_ports += ["maa.mem_side"]
-
     def createThreads(self):
         # If no ISAs have been created, assume that the user wants the
         # default ISA.

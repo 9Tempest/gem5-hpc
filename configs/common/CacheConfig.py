@@ -186,7 +186,7 @@ def config_3L_cache(options, system):
         system.cpu[i].connectAllPorts(
             system.tol3bus.cpu_side_ports,
             system.membus.cpu_side_ports,
-            system.membus.mem_side_ports,
+            system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports,
         )
 
     return system
@@ -331,11 +331,11 @@ def config_cache(options, system):
             system.cpu[i].connectAllPorts(
                 system.tol2bus.cpu_side_ports,
                 system.membus.cpu_side_ports,
-                system.membus.mem_side_ports,
+                system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports,
             )
         elif options.external_memory_system:
             system.cpu[i].connectUncachedPorts(
-                system.membus.cpu_side_ports, system.membus.mem_side_ports
+                system.membus.cpu_side_ports, system.membus.mem_side_ports if not options.maa else system.membusnc.mem_side_ports
             )
         else:
             system.cpu[i].connectBus(system.membus)
