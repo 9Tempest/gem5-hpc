@@ -55,7 +55,8 @@ namespace prefetch {
 void Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
                                        RequestorID requestor_id,
                                        bool tag_prefetch,
-                                       Tick t) {
+                                       Tick t,
+                                       bool tag_vaddr) {
     /* Create a prefetch memory request */
     RequestPtr req = std::make_shared<Request>(paddr, blk_size,
                                                0, requestor_id);
@@ -65,11 +66,14 @@ void Queued::DeferredPacket::createPkt(Addr paddr, unsigned blk_size,
         req->setFlags(Request::SECURE);
     }
     req->taskId(context_switch_task_id::Prefetcher);
-    pkt = new Packet(req, MemCmd::HardPFReq);
+    pkt = new Packet(req, MemCmd::HardPFReq, blk_size);
     pkt->allocate();
     if (tag_prefetch && pfInfo.hasPC()) {
         // Tag prefetch packet with  accessing pc
         pkt->req->setPC(pfInfo.getPC());
+    }
+    if (tag_vaddr) {
+        pkt->req->setVaddr(pfInfo.getAddr() + (paddr - owner->blockAddress(paddr)));
     }
     tick = t;
 }
@@ -97,8 +101,10 @@ Queued::Queued(const QueuedPrefetcherParams &p)
           p.max_prefetch_requests_with_pending_translation),
       latency(p.latency), queueSquash(p.queue_squash),
       queueFilter(p.queue_filter), cacheSnoop(p.cache_snoop),
-      tagPrefetch(p.tag_prefetch),
+      tagPrefetch(p.tag_prefetch), tagVaddr(p.tag_vaddr),
+      crossPageCtrl(p.cross_page_ctrl),
       throttleControlPct(p.throttle_control_percentage), statsQueued(this) {
+    assert(useVirtualAddresses == tagVaddr);
 }
 
 Queued::~Queued() {
@@ -127,6 +133,12 @@ void Queued::printQueue(const std::list<DeferredPacket> &queue) const {
                                  "prio: %3d\n",
                 queue_name, pos, vaddr, paddr, it->priority);
     }
+}
+
+void Queued::printSize() const {
+    DPRINTF(
+        HWPrefetch, "pfq size %lu, pfqMissingTranslation size %lu\n",
+        pfq.size(), pfqMissingTranslation.size());
 }
 
 size_t
@@ -204,7 +216,8 @@ void Queued::notify(const CacheAccessProbeArg &acc, const PrefetchInfo &pfi) {
             }
         }
 
-        bool can_cross_page = (mmu != nullptr);
+        bool can_cross_page = (mmu != nullptr) && crossPageCtrl;
+        ;
         if (can_cross_page || samePage(addr_prio.first, pfi.getAddr())) {
             PrefetchInfo new_pfi(pfi, addr_prio.first);
             statsQueued.pfIdentified++;
@@ -309,7 +322,7 @@ void Queued::translationComplete(DeferredPacket *dp, bool failed,
                     target_paddr);
         } else {
             Tick pf_time = curTick() + clockPeriod() * latency;
-            it->createPkt(target_paddr, blkSize, requestorId, tagPrefetch, pf_time);
+            it->createPkt(target_paddr, blkSize, requestorId, tagPrefetch, pf_time, tagVaddr);
             addToQueue(pfq, *it);
         }
     } else {
@@ -443,7 +456,7 @@ void Queued::insert(const PacketPtr &pkt, PrefetchInfo &new_pfi,
     dpp.region = pkt->getRegion();
     if (has_target_pa) {
         Tick pf_time = curTick() + clockPeriod() * latency;
-        dpp.createPkt(target_paddr, blkSize, requestorId, tagPrefetch, pf_time);
+        dpp.createPkt(target_paddr, blkSize, requestorId, tagPrefetch, pf_time, tagVaddr);
         DPRINTF(HWPrefetch, "Prefetch queued. "
                             "addr:%#x priority: %3d tick:%lld.\n",
                 new_pfi.getAddr(), priority, pf_time);
@@ -506,6 +519,9 @@ void Queued::addToQueue(std::list<DeferredPacket> &queue,
 
     if (debug::HWPrefetchQueue)
         printQueue(queue);
+
+    if (debug::HWPrefetch)
+        printSize();
 }
 
 } // namespace prefetch

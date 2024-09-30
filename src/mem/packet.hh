@@ -1496,6 +1496,9 @@ public:
      * failed transaction, this function returns the failure reason.
      */
     HtmCacheFailure getHtmTransactionFailedInCacheRC() const;
+
+    /** Check if a packet has valid data */
+    bool validData() const;
 };
 
 } // namespace gem5

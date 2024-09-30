@@ -165,6 +165,70 @@ def config_3L_cache(options, system):
             l2cache.mshrs = l2cache.mshrs * options.cpu_buffer_enlarge_factor
             l2cache.write_buffers = l2cache.write_buffers * options.cpu_buffer_enlarge_factor
 
+        if options.l1d_hwp_type == "StridePrefetcher":
+            dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
+        if options.l1d_hwp_type == "DiffMatchingPrefetcher":
+            dcache.prefetcher.set_probe_obj(
+                dcache, dcache, dcache
+            )
+            dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
+            dcache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+            dcache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+            # l2cache.prefetcher.queue_size = 1024*1024*16
+            # l2cache.prefetcher.max_prefetch_requests_with_pending_translation = 1024
+            l2cache.prefetcher.queue_size = 64
+            l2cache.prefetcher.max_prefetch_requests_with_pending_translation = 64
+
+        # enable VA for all prefetcher
+        if options.l1d_hwp_type:
+            dcache.prefetcher.prefetch_on_access = True
+            dcache.prefetcher.use_virtual_addresses = True
+            dcache.prefetcher.tag_vaddr = True
+            # dcache.prefetcher.latency = 3
+            dcache.prefetcher.latency = 5
+            dcache.prefetcher.registerMMU(system.cpu[i].mmu)
+
+        if options.l2_hwp_type == "StridePrefetcher":
+            l2cache.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+        if options.l2_hwp_type == "IrregularStreamBufferPrefetcher":
+            l2cache.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+        if options.l2_hwp_type == "DiffMatchingPrefetcher":
+
+            if options.dmp_notify == "l1":
+                l2cache.prefetcher.set_probe_obj(
+                    dcache, dcache, l2cache
+                )
+            if options.dmp_notify == "l2":
+                l2cache.prefetcher.set_probe_obj(dcache, l2cache, l2cache)
+
+            if options.l1d_hwp_type == "StridePrefetcher":
+                print("Add L1 StridePrefetcher as L2 DMP helper.")
+                l2cache.prefetcher.set_pf_helper(dcache.prefetcher)
+            else:
+                l2cache.prefetcher.degree = getattr(options, "stride_degree", 4)
+
+            l2cache.prefetcher.stream_ahead_dist = getattr(options, "dmp_stream_ahead_dist", 64)
+            l2cache.prefetcher.range_ahead_dist = getattr(options, "dmp_range_ahead_dist", 0)
+            l2cache.prefetcher.indir_range = getattr(options, "dmp_indir_range", 4)
+
+            l2cache.prefetcher.auto_detect = True
+
+            # l2cache.prefetcher.queue_size = 1024*1024*16
+            # l2cache.prefetcher.max_prefetch_requests_with_pending_translation = 1024
+            l2cache.prefetcher.queue_size = 64
+            l2cache.prefetcher.max_prefetch_requests_with_pending_translation = 64
+
+        # enable VA for all prefetcher
+        if options.l2_hwp_type:
+            l2cache.prefetcher.prefetch_on_access = True
+            l2cache.prefetcher.use_virtual_addresses = True
+            l2cache.prefetcher.tag_vaddr = True
+            # l2cache.prefetcher.latency = 15
+            l2cache.prefetcher.latency = 17
+            l2cache.prefetcher.registerMMU(system.cpu[i].mmu)
+
         # If we are using ISA.X86 or ISA.RISCV, we set walker caches.
         if ObjectList.cpu_list.get_isa(options.cpu_type) in [
             ISA.RISCV,
@@ -249,13 +313,13 @@ def config_cache(options, system):
         # Provide a clock for the L2 and the L1-to-L2 bus here as they
         # are not connected using addTwoLevelCacheHierarchy. Use the
         # same clock as the CPUs.
-        system.l2 = l2_cache_class(
+        l2cache = l2_cache_class(
             clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
         )
 
         system.tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
-        system.l2.cpu_side = system.tol2bus.mem_side_ports
-        system.l2.mem_side = system.membus.cpu_side_ports
+        l2cache.cpu_side = system.tol2bus.mem_side_ports
+        l2cache.mem_side = system.membus.cpu_side_ports
 
     if options.memchecker:
         system.memchecker = MemChecker()

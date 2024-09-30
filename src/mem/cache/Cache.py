@@ -106,6 +106,13 @@ class BaseCache(ClockedObject):
     is_read_only = Param.Bool(False, "Is this cache read only (e.g. inst)")
 
     prefetcher = Param.BasePrefetcher(NULL, "Prefetcher attached to cache")
+    prefetch_on_access = Param.Bool(
+        False,
+        "Notify the hardware prefetcher on every access (not just misses)",
+    )
+    prefetch_on_pf_hit = Param.Bool(
+        False, "Notify the hardware prefetcher on hit on prefetched lines"
+    )
 
     tags = Param.BaseTags(BaseSetAssoc(), "Tag store")
     replacement_policy = Param.BaseReplacementPolicy(
@@ -166,6 +173,7 @@ class BaseCache(ClockedObject):
     # data cache.
     write_allocator = Param.WriteAllocator(NULL, "Write allocator")
 
+    stats_pc_list = VectorParam.Addr([], "Monitor PC list in stats")
 
 class Cache(BaseCache):
     type = "Cache"

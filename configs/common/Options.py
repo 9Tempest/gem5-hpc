@@ -221,6 +221,27 @@ def addNoISAOptions(parser):
     parser.add_argument("--maa_num_alu_units", type=int, default=1, help="Number of alu units")
     parser.add_argument("--maa_num_row_table_rows", type=int, default=64, help="Number of rows in each row table bank")
     parser.add_argument("--maa_num_row_table_entries_per_row", type=int, default=16, help="Number of row table entries (bursts) per row table row")
+    parser.add_argument("--l1d_repl_policy",  default="LRURP",
+                    choices=ObjectList.rp_list.get_names(),
+                    help="""
+                    type of replacement policy to use with the L1
+                    data cache.
+                    (if not set, use the default repl_policy of
+                    the selected cache)""")
+    parser.add_argument("--l2_repl_policy",  default="LRURP",
+                    choices=ObjectList.rp_list.get_names(),
+                    help="""
+                    type of replacement policy to use with the L2
+                    data cache.
+                    (if not set, use the default repl_policy of
+                    the selected cache)""")
+    parser.add_argument("--l2_tag_store",  default="BaseSetAssoc",
+                    choices=ObjectList.tag_list.get_names(),
+                    help="""
+                    type of tag store to use with the L2
+                    data cache.
+                    (if not set, use the default tag store of
+                    the selected cache)""")
 
     # Enable Ruby
     parser.add_argument("--ruby", action="store_true")
@@ -376,6 +397,41 @@ def addCommonOptions(parser, default_isa: Optional[ISA] = None):
                         type of hardware prefetcher to use with the L2 cache.
                         (if not set, use the default prefetcher of
                         the selected cache)""",
+    )
+    parser.add_argument(
+        "--stride-degree",
+        default=4,
+        action="store",
+        type=int,
+        help="Number of Stride prefetches to generate",
+    )
+    parser.add_argument(
+        "--dmp-stream-ahead-dist",
+        default=0x40,
+        action="store",
+        type=int,
+        help="Byte-distance prefetch ahead which triggered by stream refill",
+    )
+    parser.add_argument(
+        "--dmp-range-ahead-dist",
+        default=0,
+        action="store",
+        type=int,
+        help="Number of prefetchs ahead when a range target being identified",
+    )
+    parser.add_argument(
+        "--dmp-indir-range",
+        default=16,
+        action="store",
+        type=int,
+        help="Size of indirect prefetch range, limited by Cache blkSize",
+    )
+    parser.add_argument(
+        "--dmp-notify", 
+        default=None,
+        action="store",
+        type=str,
+        help="DMP is notified by which cache"
     )
     parser.add_argument("--checker", action="store_true")
     parser.add_argument(

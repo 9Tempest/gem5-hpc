@@ -276,6 +276,15 @@ protected:
 
         virtual AddrRangeList getAddrRanges() const override;
 
+        virtual bool sendTimingResp(PacketPtr pkt) override {
+            bool rep_res = CacheResponsePort::sendTimingResp(pkt);
+
+            if (rep_res) {
+                cache.ppL1Resp->notify(CacheAccessProbeArg(pkt, cache.accessor));
+            }
+            return rep_res;
+        };
+
     public:
         CpuSidePort(const std::string &_name, BaseCache &_cache,
                     const std::string &_label);
@@ -301,8 +310,11 @@ protected:
 
         bool coalesce() const override { return cache.coalesce(); }
 
+        CacheBlk *getCacheBlk(Addr addr, bool is_secure) const override { return cache.getCacheBlk(addr, is_secure); }
+
     } accessor;
 
+protected:
     /** Miss status registers */
     MSHRQueue mshrQueue;
 
@@ -326,6 +338,9 @@ protected:
 
     /** To probe when a cache fill occurs */
     ProbePointArg<CacheAccessProbeArg> *ppFill;
+
+    ProbePointArg<CacheAccessProbeArg> *ppL1Req;
+    ProbePointArg<CacheAccessProbeArg> *ppL1Resp;
 
     /**
      * To probe when the contents of a block are updated. Content updates
@@ -1237,6 +1252,10 @@ public:
     }
 
     bool inCache(Addr addr, bool is_secure) const {
+        return tags->findBlock(addr, is_secure);
+    }
+
+    CacheBlk *getCacheBlk(Addr addr, bool is_secure) const {
         return tags->findBlock(addr, is_secure);
     }
 
