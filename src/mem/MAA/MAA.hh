@@ -417,27 +417,46 @@ protected:
 
 public:
     struct MAAStats : public statistics::Group {
-        MAAStats(statistics::Group *parent, int num_indirect_access_units);
+        MAAStats(statistics::Group *parent,
+                 int num_indirect_access_units,
+                 int num_stream_access_units,
+                 int num_range_units,
+                 int num_alu_units);
 
         /** Number of instructions. */
         statistics::Scalar numInst_INDRD;
         statistics::Scalar numInst_INDWR;
         statistics::Scalar numInst_INDRMW;
+        statistics::Scalar numInst_STRRD;
+        statistics::Scalar numInst_RANGE;
+        statistics::Scalar numInst_ALUS;
+        statistics::Scalar numInst_ALUV;
+        statistics::Scalar numInst_INV;
         statistics::Scalar numInst;
 
         /** Cycles of instructions. */
         statistics::Scalar cycles_INDRD;
         statistics::Scalar cycles_INDWR;
         statistics::Scalar cycles_INDRMW;
+        statistics::Scalar cycles_STRRD;
+        statistics::Scalar cycles_RANGE;
+        statistics::Scalar cycles_ALUS;
+        statistics::Scalar cycles_ALUV;
+        statistics::Scalar cycles_INV;
         statistics::Scalar cycles;
 
         /** Average cycles per instruction. */
         statistics::Formula avgCPI_INDRD;
         statistics::Formula avgCPI_INDWR;
         statistics::Formula avgCPI_INDRMW;
+        statistics::Formula avgCPI_STRRD;
+        statistics::Formula avgCPI_RANGE;
+        statistics::Formula avgCPI_ALUS;
+        statistics::Formula avgCPI_ALUV;
+        statistics::Formula avgCPI_INV;
         statistics::Formula avgCPI;
 
-        /** Row-Table Statistics. */
+        /** Indirect Unit -- Row-Table Statistics. */
         std::vector<statistics::Scalar *> IND_NumInsts;
         std::vector<statistics::Scalar *> IND_NumWordsInserted;
         std::vector<statistics::Scalar *> IND_NumCacheLineInserted;
@@ -448,17 +467,23 @@ public:
         std::vector<statistics::Formula *> IND_AvgRowsPerInst;
         std::vector<statistics::Formula *> IND_AvgDrainsPerInst;
 
-        /** Cycles of stages. */
+        /** Indirect Unit -- Cycles of stages. */
         std::vector<statistics::Scalar *> IND_CyclesFill;
         std::vector<statistics::Scalar *> IND_CyclesDrain;
         std::vector<statistics::Scalar *> IND_CyclesBuild;
         std::vector<statistics::Scalar *> IND_CyclesRequest;
+        std::vector<statistics::Scalar *> IND_CyclesRTAccess;
+        std::vector<statistics::Scalar *> IND_CyclesSPDReadAccess;
+        std::vector<statistics::Scalar *> IND_CyclesSPDWriteAccess;
         std::vector<statistics::Formula *> IND_AvgCyclesFillPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesDrainPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesBuildPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesRequestPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesRTAccessPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesSPDReadAccessPerInst;
+        std::vector<statistics::Formula *> IND_AvgCyclesSPDWriteAccessPerInst;
 
-        /** Load accesses. */
+        /** Indirect Unit -- Load accesses. */
         std::vector<statistics::Scalar *> IND_LoadsCacheHitResponding;
         std::vector<statistics::Scalar *> IND_LoadsCacheHitAccessing;
         std::vector<statistics::Scalar *> IND_LoadsMemAccessing;
@@ -466,13 +491,70 @@ public:
         std::vector<statistics::Formula *> IND_AvgLoadsCacheHitAccessingPerInst;
         std::vector<statistics::Formula *> IND_AvgLoadsMemAccessingPerInst;
 
-        /** Store accesses. */
+        /** Indirect Unit -- Store accesses. */
         std::vector<statistics::Scalar *> IND_StoresMemAccessing;
         std::vector<statistics::Formula *> IND_AvgStoresMemAccessingPerInst;
 
-        /** Evict accesses. */
+        /** Indirect Unit -- Evict accesses. */
         std::vector<statistics::Scalar *> IND_Evicts;
         std::vector<statistics::Formula *> IND_AvgEvictssPerInst;
+
+        /** Stream Unit -- Row-Table Statistics. */
+        std::vector<statistics::Scalar *> STR_NumInsts;
+        std::vector<statistics::Scalar *> STR_NumWordsInserted;
+        std::vector<statistics::Scalar *> STR_NumCacheLineInserted;
+        std::vector<statistics::Scalar *> STR_NumDrains;
+        std::vector<statistics::Formula *> STR_AvgWordsPerCacheLine;
+        std::vector<statistics::Formula *> STR_AvgCacheLinesPerInst;
+        std::vector<statistics::Formula *> STR_AvgDrainsPerInst;
+
+        /** Stream Unit -- Cycles of stages. */
+        std::vector<statistics::Scalar *> STR_CyclesRequest;
+        std::vector<statistics::Scalar *> STR_CyclesRTAccess;
+        std::vector<statistics::Scalar *> STR_CyclesSPDReadAccess;
+        std::vector<statistics::Scalar *> STR_CyclesSPDWriteAccess;
+        std::vector<statistics::Formula *> STR_AvgCyclesRequestPerInst;
+        std::vector<statistics::Formula *> STR_AvgCyclesRTAccessPerInst;
+        std::vector<statistics::Formula *> STR_AvgCyclesSPDReadAccessPerInst;
+        std::vector<statistics::Formula *> STR_AvgCyclesSPDWriteAccessPerInst;
+
+        /** Stream Unit -- Load accesses. */
+        std::vector<statistics::Scalar *> STR_LoadsCacheAccessing;
+        std::vector<statistics::Formula *> STR_AvgLoadsCacheAccessingPerInst;
+
+        /** Stream Unit -- Evict accesses. */
+        std::vector<statistics::Scalar *> STR_Evicts;
+        std::vector<statistics::Formula *> STR_AvgEvictssPerInst;
+
+        /** Range Fuser Unit -- Cycles of stages. */
+        std::vector<statistics::Scalar *> RNG_NumInsts;
+        std::vector<statistics::Scalar *> RNG_CyclesCompute;
+        std::vector<statistics::Scalar *> RNG_CyclesSPDReadAccess;
+        std::vector<statistics::Scalar *> RNG_CyclesSPDWriteAccess;
+        std::vector<statistics::Formula *> RNG_AvgCyclesComputePerInst;
+        std::vector<statistics::Formula *> RNG_AvgCyclesSPDReadAccessPerInst;
+        std::vector<statistics::Formula *> RNG_AvgCyclesSPDWriteAccessPerInst;
+
+        /** ALU Unit -- Cycles of stages. */
+        std::vector<statistics::Scalar *> ALU_NumInsts;
+        std::vector<statistics::Scalar *> ALU_NumInstsCompare;
+        std::vector<statistics::Scalar *> ALU_NumInstsCompute;
+        std::vector<statistics::Scalar *> ALU_CyclesCompute;
+        std::vector<statistics::Scalar *> ALU_CyclesSPDReadAccess;
+        std::vector<statistics::Scalar *> ALU_CyclesSPDWriteAccess;
+        std::vector<statistics::Formula *> ALU_AvgCyclesComputePerInst;
+        std::vector<statistics::Formula *> ALU_AvgCyclesSPDReadAccessPerInst;
+        std::vector<statistics::Formula *> ALU_AvgCyclesSPDWriteAccessPerInst;
+
+        /** ALU Unit -- Comparison Info. */
+        std::vector<statistics::Scalar *> ALU_NumComparedWords;
+        std::vector<statistics::Scalar *> ALU_NumTakenWords;
+        std::vector<statistics::Formula *> ALU_AvgNumTakenWordsPerComparedWords;
+
+        /** ALU Unit -- Comparison Info. */
+        statistics::Scalar *INV_NumInvalidatedCachelines;
+        statistics::Formula *INV_AvgInvalidatedCachelinesPerInst;
+
     } stats;
 };
 /**

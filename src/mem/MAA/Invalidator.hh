@@ -61,6 +61,7 @@ protected:
     int my_received_responses;
     Addr my_last_block_addr = 0;
     Addr my_base_addr;
+    Tick my_decode_start_tick;
     const Addr block_size = 64;
     Request::Flags flags = Request::INVALIDATE;
     PacketPtr my_pkt;

@@ -87,6 +87,9 @@ void Invalidator::executeInstruction() {
         my_outstanding_pkt = false;
         my_received_responses = 0;
         my_total_invalidations_sent = 0;
+        my_decode_start_tick = curTick();
+        maa->stats.numInst++;
+        maa->stats.numInst_INV++;
 
         // Setting the state of the instruction and stream unit
         DPRINTF(MAAInvalidator, "%s: state set to request for request %s!\n", __func__, my_instruction->print());
@@ -133,6 +136,10 @@ void Invalidator::executeInstruction() {
             state = Status::Idle;
             maa->setDstReady(my_instruction, my_dst_tile);
             my_instruction = nullptr;
+            Cycles total_cycles = maa->getTicksToCycles(curTick() - my_decode_start_tick);
+            maa->stats.cycles += total_cycles;
+            maa->stats.cycles_INV += total_cycles;
+            my_decode_start_tick = 0;
         }
         break;
     }
@@ -150,6 +157,7 @@ void Invalidator::createMyPacket() {
     my_pkt = new Packet(real_req, MemCmd::InvalidateReq);
     my_outstanding_pkt = true;
     DPRINTF(MAAInvalidator, "%s: created %s\n", __func__, my_pkt->print());
+    (*maa->stats.INV_NumInvalidatedCachelines)++;
 }
 bool Invalidator::sendOutstandingPacket() {
     DPRINTF(MAAInvalidator, "%s: trying sending %s\n", __func__, my_pkt->print());

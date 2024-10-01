@@ -72,6 +72,10 @@ void Ramulator2::resetStats() {
     printf("Resetting ramulator's stats\n");
     ramulator2_memorysystem->reset_stats();
 }
+void Ramulator2::preDumpStats() {
+    printf("Dumping ramulator's stats\n");
+    ramulator2_memorysystem->dump_stats();
+}
 
 void Ramulator2::sendResponse() {
     assert(!retryResp);

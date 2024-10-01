@@ -118,6 +118,7 @@ public:
     void startup() override;
 
     void resetStats() override;
+    void preDumpStats() override;
     void getAddrMapData(std::vector<int> &m_org,
                         std::vector<int> &m_addr_bits,
                         int &m_num_levels,

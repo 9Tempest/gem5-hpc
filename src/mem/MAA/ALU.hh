@@ -35,7 +35,7 @@ protected:
 public:
     ALUUnit();
 
-    void allocate(MAA *_maa, Cycles _ALU_lane_latency, int _num_ALU_lanes);
+    void allocate(MAA *_maa, int _my_alu_id, Cycles _ALU_lane_latency, int _num_ALU_lanes);
 
     Status getState() const { return state; }
 
@@ -45,6 +45,7 @@ public:
 
 protected:
     Instruction *my_instruction;
+    int my_alu_id;
     int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
     int my_max;
     int my_word_size;

@@ -16,6 +16,7 @@
 namespace gem5 {
 
 class MAA;
+class StreamAccessUnit;
 
 struct RequestTableEntry {
     RequestTableEntry() : itr(0), wid(0) {}
@@ -26,7 +27,7 @@ struct RequestTableEntry {
 
 class RequestTable {
 public:
-    RequestTable();
+    RequestTable(StreamAccessUnit *_stream_access, int _my_stream_id);
     ~RequestTable();
 
     bool add_entry(int itr, Addr base_addr, uint16_t wid);
@@ -42,6 +43,8 @@ protected:
     bool **entries_valid;
     Addr *addresses;
     bool *addresses_valid;
+    StreamAccessUnit *stream_access;
+    int my_stream_id;
 };
 
 class StreamAccessUnit : public BaseMMU::Translation {
@@ -83,7 +86,6 @@ protected:
     std::multiset<StreamPacket, CompareByTick> my_outstanding_read_pkts;
     unsigned int num_tile_elements;
     Status state;
-    MAA *maa;
     RequestTable *request_table;
     int dst_tile_id;
 
@@ -109,6 +111,7 @@ public:
     void markDelayed() override {}
     void finish(const Fault &fault, const RequestPtr &req,
                 ThreadContext *tc, BaseMMU::Mode mode) override;
+    MAA *maa;
 
 protected:
     Instruction *my_instruction;
@@ -124,6 +127,8 @@ protected:
     Tick my_SPD_write_finish_tick;
     Tick my_RT_access_finish_tick;
     int my_word_size;
+    Tick my_decode_start_tick;
+    Tick my_request_start_tick;
 
     Addr my_translated_addr;
     bool my_translation_done;
@@ -135,7 +140,7 @@ protected:
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
     EventFunctionWrapper sendPacketEvent;
-    bool scheduleNextExecution();
+    bool scheduleNextExecution(bool force = false);
     bool scheduleNextSend();
 };
 } // namespace gem5

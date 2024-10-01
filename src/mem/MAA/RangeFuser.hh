@@ -31,11 +31,12 @@ protected:
         "max"};
     Status state;
     MAA *maa;
+    int my_range_id;
 
 public:
     RangeFuserUnit();
 
-    void allocate(unsigned int _num_tile_elements, MAA *_maa);
+    void allocate(unsigned int _num_tile_elements, MAA *_maa, int _my_range_id);
 
     Status getState() const { return state; }
 

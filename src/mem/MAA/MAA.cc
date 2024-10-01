@@ -56,7 +56,11 @@ MAA::MAA(const MAAParams &p)
       my_outstanding_instruction_pkt(false),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
-      stats(this, p.num_indirect_access_units) {
+      stats(this,
+            p.num_indirect_access_units,
+            p.num_stream_access_units,
+            p.num_range_units,
+            p.num_alu_units) {
 
     requestorId = p.system->getRequestorId(this);
     spd = new SPD(this,
@@ -83,11 +87,11 @@ MAA::MAA(const MAAParams &p)
         this);
     aluUnits = new ALUUnit[num_alu_units];
     for (int i = 0; i < num_alu_units; i++) {
-        aluUnits[i].allocate(this, p.ALU_lane_latency, p.num_ALU_lanes);
+        aluUnits[i].allocate(this, i, p.ALU_lane_latency, p.num_ALU_lanes);
     }
     rangeUnits = new RangeFuserUnit[num_range_units];
     for (int i = 0; i < num_range_units; i++) {
-        rangeUnits[i].allocate(num_tile_elements, this);
+        rangeUnits[i].allocate(num_tile_elements, this, i);
     }
     current_instruction = new Instruction();
 }
@@ -1036,37 +1040,94 @@ Cycles MAA::getTicksToCycles(Tick t) const {
 Tick MAA::getCyclesToTicks(Cycles c) const {
     return cyclesToTicks(c);
 }
+
 #define MAKE_INDIRECT_STAT_NAME(name) \
     (std::string("I") + std::to_string(indirect_id) + "_" + std::string(name)).c_str()
 
-MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units)
+#define MAKE_STREAM_STAT_NAME(name) \
+    (std::string("S") + std::to_string(stream_id) + "_" + std::string(name)).c_str()
+
+#define MAKE_RANGE_STAT_NAME(name) \
+    (std::string("A") + std::to_string(range_id) + "_" + std::string(name)).c_str()
+
+#define MAKE_ALU_STAT_NAME(name) \
+    (std::string("A") + std::to_string(alu_id) + "_" + std::string(name)).c_str()
+
+#define MAKE_INVALIDATOR_STAT_NAME(name) \
+    (std::string("INV_") + std::string(name)).c_str()
+
+MAA::MAAStats::MAAStats(statistics::Group *parent,
+                        int num_indirect_access_units,
+                        int num_stream_access_units,
+                        int num_range_units,
+                        int num_alu_units)
     : statistics::Group(parent),
       ADD_STAT(numInst_INDRD, statistics::units::Count::get(), "number of indirect read instructions"),
       ADD_STAT(numInst_INDWR, statistics::units::Count::get(), "number of indirect write instructions"),
       ADD_STAT(numInst_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instructions"),
+      ADD_STAT(numInst_STRRD, statistics::units::Count::get(), "number of stream read instructions"),
+      ADD_STAT(numInst_RANGE, statistics::units::Count::get(), "number of range loop instructions"),
+      ADD_STAT(numInst_ALUS, statistics::units::Count::get(), "number of ALU Scalar instructions"),
+      ADD_STAT(numInst_ALUV, statistics::units::Count::get(), "number of ALU Vector instructions"),
+      ADD_STAT(numInst_INV, statistics::units::Count::get(), "number of Invalidation for instructions"),
       ADD_STAT(numInst, statistics::units::Count::get(), "total number of instructions"),
       ADD_STAT(cycles_INDRD, statistics::units::Count::get(), "number of indirect read instruction cycles"),
       ADD_STAT(cycles_INDWR, statistics::units::Count::get(), "number of indirect write instruction cycles"),
       ADD_STAT(cycles_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instruction cycles"),
+      ADD_STAT(cycles_STRRD, statistics::units::Count::get(), "number of stream read instruction cycles"),
+      ADD_STAT(cycles_RANGE, statistics::units::Count::get(), "number of range loop instruction cycles"),
+      ADD_STAT(cycles_ALUS, statistics::units::Count::get(), "number of ALU Scalar instruction cycles"),
+      ADD_STAT(cycles_ALUV, statistics::units::Count::get(), "number of ALU Vector instruction cycles"),
+      ADD_STAT(cycles_INV, statistics::units::Count::get(), "number of Invalidation for instruction cycles"),
       ADD_STAT(cycles, statistics::units::Count::get(), "total number of instruction cycles"),
       ADD_STAT(avgCPI_INDRD, statistics::units::Count::get(), "average CPI for indirect read instructions"),
       ADD_STAT(avgCPI_INDWR, statistics::units::Count::get(), "average CPI for indirect write instructions"),
       ADD_STAT(avgCPI_INDRMW, statistics::units::Count::get(), "average CPI for indirect read-modify-write instructions"),
+      ADD_STAT(avgCPI_STRRD, statistics::units::Count::get(), "average CPI for stream read instructions"),
+      ADD_STAT(avgCPI_RANGE, statistics::units::Count::get(), "average CPI for range loop instructions"),
+      ADD_STAT(avgCPI_ALUS, statistics::units::Count::get(), "average CPI for ALU Scalar instructions"),
+      ADD_STAT(avgCPI_ALUV, statistics::units::Count::get(), "average CPI for ALU Vector instructions"),
+      ADD_STAT(avgCPI_INV, statistics::units::Count::get(), "average CPI for Invalidation for instructions"),
       ADD_STAT(avgCPI, statistics::units::Count::get(), "average CPI for all instructions") {
 
     numInst_INDRD.flags(statistics::nozero);
     numInst_INDWR.flags(statistics::nozero);
     numInst_INDRMW.flags(statistics::nozero);
+    numInst_STRRD.flags(statistics::nozero);
+    numInst_RANGE.flags(statistics::nozero);
+    numInst_ALUS.flags(statistics::nozero);
+    numInst_ALUV.flags(statistics::nozero);
+    numInst_INV.flags(statistics::nozero);
     numInst.flags(statistics::nozero);
     cycles_INDRD.flags(statistics::nozero);
     cycles_INDWR.flags(statistics::nozero);
     cycles_INDRMW.flags(statistics::nozero);
+    cycles_STRRD.flags(statistics::nozero);
+    cycles_RANGE.flags(statistics::nozero);
+    cycles_ALUS.flags(statistics::nozero);
+    cycles_ALUV.flags(statistics::nozero);
+    cycles_INV.flags(statistics::nozero);
     cycles.flags(statistics::nozero);
 
     avgCPI_INDRD = cycles_INDRD / numInst_INDRD;
     avgCPI_INDWR = cycles_INDWR / numInst_INDWR;
     avgCPI_INDRMW = cycles_INDRMW / numInst_INDRMW;
+    avgCPI_STRRD = cycles_STRRD / numInst_STRRD;
+    avgCPI_RANGE = cycles_RANGE / numInst_RANGE;
+    avgCPI_ALUS = cycles_ALUS / numInst_ALUS;
+    avgCPI_ALUV = cycles_ALUV / numInst_ALUV;
+    avgCPI_INV = cycles_INV / numInst_INV;
     avgCPI = cycles / numInst;
+
+    avgCPI_INDRD.flags(statistics::nonan | statistics::nozero);
+    avgCPI_INDWR.flags(statistics::nonan | statistics::nozero);
+    avgCPI_INDRMW.flags(statistics::nonan | statistics::nozero);
+    avgCPI_STRRD.flags(statistics::nonan | statistics::nozero);
+    avgCPI_RANGE.flags(statistics::nonan | statistics::nozero);
+    avgCPI_ALUS.flags(statistics::nonan | statistics::nozero);
+    avgCPI_ALUV.flags(statistics::nonan | statistics::nozero);
+    avgCPI_INV.flags(statistics::nonan | statistics::nozero);
+    avgCPI.flags(statistics::nonan | statistics::nozero);
 
     for (int indirect_id = 0; indirect_id < num_indirect_access_units; indirect_id++) {
         IND_NumInsts.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumInsts"), statistics::units::Count::get(), "number of instructions"));
@@ -1082,10 +1143,16 @@ MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units
         IND_CyclesDrain.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesDrain"), statistics::units::Count::get(), "number of cycles in the DRAIN stage"));
         IND_CyclesBuild.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesBuild"), statistics::units::Count::get(), "number of cycles in the BUILD stage"));
         IND_CyclesRequest.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesRequest"), statistics::units::Count::get(), "number of cycles in the REQUEST stage"));
+        IND_CyclesRTAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesRTAccess"), statistics::units::Count::get(), "number of cycles spent on row table access"));
+        IND_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles spent on SPD read access"));
+        IND_CyclesSPDWriteAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesSPDWriteAccess"), statistics::units::Count::get(), "number of cycles spent on SPD write access"));
         IND_AvgCyclesFillPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesFillPerInst"), statistics::units::Count::get(), "average number of cycles in the FILL stage per indirect instruction"));
         IND_AvgCyclesDrainPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesDrainPerInst"), statistics::units::Count::get(), "average number of cycles in the DRAIN stage per indirect instruction"));
         IND_AvgCyclesBuildPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesBuildPerInst"), statistics::units::Count::get(), "average number of cycles in the BUILD stage per indirect instruction"));
         IND_AvgCyclesRequestPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesRequestPerInst"), statistics::units::Count::get(), "average number of cycles in the REQUEST stage per indirect instruction"));
+        IND_AvgCyclesRTAccessPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesRTAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on row table access per indirect instruction"));
+        IND_AvgCyclesSPDReadAccessPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesSPDReadAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on SPD read access per indirect instruction"));
+        IND_AvgCyclesSPDWriteAccessPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesSPDWriteAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on SPD write access per indirect instruction"));
         IND_LoadsCacheHitResponding.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitResponding"), statistics::units::Count::get(), "number of loads hit in cache in the M/O state, responding back"));
         IND_LoadsCacheHitAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitAccessing"), statistics::units::Count::get(), "number of loads hit in cache in the E/S state, reaccessed cache"));
         IND_LoadsMemAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsMemAccessing"), statistics::units::Count::get(), "number of loads miss in cache, accessed from memory"));
@@ -1094,9 +1161,10 @@ MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units
         IND_AvgLoadsMemAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsMemAccessingPerInst"), statistics::units::Count::get(), "average number of loads miss in cache per indirect instruction"));
         IND_StoresMemAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_StoresMemAccessing"), statistics::units::Count::get(), "number of writes accessed from memory"));
         IND_AvgStoresMemAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgStoresMemAccessingPerInst"), statistics::units::Count::get(), "average number of writes accessed from memory per indirect instruction"));
-        IND_Evicts.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_Evicts"), statistics::units::Count::get(), "number of evict accesses to the CPU side port"));
-        IND_AvgEvictssPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgEvictssPerInst"), statistics::units::Count::get(), "average number of evict accesses to the CPU side port per indirect instruction"));
+        IND_Evicts.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_Evicts"), statistics::units::Count::get(), "number of evict accesses to the cache side port"));
+        IND_AvgEvictssPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgEvictssPerInst"), statistics::units::Count::get(), "average number of evict accesses to the cache side port per indirect instruction"));
 
+        (*IND_NumInsts[indirect_id]).flags(statistics::nozero);
         (*IND_NumWordsInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumCacheLineInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumRowsInserted[indirect_id]).flags(statistics::nozero);
@@ -1105,6 +1173,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units
         (*IND_CyclesDrain[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesBuild[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesRequest[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesRTAccess[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesSPDReadAccess[indirect_id]).flags(statistics::nozero);
+        (*IND_CyclesSPDWriteAccess[indirect_id]).flags(statistics::nozero);
         (*IND_LoadsCacheHitResponding[indirect_id]).flags(statistics::nozero);
         (*IND_LoadsCacheHitAccessing[indirect_id]).flags(statistics::nozero);
         (*IND_LoadsMemAccessing[indirect_id]).flags(statistics::nozero);
@@ -1121,11 +1192,147 @@ MAA::MAAStats::MAAStats(statistics::Group *parent, int num_indirect_access_units
         (*IND_AvgCyclesBuildPerInst[indirect_id]) = (*IND_CyclesBuild[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgCyclesRequestPerInst[indirect_id]) = (*IND_CyclesRequest[indirect_id]) / (*IND_NumInsts[indirect_id]);
 
+        (*IND_AvgCyclesRTAccessPerInst[indirect_id]) = (*IND_CyclesRTAccess[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgCyclesSPDReadAccessPerInst[indirect_id]) = (*IND_CyclesSPDReadAccess[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgCyclesSPDWriteAccessPerInst[indirect_id]) = (*IND_CyclesSPDWriteAccess[indirect_id]) / (*IND_NumInsts[indirect_id]);
+
         (*IND_AvgLoadsCacheHitRespondingPerInst[indirect_id]) = (*IND_LoadsCacheHitResponding[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgLoadsCacheHitAccessingPerInst[indirect_id]) = (*IND_LoadsCacheHitAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgLoadsMemAccessingPerInst[indirect_id]) = (*IND_LoadsMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgStoresMemAccessingPerInst[indirect_id]) = (*IND_StoresMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgEvictssPerInst[indirect_id]) = (*IND_Evicts[indirect_id]) / (*IND_NumInsts[indirect_id]);
+
+        (*IND_AvgWordsPerCacheLine[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCacheLinesPerRow[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgRowsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgDrainsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesFillPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesDrainPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesBuildPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesRequestPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesRTAccessPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesSPDReadAccessPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgCyclesSPDWriteAccessPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsCacheHitRespondingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsCacheHitAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsMemAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgStoresMemAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgEvictssPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
     }
+    for (int stream_id = 0; stream_id < num_stream_access_units; stream_id++) {
+        STR_NumInsts.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumInsts"), statistics::units::Count::get(), "number of instructions"));
+        STR_NumWordsInserted.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumWordsInserted"), statistics::units::Count::get(), "number of words inserted to the request table"));
+        STR_NumCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumCacheLineInserted"), statistics::units::Count::get(), "number of cachelines inserted to the request table"));
+        STR_NumDrains.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumDrains"), statistics::units::Count::get(), "number of drains due to request table full"));
+        STR_AvgWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgWordsPerCacheLine"), statistics::units::Count::get(), "average number of words per cacheline"));
+        STR_AvgCacheLinesPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCacheLinesPerInst"), statistics::units::Count::get(), "average number of cachelines per stream instruction"));
+        STR_AvgDrainsPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgDrainsPerInst"), statistics::units::Count::get(), "average number of drains per stream instruction"));
+        STR_CyclesRequest.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesRequest"), statistics::units::Count::get(), "number of cycles in the REQUEST stage"));
+        STR_CyclesRTAccess.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesRTAccess"), statistics::units::Count::get(), "number of cycles for request table access"));
+        STR_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles for SPD read access"));
+        STR_CyclesSPDWriteAccess.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesSPDWriteAccess"), statistics::units::Count::get(), "number of cycles for SPD write access"));
+        STR_AvgCyclesRequestPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCyclesRequestPerInst"), statistics::units::Count::get(), "average number of cycles in the REQUEST stage per stream instruction"));
+        STR_AvgCyclesRTAccessPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCyclesRTAccessPerInst"), statistics::units::Count::get(), "average number of cycles for request table access per stream instruction"));
+        STR_AvgCyclesSPDReadAccessPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCyclesSPDReadAccessPerInst"), statistics::units::Count::get(), "average number of cycles for SPD read access per stream instruction"));
+        STR_AvgCyclesSPDWriteAccessPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCyclesSPDWriteAccessPerInst"), statistics::units::Count::get(), "average number of cycles for SPD write access per stream instruction"));
+        STR_LoadsCacheAccessing.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_LoadsCacheAccessing"), statistics::units::Count::get(), "number of loads accessed from cache"));
+        STR_AvgLoadsCacheAccessingPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgLoadsCacheAccessingPerInst"), statistics::units::Count::get(), "average number of loads accessed from cache per stream instruction"));
+        STR_Evicts.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_Evicts"), statistics::units::Count::get(), "number of evict accesses to the cache side port"));
+        STR_AvgEvictssPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgEvictssPerInst"), statistics::units::Count::get(), "average number of evict accesses to the cache side port per stream instruction"));
+
+        (*STR_NumInsts[stream_id]).flags(statistics::nozero);
+        (*STR_NumWordsInserted[stream_id]).flags(statistics::nozero);
+        (*STR_NumCacheLineInserted[stream_id]).flags(statistics::nozero);
+        (*STR_NumDrains[stream_id]).flags(statistics::nozero);
+        (*STR_CyclesRequest[stream_id]).flags(statistics::nozero);
+        (*STR_CyclesRTAccess[stream_id]).flags(statistics::nozero);
+        (*STR_CyclesSPDReadAccess[stream_id]).flags(statistics::nozero);
+        (*STR_CyclesSPDWriteAccess[stream_id]).flags(statistics::nozero);
+        (*STR_LoadsCacheAccessing[stream_id]).flags(statistics::nozero);
+        (*STR_Evicts[stream_id]).flags(statistics::nozero);
+
+        (*STR_AvgWordsPerCacheLine[stream_id]) = (*STR_NumWordsInserted[stream_id]) / (*STR_NumCacheLineInserted[stream_id]);
+        (*STR_AvgCacheLinesPerInst[stream_id]) = (*STR_NumCacheLineInserted[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgDrainsPerInst[stream_id]) = (*STR_NumDrains[stream_id]) / (*STR_NumInsts[stream_id]);
+
+        (*STR_AvgCyclesRequestPerInst[stream_id]) = (*STR_CyclesRequest[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgCyclesRTAccessPerInst[stream_id]) = (*STR_CyclesRTAccess[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgCyclesSPDReadAccessPerInst[stream_id]) = (*STR_CyclesSPDReadAccess[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgCyclesSPDWriteAccessPerInst[stream_id]) = (*STR_CyclesSPDWriteAccess[stream_id]) / (*STR_NumInsts[stream_id]);
+
+        (*STR_AvgLoadsCacheAccessingPerInst[stream_id]) = (*STR_LoadsCacheAccessing[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgEvictssPerInst[stream_id]) = (*STR_Evicts[stream_id]) / (*STR_NumInsts[stream_id]);
+
+        (*STR_AvgWordsPerCacheLine[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgCacheLinesPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgDrainsPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgCyclesRequestPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgCyclesRTAccessPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgCyclesSPDReadAccessPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgCyclesSPDWriteAccessPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgLoadsCacheAccessingPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgEvictssPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+    }
+    for (int range_id = 0; range_id < num_range_units; range_id++) {
+        RNG_NumInsts.push_back(new statistics::Scalar(this, MAKE_RANGE_STAT_NAME("RNG_NumInsts"), statistics::units::Count::get(), "number of instructions"));
+        RNG_CyclesCompute.push_back(new statistics::Scalar(this, MAKE_RANGE_STAT_NAME("RNG_CyclesCompute"), statistics::units::Count::get(), "number of compute cycles in range loop"));
+        RNG_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_RANGE_STAT_NAME("RNG_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles spent on SPD read access in range loop"));
+        RNG_CyclesSPDWriteAccess.push_back(new statistics::Scalar(this, MAKE_RANGE_STAT_NAME("RNG_CyclesSPDWriteAccess"), statistics::units::Count::get(), "number of cycles spent on SPD write access in range loop"));
+        RNG_AvgCyclesComputePerInst.push_back(new statistics::Formula(this, MAKE_RANGE_STAT_NAME("RNG_AvgCyclesComputePerInst"), statistics::units::Count::get(), "average number of compute cycles per range loop instruction"));
+        RNG_AvgCyclesSPDReadAccessPerInst.push_back(new statistics::Formula(this, MAKE_RANGE_STAT_NAME("RNG_AvgCyclesSPDReadAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on SPD read access per range loop instruction"));
+        RNG_AvgCyclesSPDWriteAccessPerInst.push_back(new statistics::Formula(this, MAKE_RANGE_STAT_NAME("RNG_AvgCyclesSPDWriteAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on SPD write access per range loop instruction"));
+
+        (*RNG_NumInsts[range_id]).flags(statistics::nozero);
+        (*RNG_CyclesCompute[range_id]).flags(statistics::nozero);
+        (*RNG_CyclesSPDReadAccess[range_id]).flags(statistics::nozero);
+        (*RNG_CyclesSPDWriteAccess[range_id]).flags(statistics::nozero);
+
+        (*RNG_AvgCyclesComputePerInst[range_id]) = (*RNG_CyclesCompute[range_id]) / (*RNG_NumInsts[range_id]);
+        (*RNG_AvgCyclesSPDReadAccessPerInst[range_id]) = (*RNG_CyclesSPDReadAccess[range_id]) / (*RNG_NumInsts[range_id]);
+        (*RNG_AvgCyclesSPDWriteAccessPerInst[range_id]) = (*RNG_CyclesSPDWriteAccess[range_id]) / (*RNG_NumInsts[range_id]);
+
+        (*RNG_AvgCyclesComputePerInst[range_id]).flags(statistics::nozero | statistics::nonan);
+        (*RNG_AvgCyclesSPDReadAccessPerInst[range_id]).flags(statistics::nozero | statistics::nonan);
+        (*RNG_AvgCyclesSPDWriteAccessPerInst[range_id]).flags(statistics::nozero | statistics::nonan);
+    }
+    for (int alu_id = 0; alu_id < num_alu_units; alu_id++) {
+        ALU_NumInsts.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_NumInsts"), statistics::units::Count::get(), "number of instructions"));
+        ALU_NumInstsCompare.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_NumInstsCompare"), statistics::units::Count::get(), "number of compare instructions"));
+        ALU_NumInstsCompute.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_NumInstsCompute"), statistics::units::Count::get(), "number of compute instructions"));
+        ALU_CyclesCompute.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_CyclesCompute"), statistics::units::Count::get(), "number of cycles spent on compute"));
+        ALU_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles for SPD read access"));
+        ALU_CyclesSPDWriteAccess.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_CyclesSPDWriteAccess"), statistics::units::Count::get(), "number of cycles for SPD write access"));
+        ALU_AvgCyclesComputePerInst.push_back(new statistics::Formula(this, MAKE_ALU_STAT_NAME("ALU_AvgCyclesComputePerInst"), statistics::units::Count::get(), "average number of cycles spent on compute per ALU instruction"));
+        ALU_AvgCyclesSPDReadAccessPerInst.push_back(new statistics::Formula(this, MAKE_ALU_STAT_NAME("ALU_AvgCyclesSPDReadAccessPerInst"), statistics::units::Count::get(), "average number of cycles for SPD read access per ALU instruction"));
+        ALU_AvgCyclesSPDWriteAccessPerInst.push_back(new statistics::Formula(this, MAKE_ALU_STAT_NAME("ALU_AvgCyclesSPDWriteAccessPerInst"), statistics::units::Count::get(), "average number of cycles for SPD write access per ALU instruction"));
+        ALU_NumComparedWords.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_NumComparedWords"), statistics::units::Count::get(), "number of words compared"));
+        ALU_NumTakenWords.push_back(new statistics::Scalar(this, MAKE_ALU_STAT_NAME("ALU_NumTakenWords"), statistics::units::Count::get(), "number of words which comparison was taken"));
+        ALU_AvgNumTakenWordsPerComparedWords.push_back(new statistics::Formula(this, MAKE_ALU_STAT_NAME("ALU_AvgNumTakenWordsPerComparedWords"), statistics::units::Count::get(), "portion of words which comparison was taken"));
+
+        (*ALU_NumInsts[alu_id]).flags(statistics::nozero);
+        (*ALU_NumInstsCompare[alu_id]).flags(statistics::nozero);
+        (*ALU_NumInstsCompute[alu_id]).flags(statistics::nozero);
+        (*ALU_CyclesCompute[alu_id]).flags(statistics::nozero);
+        (*ALU_CyclesSPDReadAccess[alu_id]).flags(statistics::nozero);
+        (*ALU_CyclesSPDWriteAccess[alu_id]).flags(statistics::nozero);
+        (*ALU_NumComparedWords[alu_id]).flags(statistics::nozero);
+        (*ALU_NumTakenWords[alu_id]).flags(statistics::nozero);
+
+        (*ALU_AvgCyclesComputePerInst[alu_id]) = (*ALU_CyclesCompute[alu_id]) / (*ALU_NumInsts[alu_id]);
+        (*ALU_AvgCyclesSPDReadAccessPerInst[alu_id]) = (*ALU_CyclesSPDReadAccess[alu_id]) / (*ALU_NumInsts[alu_id]);
+        (*ALU_AvgCyclesSPDWriteAccessPerInst[alu_id]) = (*ALU_CyclesSPDWriteAccess[alu_id]) / (*ALU_NumInsts[alu_id]);
+        (*ALU_AvgNumTakenWordsPerComparedWords[alu_id]) = (*ALU_NumTakenWords[alu_id]) / (*ALU_NumComparedWords[alu_id]);
+
+        (*ALU_AvgCyclesComputePerInst[alu_id]).flags(statistics::nozero | statistics::nonan);
+        (*ALU_AvgCyclesSPDReadAccessPerInst[alu_id]).flags(statistics::nozero | statistics::nonan);
+        (*ALU_AvgCyclesSPDWriteAccessPerInst[alu_id]).flags(statistics::nozero | statistics::nonan);
+        (*ALU_AvgNumTakenWordsPerComparedWords[alu_id]).flags(statistics::nozero | statistics::nonan);
+    }
+    INV_NumInvalidatedCachelines = new statistics::Scalar(this, MAKE_INVALIDATOR_STAT_NAME("INV_NumInvalidatedCachelines"), statistics::units::Count::get(), "number of invalidated cachelines");
+    INV_AvgInvalidatedCachelinesPerInst = new statistics::Formula(this, MAKE_INVALIDATOR_STAT_NAME("INV_AvgInvalidatedCachelinesPerInst"), statistics::units::Count::get(), "average number of invalidated cachelines per instruction");
+
+    (*INV_NumInvalidatedCachelines).flags(statistics::nozero);
+    (*INV_AvgInvalidatedCachelinesPerInst) = (*INV_NumInvalidatedCachelines) / numInst_INV;
+    (*INV_AvgInvalidatedCachelinesPerInst).flags(statistics::nozero | statistics::nonan);
 }
 } // namespace gem5

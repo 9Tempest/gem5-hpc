@@ -21,10 +21,11 @@ RangeFuserUnit::RangeFuserUnit()
     : executeInstructionEvent([this] { executeInstruction(); }, name()) {
     my_instruction = nullptr;
 }
-void RangeFuserUnit::allocate(unsigned int _num_tile_elements, MAA *_maa) {
+void RangeFuserUnit::allocate(unsigned int _num_tile_elements, MAA *_maa, int _my_range_id) {
     state = Status::Idle;
     num_tile_elements = _num_tile_elements;
     maa = _maa;
+    my_range_id = _my_range_id;
     my_instruction = nullptr;
 }
 void RangeFuserUnit::executeInstruction() {
@@ -58,6 +59,9 @@ void RangeFuserUnit::executeInstruction() {
                  __func__, my_max_i, maa->spd->getSize(my_cond_tile));
         DPRINTF(MAARangeFuser, "%s: my_last_i: %d, my_last_j: %d, my_stride: %d, my_max_i: %d, my_idx_j: %d\n",
                 __func__, my_last_i, my_last_j, my_stride, my_max_i, my_idx_j);
+        maa->stats.numInst_RANGE++;
+        (*maa->stats.RNG_NumInsts[my_range_id])++;
+        maa->stats.numInst++;
 
         // Setting the state of the instruction and ALU unit
         DPRINTF(MAARangeFuser, "%s: state set to work for request %s!\n", __func__, my_instruction->print());
@@ -98,9 +102,14 @@ void RangeFuserUnit::executeInstruction() {
             }
         }
         Cycles spd_read_latency = maa->spd->getDataLatency(num_spd_read_accesses);
+        (*maa->stats.RNG_CyclesSPDReadAccess[my_range_id]) += spd_read_latency;
         Cycles spd_write_latency = maa->spd->setDataLatency(num_spd_write_accesses);
+        (*maa->stats.RNG_CyclesSPDWriteAccess[my_range_id]) += spd_write_latency;
         Cycles compute_latency = Cycles(my_idx_j);
+        (*maa->stats.RNG_CyclesCompute[my_range_id]) += compute_latency;
         Cycles final_latency = std::max(spd_read_latency, std::max(spd_write_latency, compute_latency));
+        maa->stats.cycles_RANGE += final_latency;
+        maa->stats.cycles += final_latency;
         DPRINTF(MAARangeFuser, "%s: setting state to finish for request %s in %d cycles!\n", __func__, my_instruction->print(), final_latency);
         state = Status::Finish;
         scheduleExecuteInstructionEvent(final_latency);

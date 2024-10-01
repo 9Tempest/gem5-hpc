@@ -21,9 +21,10 @@ ALUUnit::ALUUnit()
     my_dst_tile = -1;
     my_instruction = nullptr;
 }
-void ALUUnit::allocate(MAA *_maa, Cycles _ALU_lane_latency, int _num_ALU_lanes) {
+void ALUUnit::allocate(MAA *_maa, int _my_alu_id, Cycles _ALU_lane_latency, int _num_ALU_lanes) {
     state = Status::Idle;
     maa = _maa;
+    my_alu_id = _my_alu_id;
     ALU_lane_latency = _ALU_lane_latency;
     num_ALU_lanes = _num_ALU_lanes;
     my_instruction = nullptr;
@@ -53,6 +54,25 @@ void ALUUnit::executeInstruction() {
         panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
                  "%s: src1 size(%d) != cond size(%d)!\n",
                  __func__, my_max, maa->spd->getSize(my_cond_tile));
+        maa->stats.numInst++;
+        if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+            maa->stats.numInst_ALUS++;
+        } else if (my_instruction->opcode == Instruction::OpcodeType::ALU_VECTOR) {
+            maa->stats.numInst_ALUV++;
+        } else {
+            assert(false);
+        }
+        (*maa->stats.ALU_NumInsts[my_alu_id])++;
+        if (my_instruction->optype == Instruction::OPType::ADD_OP ||
+            my_instruction->optype == Instruction::OPType::SUB_OP ||
+            my_instruction->optype == Instruction::OPType::MUL_OP ||
+            my_instruction->optype == Instruction::OPType::DIV_OP ||
+            my_instruction->optype == Instruction::OPType::MIN_OP ||
+            my_instruction->optype == Instruction::OPType::MAX_OP) {
+            (*maa->stats.ALU_NumInstsCompute[my_alu_id])++;
+        } else {
+            (*maa->stats.ALU_NumInstsCompare[my_alu_id])++;
+        }
 
         // Setting the state of the instruction and ALU unit
         DPRINTF(MAAALU, "%s: state set to work for request %s!\n", __func__, my_instruction->print());
@@ -81,46 +101,59 @@ void ALUUnit::executeInstruction() {
                         src2 = maa->spd->getData<uint32_t>(my_src2_tile, i);
                         num_spd_read_accesses++;
                     }
-                    uint32_t result;
+                    uint32_t result_UINT32_compare;
+                    uint32_t result_UINT32_compute;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
-                        result = src1 + src2;
+                        result_UINT32_compute = src1 + src2;
                         break;
                     case Instruction::OPType::SUB_OP:
-                        result = src1 - src2;
+                        result_UINT32_compute = src1 - src2;
                         break;
                     case Instruction::OPType::MUL_OP:
-                        result = src1 * src2;
+                        result_UINT32_compute = src1 * src2;
                         break;
                     case Instruction::OPType::DIV_OP:
-                        result = src1 / src2;
+                        result_UINT32_compute = src1 / src2;
                         break;
                     case Instruction::OPType::MIN_OP:
-                        result = std::min(src1, src2);
+                        result_UINT32_compute = std::min(src1, src2);
                         break;
                     case Instruction::OPType::MAX_OP:
-                        result = std::max(src1, src2);
+                        result_UINT32_compute = std::max(src1, src2);
                         break;
                     case Instruction::OPType::GT_OP:
-                        result = src1 > src2 ? 1 : 0;
+                        result_UINT32_compare = src1 > src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::GTE_OP:
-                        result = src1 >= src2 ? 1 : 0;
+                        result_UINT32_compare = src1 >= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LT_OP:
-                        result = src1 < src2 ? 1 : 0;
+                        result_UINT32_compare = src1 < src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::LTE_OP:
-                        result = src1 <= src2 ? 1 : 0;
+                        result_UINT32_compare = src1 <= src2 ? 1 : 0;
                         break;
                     case Instruction::OPType::EQ_OP:
-                        result = src1 == src2 ? 1 : 0;
+                        result_UINT32_compare = src1 == src2 ? 1 : 0;
                         break;
                     default:
                         assert(false);
                     }
                     num_spd_write_accesses++;
-                    maa->spd->setData<uint32_t>(my_dst_tile, i, result);
+                    if (my_instruction->optype == Instruction::OPType::GT_OP ||
+                        my_instruction->optype == Instruction::OPType::GTE_OP ||
+                        my_instruction->optype == Instruction::OPType::LT_OP ||
+                        my_instruction->optype == Instruction::OPType::LTE_OP ||
+                        my_instruction->optype == Instruction::OPType::EQ_OP) {
+                        maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32_compare);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32_compare != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
+                    } else {
+                        maa->spd->setData<int32_t>(my_dst_tile, i, result_UINT32_compute);
+                    }
                     break;
                 }
                 case Instruction::DataType::INT32_TYPE: {
@@ -179,6 +212,10 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
                         maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32 != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
                     } else {
                         maa->spd->setData<int32_t>(my_dst_tile, i, result_INT32);
                     }
@@ -240,6 +277,10 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
                         maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32 != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
                     } else {
                         maa->spd->setData<float>(my_dst_tile, i, result_FLOAT32);
                     }
@@ -301,6 +342,10 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
                         maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32 != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
                     } else {
                         maa->spd->setData<uint64_t>(my_dst_tile, i, result_UINT64);
                     }
@@ -362,6 +407,10 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
                         maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32 != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
                     } else {
                         maa->spd->setData<int64_t>(my_dst_tile, i, result_INT64);
                     }
@@ -423,6 +472,10 @@ void ALUUnit::executeInstruction() {
                         my_instruction->optype == Instruction::OPType::LTE_OP ||
                         my_instruction->optype == Instruction::OPType::EQ_OP) {
                         maa->spd->setData<uint32_t>(my_dst_tile, i, result_UINT32);
+                        (*maa->stats.ALU_NumComparedWords[my_alu_id])++;
+                        if (result_UINT32 != 0) {
+                            (*maa->stats.ALU_NumTakenWords[my_alu_id])++;
+                        }
                     } else {
                         maa->spd->setData<double>(my_dst_tile, i, result_FLOAT64);
                     }
@@ -434,14 +487,25 @@ void ALUUnit::executeInstruction() {
             }
         }
         Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
+        (*maa->stats.ALU_CyclesSPDReadAccess[my_alu_id]) += get_data_latency;
         Cycles set_data_latency = maa->spd->setDataLatency(num_spd_write_accesses);
+        (*maa->stats.ALU_CyclesSPDWriteAccess[my_alu_id]) += set_data_latency;
         int num_ALU_iterations = my_max / num_ALU_lanes;
         if (my_max % num_ALU_lanes != 0) {
             num_ALU_iterations++;
         }
         Cycles ALU_latency = Cycles(num_ALU_iterations * ALU_lane_latency);
+        (*maa->stats.ALU_CyclesCompute[my_alu_id]) += ALU_latency;
         Cycles final_latency = std::max(get_data_latency, set_data_latency);
         final_latency = std::max(final_latency, ALU_latency);
+        maa->stats.cycles += final_latency;
+        if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
+            maa->stats.cycles_ALUS += final_latency;
+        } else if (my_instruction->opcode == Instruction::OpcodeType::ALU_VECTOR) {
+            maa->stats.cycles_ALUV += final_latency;
+        } else {
+            assert(false);
+        }
         DPRINTF(MAAALU, "%s: setting state to finish for request %s in %d cycles!\n", __func__, my_instruction->print(), final_latency);
         state = Status::Finish;
         scheduleExecuteInstructionEvent(final_latency);

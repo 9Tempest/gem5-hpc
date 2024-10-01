@@ -546,8 +546,11 @@ void IndirectAccessUnit::executeInstruction() {
                 if (inserted == false) {
                     DPRINTF(MAAIndirect, "I[%d] %s: insertion failed due to no space, average entry/row = %.2f, number of SPD accesses: %d, switching to drain mode...\n",
                             my_indirect_id, __func__, row_table[my_row_table_idx].getAverageEntriesPerRow(), num_spd_read_accesses);
-                    my_SPD_read_finish_tick = maa->getClockEdge(maa->spd->getDataLatency(num_spd_read_accesses));
+                    Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
+                    my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
                     my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
+                    (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
+                    (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
                     scheduleNextExecution(true);
                     prev_state = Status::Fill;
                     state = Status::Drain;
@@ -561,8 +564,11 @@ void IndirectAccessUnit::executeInstruction() {
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n",
                 my_indirect_id, __func__, my_instruction->print());
-        my_SPD_read_finish_tick = maa->getClockEdge(maa->spd->getDataLatency(num_spd_read_accesses));
+        Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
+        my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
         my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
+        (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
+        (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
         scheduleNextExecution(true);
         prev_state = Status::Fill;
         state = Status::Build;
@@ -592,9 +598,9 @@ void IndirectAccessUnit::executeInstruction() {
         }
         DPRINTF(MAAIndirect, "I[%d] %s: drain completed, going to the request state...\n", my_indirect_id, __func__);
         my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
+        (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
         prev_state = Status::Drain;
         state = Status::Request;
-        // scheduleNextExecution();
         scheduleNextSendRead();
         break;
     }
@@ -642,6 +648,7 @@ void IndirectAccessUnit::executeInstruction() {
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for %s!\n", my_indirect_id, __func__, my_instruction->print());
         my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
+        (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
         prev_state = Status::Build;
         state = Status::Request;
         if (my_received_responses == my_expected_responses) {
@@ -684,7 +691,7 @@ void IndirectAccessUnit::executeInstruction() {
             state = Status::Fill;
         } else {
             assert(prev_state == Status::Build);
-            DPRINTF(MAAIndirect, "I[%d] %s: request completed, state set to respond %s!\n", my_indirect_id, __func__);
+            DPRINTF(MAAIndirect, "I[%d] %s: request completed, state set to respond!\n", my_indirect_id, __func__);
             prev_state = Status::Request;
             state = Status::Response;
         }
@@ -777,6 +784,7 @@ void IndirectAccessUnit::createReadPacketEvict(Addr addr) {
 }
 bool IndirectAccessUnit::sendOutstandingReadPacket() {
     DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding read packets...\n", my_indirect_id, __func__, my_outstanding_read_pkts.size());
+    bool packet_sent = false;
     while (my_outstanding_read_pkts.empty() == false) {
         IndirectAccessUnit::IndirectPacket read_pkt = *my_outstanding_read_pkts.begin();
         DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to %s as a %s at time %u from %d packets\n",
@@ -795,6 +803,7 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
             maa->cpuSidePort.sendTimingSnoopReq(read_pkt.packet);
             DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to cpuSide, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
                     my_indirect_id, __func__, read_pkt.packet->cacheResponding(), read_pkt.packet->hasSharers(), read_pkt.packet->responderHadWritable(), read_pkt.packet->satisfied(), read_pkt.packet->isBlockCached());
+            packet_sent = true;
             my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
             if (read_pkt.packet->cacheResponding() == true) {
                 DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
@@ -817,6 +826,7 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
                 // A send has failed, we cannot continue sending the next packets
                 return false;
             } else {
+                packet_sent = true;
                 my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
                 // A packet is sent successfully, we can continue sending the next packets
             }
@@ -832,14 +842,17 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
             }
         }
     }
-    if (my_received_responses == my_expected_responses) {
+    if (packet_sent && (my_received_responses == my_expected_responses)) {
         DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n",
                 my_indirect_id, __func__, status_names[(int)state]);
-        scheduleNextExecution();
+        scheduleNextExecution(true);
+    } else {
+        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, packet_sent);
     }
     return true;
 }
 bool IndirectAccessUnit::sendOutstandingWritePacket() {
+    bool packet_sent = false;
     while (my_outstanding_write_pkts.empty() == false) {
         IndirectAccessUnit::IndirectPacket write_pkt = *my_outstanding_write_pkts.begin();
         if (write_pkt.tick > curTick()) {
@@ -857,12 +870,15 @@ bool IndirectAccessUnit::sendOutstandingWritePacket() {
         } else {
             my_outstanding_write_pkts.erase(my_outstanding_write_pkts.begin());
             my_received_responses++;
+            packet_sent = true;
         }
     }
-    if (my_received_responses == my_expected_responses) {
+    if (packet_sent && (my_received_responses == my_expected_responses)) {
         DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n",
                 my_indirect_id, __func__, status_names[(int)state]);
         scheduleNextExecution(true);
+    } else {
+        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, packet_sent);
     }
     return true;
 }
@@ -977,9 +993,12 @@ bool IndirectAccessUnit::recvData(const Addr addr,
     }
     Cycles get_data_latency = maa->spd->getDataLatency(num_recv_spd_write_accesses);
     my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
+    (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
     Cycles set_data_latency = maa->spd->setDataLatency(num_recv_spd_read_accesses);
     my_SPD_write_finish_tick = maa->getClockEdge(set_data_latency);
+    (*maa->stats.IND_CyclesSPDWriteAccess[my_indirect_id]) += set_data_latency;
     Cycles access_rt_latency = Cycles(num_recv_rt_accesses * rowtable_latency);
+    (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += access_rt_latency;
     if (my_RT_access_finish_tick < curTick())
         my_RT_access_finish_tick = maa->getClockEdge(access_rt_latency);
     else
