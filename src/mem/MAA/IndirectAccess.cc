@@ -800,7 +800,10 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
         }
         if (read_pkt.is_snoop) {
             DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide\n", my_indirect_id, __func__, read_pkt.packet->print());
-            maa->cpuSidePort.sendTimingSnoopReq(read_pkt.packet);
+            if (maa->cpuSidePort.sendSnoopPacket((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
+                DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
+                return false;
+            }
             DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to cpuSide, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
                     my_indirect_id, __func__, read_pkt.packet->cacheResponding(), read_pkt.packet->hasSharers(), read_pkt.packet->responderHadWritable(), read_pkt.packet->satisfied(), read_pkt.packet->isBlockCached());
             packet_sent = true;

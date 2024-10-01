@@ -61,6 +61,11 @@ class MAA : public ClockedObject {
      * functions for functional, atomic and timing requests.
      */
     class CpuSidePort : public MAAResponsePort {
+        enum class BlockReason : uint8_t {
+            NOT_BLOCKED,
+            MAX_XBAR_PACKETS
+        };
+
     protected:
         bool recvTimingSnoopResp(PacketPtr pkt) override;
 
@@ -73,6 +78,19 @@ class MAA : public ClockedObject {
         void recvFunctional(PacketPtr pkt) override;
 
         AddrRangeList getAddrRanges() const override;
+
+    protected:
+        int outstandingCpuSidePackets;
+        int maxOutstandingCpuSidePackets;
+        BlockReason blockReason;
+        BlockReason *funcBlockReasons[3];
+        void setUnblocked();
+
+    public:
+        bool sendSnoopPacket(uint8_t func_unit_type,
+                             int func_unit_id,
+                             PacketPtr pkt);
+        void allocate(int _maxOutstandingCpuSidePackets);
 
     public:
         CpuSidePort(const std::string &_name, MAA &_maa,
@@ -169,7 +187,7 @@ class MAA : public ClockedObject {
 
         SnoopRespPacketQueue _snoopRespQueue;
 
-        // a pointer to our specific cache implementation
+        // a pointer to our specific MAA implementation
         MAA *maa;
 
     protected:
@@ -400,7 +418,7 @@ public:
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID = -1,
                            int dst2SpdID = -1);
-    void setDstReady(Instruction *instruction, int dstSpdID);
+    void setTileInvalidated(Instruction *instruction, int tileID);
     bool sentMemSidePacket(PacketPtr pkt);
     Tick getClockEdge(Cycles cycles = Cycles(0)) const;
     Cycles getTicksToCycles(Tick t) const;

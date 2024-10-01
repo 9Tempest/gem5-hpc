@@ -128,13 +128,21 @@ def config_maa(options, system):
     # LLC side derives the cpu side of the L3 bus
     
     # Increasing LLC side packets to accommodate the MAA routing table
-    max_routing_table_size = (1 if "num_stream_access_units" not in opts else opts["num_stream_access_units"])
-    max_routing_table_size += (1 if "num_indirect_access_units" not in opts else opts["num_indirect_access_units"])
-    max_routing_table_size *= (1 if "num_tile_elements" not in opts else opts["num_tile_elements"])
-    max_routing_table_size = max(512, max_routing_table_size)
-    print(f"MAA max routing table size: {max_routing_table_size}")
-    system.maa.max_outstanding_cache_side_packets = max_routing_table_size
-    system.tol3bus.max_routing_table_size = max_routing_table_size
+    max_tol3_routing_table_size = (1 if "num_stream_access_units" not in opts else opts["num_stream_access_units"])
+    max_tol3_routing_table_size += (1 if "num_indirect_access_units" not in opts else opts["num_indirect_access_units"])
+    max_tol3_routing_table_size *= (1 if "num_tile_elements" not in opts else opts["num_tile_elements"])
+    max_tol3_routing_table_size = max(512, max_tol3_routing_table_size)
+    print(f"MAA max tol3bus routing table size: {max_tol3_routing_table_size}")
+    system.maa.max_outstanding_cache_side_packets = max_tol3_routing_table_size
+    system.tol3bus.max_routing_table_size = max_tol3_routing_table_size
+
+    max_mem_routing_table_size = 1 # for invalidator
+    max_mem_routing_table_size += (1 if "num_indirect_access_units" not in opts else opts["num_indirect_access_units"])
+    max_mem_routing_table_size *= (1 if "num_tile_elements" not in opts else opts["num_tile_elements"])
+    max_mem_routing_table_size = max(512, max_mem_routing_table_size)
+    print(f"MAA max membus routing table size: {max_mem_routing_table_size}")
+    system.maa.max_outstanding_cpu_side_packets = max_mem_routing_table_size
+    system.membus.max_routing_table_size = max_mem_routing_table_size
 
     # Increasing snoop filter size to accommodate all LLC and MAA's SPD cachelines
     SPD_data_size = opts["num_tiles"] * opts["num_tile_elements"] * 4

@@ -29,6 +29,7 @@ class MAA(ClockedObject):
     num_ALU_lanes = Param.Unsigned(4, "Number of ALU lanes")
     cache_snoop_latency = Param.Cycles(1, "Cache snoop latency")
     max_outstanding_cache_side_packets = Param.Unsigned(512, "Maximum number of outstanding cache side packets")
+    max_outstanding_cpu_side_packets = Param.Unsigned(512, "Maximum number of outstanding cpu side packets")
 
     cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
     mem_side = RequestPort("Downstream port closer to DRAM memory")

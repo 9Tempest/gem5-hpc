@@ -2,6 +2,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "mem/MAA/MAA.hh"
+#include "mem/MAA/SPD.hh"
 #include "debug/MAAInvalidator.hh"
 #include <cassert>
 
@@ -42,8 +43,23 @@ void Invalidator::read(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
     int cl_id = get_cl_id(tile_id, element_id, 4);
-    cl_status[cl_id] = CLStatus::Cached;
-    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: cached\n",
+    panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
+             cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
+    cl_status[cl_id] = CLStatus::ReadCached;
+    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: read cached\n",
+            __func__,
+            tile_id,
+            element_id,
+            cl_id);
+}
+void Invalidator::write(int tile_id, int element_id) {
+    assert((0 <= tile_id) && (tile_id < num_tiles));
+    assert((0 <= element_id) && (element_id < num_tile_elements));
+    int cl_id = get_cl_id(tile_id, element_id, 4);
+    panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
+             cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
+    cl_status[cl_id] = CLStatus::WriteCached;
+    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: read cached\n",
             __func__,
             tile_id,
             element_id,
@@ -66,9 +82,12 @@ void Invalidator::executeInstruction() {
         DPRINTF(MAAInvalidator, "%s: decoding %s!\n", __func__, my_instruction->print());
 
         // Decoding the instruction
-        panic_if(my_instruction->dst1Ready && my_instruction->dst2Ready,
-                 "Both dst1 and dst2 are ready!\n");
-        my_dst_tile = my_instruction->dst1Ready == false ? my_instruction->dst1SpdID : my_instruction->dst2SpdID;
+        my_invalidating_tile = my_instruction->dst1Invalidated == false ? my_instruction->dst1SpdID : -1;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->dst2Invalidated == false) ? my_instruction->dst2SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src1Invalidated == false) ? my_instruction->src1SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src2Invalidated == false) ? my_instruction->src2SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->condInvalidated == false) ? my_instruction->condSpdID : my_invalidating_tile;
+        panic_if(my_invalidating_tile == -1, "No invalidating tile found!\n");
         if ((my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR ||
              my_instruction->opcode == Instruction::OpcodeType::ALU_VECTOR) &&
             (my_instruction->optype == Instruction::OPType::GT_OP ||
@@ -90,6 +109,7 @@ void Invalidator::executeInstruction() {
         my_decode_start_tick = curTick();
         maa->stats.numInst++;
         maa->stats.numInst_INV++;
+        my_cl_id = -1;
 
         // Setting the state of the instruction and stream unit
         DPRINTF(MAAInvalidator, "%s: state set to request for request %s!\n", __func__, my_instruction->print());
@@ -105,14 +125,11 @@ void Invalidator::executeInstruction() {
             }
         }
         for (; my_i < num_tile_elements; my_i++) {
-            int cl_id = get_cl_id(my_dst_tile, my_i, my_word_size);
-            if (cl_status[cl_id] == CLStatus::Cached) {
-                DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: cached, invalidating\n",
-                        __func__,
-                        my_dst_tile,
-                        my_i,
-                        cl_id);
-                Addr curr_block_addr = my_base_addr + cl_id * 64;
+            my_cl_id = get_cl_id(my_invalidating_tile, my_i, my_word_size);
+            if (cl_status[my_cl_id] == CLStatus::ReadCached || cl_status[my_cl_id] == CLStatus::WriteCached) {
+                DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: %s, invalidating\n",
+                        __func__, my_invalidating_tile, my_i, my_cl_id, cl_status[my_cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
+                Addr curr_block_addr = my_base_addr + my_cl_id * 64;
                 if (curr_block_addr != my_last_block_addr) {
                     my_last_block_addr = curr_block_addr;
                     createMyPacket();
@@ -134,7 +151,7 @@ void Invalidator::executeInstruction() {
         if (my_received_responses == my_total_invalidations_sent) {
             DPRINTF(MAAInvalidator, "%s: state set to idle for request %s!\n", __func__, my_instruction->print());
             state = Status::Idle;
-            maa->setDstReady(my_instruction, my_dst_tile);
+            maa->setTileInvalidated(my_instruction, my_invalidating_tile);
             my_instruction = nullptr;
             Cycles total_cycles = maa->getTicksToCycles(curTick() - my_decode_start_tick);
             maa->stats.cycles += total_cycles;
@@ -154,40 +171,57 @@ void Invalidator::createMyPacket() {
         block_size,
         flags,
         maa->requestorId);
-    my_pkt = new Packet(real_req, MemCmd::InvalidateReq);
+    my_pkt = new Packet(real_req, MemCmd::ReadExReq);
     my_outstanding_pkt = true;
+    my_pkt->allocate();
+    my_pkt->setExpressSnoop();
+    my_pkt->headerDelay = my_pkt->payloadDelay = 0;
     DPRINTF(MAAInvalidator, "%s: created %s\n", __func__, my_pkt->print());
     (*maa->stats.INV_NumInvalidatedCachelines)++;
 }
 bool Invalidator::sendOutstandingPacket() {
     DPRINTF(MAAInvalidator, "%s: trying sending %s\n", __func__, my_pkt->print());
-    if (maa->cacheSidePort.sendPacket((uint8_t)FuncUnitType::INVALIDATOR,
-                                      0,
-                                      my_pkt) == false) {
-        DPRINTF(MAAInvalidator, "%s: send failed, leaving execution...\n", __func__);
+    if (maa->cpuSidePort.sendSnoopPacket((uint8_t)FuncUnitType::INVALIDATOR, 0, my_pkt) == false) {
+        DPRINTF(MAAInvalidator, "%s: send failed, leaving send packet...\n", __func__);
         return false;
-    } else {
-        my_outstanding_pkt = false;
-        return true;
     }
+    if (my_pkt->cacheResponding() == true) {
+        DPRINTF(MAAInvalidator, "INV %s: a cache in the O/M state will respond, send successfull...\n", __func__);
+    } else if (my_pkt->hasSharers() == true) {
+        my_received_responses++;
+        cl_status[my_cl_id] = CLStatus::Uncached;
+        DPRINTF(MAAInvalidator, "INV %s: There was a cache in the E/S state invalidated\n", __func__);
+    } else {
+        my_received_responses++;
+        cl_status[my_cl_id] = CLStatus::Uncached;
+        DPRINTF(MAAInvalidator, "INV %s: no cache responds (I)\n", __func__);
+    }
+    return true;
 }
-void Invalidator::recvData(int tile_id, int element_id) {
+bool Invalidator::recvData(int tile_id, int element_id, uint8_t *dataptr) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
     int cl_id = get_cl_id(tile_id, element_id, 4);
+    assert(cl_status[cl_id] != CLStatus::Uncached);
     cl_status[cl_id] = CLStatus::Uncached;
-    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: uncached\n",
+    DPRINTF(MAAInvalidator, "%s T[%d] E[%d-%d] CL[%d]: uncached\n",
             __func__,
             tile_id,
             element_id,
+            element_id + 15,
             cl_id);
     my_received_responses++;
+    uint32_t *dataptr_u32_typed = (uint32_t *)dataptr;
+    for (int i = 0; i < 16; i++) {
+        maa->spd->setData<uint32_t>(tile_id, element_id + i, dataptr_u32_typed[i]);
+    }
     if (state == Status::Response && my_received_responses == my_total_invalidations_sent) {
         DPRINTF(MAAInvalidator, "%s: all words received, calling execution again!\n", __func__);
         scheduleExecuteInstructionEvent();
     } else {
         DPRINTF(MAAInvalidator, "%s: expected: %d, received: %d!\n", __func__, my_total_invalidations_sent, my_received_responses);
     }
+    return true;
 }
 void Invalidator::scheduleExecuteInstructionEvent(int latency) {
     DPRINTF(MAAInvalidator, "%s: scheduling execute for the Invalidator Unit in the next %d cycles!\n", __func__, latency);

@@ -78,6 +78,7 @@ MAA::MAA(const MAAParams &p)
     }
     indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];
     cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
+    cpuSidePort.allocate(p.max_outstanding_cpu_side_packets);
     memSidePort.allocate();
     invalidator = new Invalidator();
     invalidator->allocate(
@@ -198,20 +199,34 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
             panic_if(pkt->req->getByteEnable()[i] == false, "Byte enable [%d] is not set for the read response\n", i);
         }
         bool received = false;
-        for (int i = 0; i < num_indirect_access_units; i++) {
-            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
-                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
-                if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
-                    panic_if(received, "Received multiple responses for the same request\n");
+
+        AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
+        if (address_range.isValid()) {
+            // It's a dirty data for the invalidator in the SPD range
+            assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
+            Addr offset = address_range.getOffset();
+            int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+            int element_id = offset % (num_tile_elements * sizeof(uint32_t));
+            assert(element_id % sizeof(uint32_t) == 0);
+            element_id /= sizeof(uint32_t);
+            assert(invalidator->recvData(tile_id, element_id, pkt->getPtr<uint8_t>()));
+        } else {
+            // It's a data
+            for (int i = 0; i < num_indirect_access_units; i++) {
+                if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
+                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
+                        panic_if(received, "Received multiple responses for the same request\n");
+                    }
                 }
             }
-        }
-        for (int i = 0; i < num_stream_access_units; i++) {
-            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
-                streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
-                panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
-                         "Received multiple responses for the same request\n");
+            for (int i = 0; i < num_stream_access_units; i++) {
+                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
+                    streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+                    panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
+                             "Received multiple responses for the same request\n");
+                }
             }
         }
         break;
@@ -237,6 +252,10 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     // assert(false);
     // Express snoop responses from requestor to responder, e.g., from L1 to L2
     maa.recvTimingSnoopResp(pkt);
+    outstandingCpuSidePackets--;
+    if (blockReason == BlockReason::MAX_XBAR_PACKETS) {
+        setUnblocked();
+    }
     return true;
 }
 
@@ -444,6 +463,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         }
         break;
     }
+    case MemCmd::ReadExReq:
     case MemCmd::ReadSharedReq: {
         // all read responses have a data payload
         assert(pkt->hasRespData());
@@ -459,7 +479,11 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
             cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->getDataLatency(1)));
-            invalidator->read(tile_id, element_id);
+            if (pkt->cmd == MemCmd::ReadSharedReq) {
+                invalidator->read(tile_id, element_id);
+            } else {
+                invalidator->write(tile_id, element_id);
+            }
             break;
         }
         default:
@@ -504,6 +528,67 @@ Tick MAA::CpuSidePort::recvAtomic(PacketPtr pkt) {
 
 AddrRangeList MAA::CpuSidePort::getAddrRanges() const {
     return maa.getAddrRanges();
+}
+
+bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type,
+                                       int func_unit_id,
+                                       PacketPtr pkt) {
+    /// print the packet
+    DPRINTF(MAACpuPort, "%s: UNIT[%s][%d] %s\n",
+            __func__,
+            func_unit_names[func_unit_type],
+            func_unit_id,
+            pkt->print());
+    panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
+    panic_if(func_unit_type == (int)FuncUnitType::STREAM, "Stream does not have any snoop requests\n");
+    if (blockReason != BlockReason::NOT_BLOCKED) {
+        DPRINTF(MAACpuPort, "%s Send snoop blocked because of MAX_XBAR_PACKETS...\n", __func__);
+        funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
+        return false;
+    }
+    if (outstandingCpuSidePackets == maxOutstandingCpuSidePackets) {
+        // XBAR is full
+        DPRINTF(MAACpuPort, "%s Send failed because XBAR is full...\n", __func__);
+        assert(blockReason == BlockReason::NOT_BLOCKED);
+        blockReason = BlockReason::MAX_XBAR_PACKETS;
+        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
+        return false;
+    }
+    sendTimingSnoopReq(pkt);
+    DPRINTF(MAACpuPort, "%s Send is successfull...\n", __func__);
+    if (!pkt->cacheResponding())
+        outstandingCpuSidePackets++;
+    return true;
+}
+
+void MAA::CpuSidePort::setUnblocked() {
+    blockReason = BlockReason::NOT_BLOCKED;
+    if (funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] != BlockReason::NOT_BLOCKED) {
+        assert(maa.invalidator->getState() == Invalidator::Status::Request);
+        funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
+        DPRINTF(MAACpuPort, "%s unblocked Unit[invalidator]...\n", __func__);
+        maa.invalidator->scheduleExecuteInstructionEvent();
+    }
+    for (int i = 0; i < maa.num_indirect_access_units; i++) {
+        if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
+            assert(maa.indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
+                   maa.indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain);
+            funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
+            DPRINTF(MAACpuPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
+            maa.indirectAccessUnits[i].scheduleSendReadPacketEvent();
+        }
+    }
+}
+
+void MAA::CpuSidePort::allocate(int _maxOutstandingCpuSidePackets) {
+    maxOutstandingCpuSidePackets = _maxOutstandingCpuSidePackets - 16;
+    funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa.num_indirect_access_units];
+    for (int i = 0; i < maa.num_indirect_access_units; i++) {
+        funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
+    }
+    funcBlockReasons[(int)FuncUnitType::INVALIDATOR] = new BlockReason[1];
+    funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
+    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 MAA::CpuSidePort::CpuSidePort(const std::string &_name, MAA &_maa,
@@ -729,15 +814,16 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         break;
     }
     case MemCmd::InvalidateResp: {
-        assert(pkt->getSize() == 64);
-        AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
-        assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
-        Addr offset = address_range.getOffset();
-        int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
-        int element_id = offset % (num_tile_elements * sizeof(uint32_t));
-        assert(element_id % sizeof(uint32_t) == 0);
-        element_id /= sizeof(uint32_t);
-        invalidator->recvData(tile_id, element_id);
+        assert(false);
+        // assert(pkt->getSize() == 64);
+        // AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
+        // assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
+        // Addr offset = address_range.getOffset();
+        // int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+        // int element_id = offset % (num_tile_elements * sizeof(uint32_t));
+        // assert(element_id % sizeof(uint32_t) == 0);
+        // element_id /= sizeof(uint32_t);
+        // invalidator->recvData(tile_id, element_id);
         break;
     }
     default:
@@ -825,7 +911,7 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type,
         funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
         return false;
     }
-    if (maa->cacheSidePort.sendTimingReq(pkt) == false) {
+    if (sendTimingReq(pkt) == false) {
         // Cache cannot receive a new request
         DPRINTF(MAACachePort, "%s Send failed because cache returned false...\n", __func__);
         blockReason = BlockReason::CACHE_FAILED;
@@ -958,14 +1044,17 @@ void MAA::dispatchInstruction() {
     DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
     if (my_outstanding_instruction_pkt) {
         assert(my_instruction_pkt != nullptr);
+        current_instruction->src1Invalidated = (current_instruction->src1SpdID == -1);
+        current_instruction->src2Invalidated = (current_instruction->src2SpdID == -1);
+        current_instruction->condInvalidated = (current_instruction->condSpdID == -1);
         current_instruction->src1Ready = current_instruction->src1SpdID == -1 ? true : spd->getReady(current_instruction->src1SpdID);
         current_instruction->src2Ready = current_instruction->src2SpdID == -1 ? true : spd->getReady(current_instruction->src2SpdID);
         current_instruction->condReady = current_instruction->condSpdID == -1 ? true : spd->getReady(current_instruction->condSpdID);
         // assume that we can read from any tile, so invalidate all destinations
         // Instructions with DST1: stream and indirect load, range loop, ALU
-        current_instruction->dst1Ready = current_instruction->dst1SpdID == -1 ? true : false;
+        current_instruction->dst1Invalidated = (current_instruction->dst1SpdID == -1);
         // Instructions with DST2: range loop
-        current_instruction->dst2Ready = current_instruction->dst2SpdID == -1 ? true : false;
+        current_instruction->dst2Invalidated = (current_instruction->dst2SpdID == -1);
         if (ifile->pushInstruction(*current_instruction)) {
             DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, current_instruction->print());
             if (current_instruction->dst1SpdID != -1) {
@@ -999,11 +1088,22 @@ void MAA::finishInstruction(Instruction *instruction,
     scheduleIssueInstructionEvent();
     scheduleDispatchInstructionEvent();
 }
-void MAA::setDstReady(Instruction *instruction, int dstSpdID) {
-    if (dstSpdID == instruction->dst1SpdID) {
-        instruction->dst1Ready = true;
-    } else if (dstSpdID == instruction->dst2SpdID) {
-        instruction->dst2Ready = true;
+void MAA::setTileInvalidated(Instruction *instruction, int tileID) {
+    if (tileID == instruction->src1SpdID) {
+        assert(instruction->src1Invalidated == false);
+        instruction->src1Invalidated = true;
+    } else if (tileID == instruction->src2SpdID) {
+        assert(instruction->src2Invalidated == false);
+        instruction->src2Invalidated = true;
+    } else if (tileID == instruction->condSpdID) {
+        assert(instruction->condInvalidated == false);
+        instruction->condInvalidated = true;
+    } else if (tileID == instruction->dst1SpdID) {
+        assert(instruction->dst1Invalidated == false);
+        instruction->dst1Invalidated = true;
+    } else if (tileID == instruction->dst2SpdID) {
+        assert(instruction->dst2Invalidated == false);
+        instruction->dst2Invalidated = true;
     } else {
         assert(false);
     }

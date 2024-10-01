@@ -19,7 +19,8 @@ class Invalidator {
 protected:
     enum class CLStatus : uint8_t {
         Uncached = 0,
-        Cached = 1,
+        ReadCached = 1,
+        WriteCached = 2,
         MAX
     };
 
@@ -38,7 +39,8 @@ public:
                   Addr _base_addr,
                   MAA *_maa);
     void read(int tile_id, int element_id);
-    void recvData(int tile_id, int element_id);
+    void write(int tile_id, int element_id);
+    bool recvData(int tile_id, int element_id, uint8_t *dataptr);
     void setInstruction(Instruction *_instruction);
     void scheduleExecuteInstructionEvent(int latency = 0);
     Status getState() const { return state; }
@@ -56,7 +58,8 @@ protected:
     int my_word_size;
     EventFunctionWrapper executeInstructionEvent;
     Status state;
-    int my_dst_tile, my_i, my_total_invalidations_sent;
+    int my_invalidating_tile, my_i, my_total_invalidations_sent;
+    int my_cl_id;
     bool my_outstanding_pkt;
     int my_received_responses;
     Addr my_last_block_addr = 0;

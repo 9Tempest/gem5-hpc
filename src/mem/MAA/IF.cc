@@ -18,12 +18,15 @@ Instruction::Instruction() : baseAddr(0),
                              src2SpdID(-1),
                              src1Ready(false),
                              src2Ready(false),
+                             src1Invalidated(false),
+                             src2Invalidated(false),
                              dst1SpdID(-1),
                              dst2SpdID(-1),
-                             dst1Ready(false),
-                             dst2Ready(false),
+                             dst1Invalidated(false),
+                             dst2Invalidated(false),
                              condSpdID(-1),
                              condReady(false),
+                             condInvalidated(false),
                              opcode(OpcodeType::MAX),
                              optype(OPType::MAX),
                              datatype(DataType::MAX),
@@ -115,8 +118,9 @@ Instruction *IF::getReady(FuncUnitType funcUnit) {
     if (funcUnit == FuncUnitType::INVALIDATOR) {
         for (int i = 0; i < num_instructions; i++) {
             if (valids[i] &&
-                ((instructions[i].dst1SpdID != -1 && instructions[i].dst1Ready == false) ||
-                 (instructions[i].dst2SpdID != -1 && instructions[i].dst2Ready == false))) {
+                (instructions[i].dst1Invalidated == false || instructions[i].dst2Invalidated == false ||
+                 instructions[i].src1Invalidated == false || instructions[i].src2Invalidated == false ||
+                 instructions[i].condInvalidated == false)) {
                 // instruction state does not matter anymore as we only have one invalidator
                 return &instructions[i];
             }
@@ -126,9 +130,12 @@ Instruction *IF::getReady(FuncUnitType funcUnit) {
             if (valids[i] &&
                 instructions[i].src1Ready &&
                 instructions[i].src2Ready &&
-                instructions[i].dst1Ready &&
-                instructions[i].dst2Ready &&
+                instructions[i].src1Invalidated &&
+                instructions[i].src2Invalidated &&
+                instructions[i].dst1Invalidated &&
+                instructions[i].dst2Invalidated &&
                 instructions[i].condReady &&
+                instructions[i].condInvalidated &&
                 instructions[i].state == Instruction::Status::Idle &&
                 instructions[i].funcUnit == funcUnit) {
                 instructions[i].state = Instruction::Status::Service;
@@ -176,18 +183,17 @@ void IF::finishInstruction(Instruction *instruction,
     }
 }
 AddressRangeType::AddressRangeType(Addr _addr, AddrRangeList addrRanges) : addr(_addr) {
-    bool range_found = false;
+    valid = false;
     rangeID = 0;
     for (const auto &r : addrRanges) {
         if (r.contains(addr)) {
             base = r.start();
             offset = addr - base;
-            range_found = true;
+            valid = true;
             break;
         }
         rangeID++;
     }
-    assert(range_found);
 }
 std::string AddressRangeType::print() const {
     std::ostringstream str;
