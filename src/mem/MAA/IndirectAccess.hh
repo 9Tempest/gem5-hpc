@@ -82,9 +82,8 @@ public:
                   int _num_row_table_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
-    bool insert(Addr addr,
-                int itr,
-                int wid);
+    bool insert(Addr addr, int itr, int wid);
+    bool find_addr(Addr addr);
     void reset();
     void check_reset();
     bool get_entry_send(Addr &addr);

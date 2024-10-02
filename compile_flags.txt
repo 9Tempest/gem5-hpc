@@ -1,3 +1,4 @@
 -Isrc/
 -Iext/ramulator2/
+-Iext/magic_enum/
 -Ibuild/X86/

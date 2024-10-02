@@ -43,8 +43,9 @@ void Invalidator::read(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
     int cl_id = get_cl_id(tile_id, element_id, 4);
-    panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
-             cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
+    // It's possible that the data is cleanevict'ed or clear cleackwirteback'ed and MAA does not know
+    // panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
+    //          cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
     cl_status[cl_id] = CLStatus::ReadCached;
     DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: read cached\n",
             __func__,
@@ -56,10 +57,11 @@ void Invalidator::write(int tile_id, int element_id) {
     assert((0 <= tile_id) && (tile_id < num_tiles));
     assert((0 <= element_id) && (element_id < num_tile_elements));
     int cl_id = get_cl_id(tile_id, element_id, 4);
-    panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
-             cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
+    // It's possible that the data is cleanevict'ed or clear cleackwirteback'ed and MAA does not know
+    // panic_if(cl_status[cl_id] != CLStatus::Uncached, "CL[%d] is not uncached, state: %s!\n",
+    //          cl_id, cl_status[cl_id] == CLStatus::ReadCached ? "ReadCached" : "WriteCached");
     cl_status[cl_id] = CLStatus::WriteCached;
-    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: read cached\n",
+    DPRINTF(MAAInvalidator, "%s T[%d] E[%d] CL[%d]: write cached\n",
             __func__,
             tile_id,
             element_id,

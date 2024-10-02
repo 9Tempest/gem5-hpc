@@ -124,8 +124,8 @@ void RangeFuserUnit::executeInstruction() {
         int tile_size = my_idx_j; // my_idx_j == -1 ? num_tile_elements : my_idx_j;
         maa->spd->setSize(my_dst_i_tile, tile_size);
         maa->spd->setSize(my_dst_j_tile, tile_size);
-        maa->spd->setReady(my_dst_i_tile);
-        maa->spd->setReady(my_dst_j_tile);
+        maa->setTileReady(my_dst_i_tile);
+        maa->setTileReady(my_dst_j_tile);
         maa->finishInstruction(my_instruction, my_dst_i_tile, my_dst_j_tile);
         DPRINTF(MAARangeFuser, "%s: my_last_i: %d [REG %d], my_last_j: %d [REG %d], my_idx_j: %d, tile size: %d\n",
                 __func__,

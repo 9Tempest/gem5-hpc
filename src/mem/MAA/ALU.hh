@@ -48,7 +48,8 @@ protected:
     int my_alu_id;
     int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
     int my_max;
-    int my_word_size;
+    int my_input_word_size;
+    int my_output_word_size;
     Cycles ALU_lane_latency;
     int num_ALU_lanes;
 

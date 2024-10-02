@@ -415,6 +415,7 @@ public:
                   PortID idx = InvalidPortID) override;
 
     const AddrRangeList &getAddrRanges() const { return addrRanges; }
+    void setTileReady(int tileID);
     void finishInstruction(Instruction *instruction,
                            int dst1SpdID = -1,
                            int dst2SpdID = -1);
@@ -426,7 +427,10 @@ public:
 
 protected:
     PacketPtr my_instruction_pkt;
+    PacketPtr my_ready_pkt;
     bool my_outstanding_instruction_pkt;
+    bool my_outstanding_ready_pkt;
+    int my_ready_tile_id;
     void issueInstruction();
     void dispatchInstruction();
     EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;

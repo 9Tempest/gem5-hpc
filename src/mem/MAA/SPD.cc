@@ -19,6 +19,10 @@ namespace gem5 {
 //
 ///////////////
 Cycles SPD::getDataLatency(int num_accesses) {
+    if (num_accesses == 0) {
+        return Cycles(0);
+    }
+    panic_if(num_accesses < 0, "Invalid number of accesses: %d\n", num_accesses);
     int min_busy_port = 0;
     Tick min_busy_until = read_port_busy_until[0];
     for (int i = 0; i < num_read_ports; i++) {
@@ -38,6 +42,10 @@ Cycles SPD::getDataLatency(int num_accesses) {
     return maa->getTicksToCycles(read_port_busy_until[min_busy_port] - curTick());
 }
 Cycles SPD::setDataLatency(int num_accesses) {
+    if (num_accesses == 0) {
+        return Cycles(0);
+    }
+    panic_if(num_accesses < 0, "Invalid number of accesses: %d\n", num_accesses);
     int min_busy_port = 0;
     Tick min_busy_until = write_port_busy_until[0];
     for (int i = 0; i < num_write_ports; i++) {

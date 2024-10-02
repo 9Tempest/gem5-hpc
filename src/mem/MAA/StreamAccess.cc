@@ -296,9 +296,9 @@ void StreamAccessUnit::executeInstruction() {
         my_decode_start_tick = 0;
         state = Status::Idle;
         maa->spd->setSize(my_dst_tile, my_idx);
-        maa->spd->setReady(my_dst_tile);
+        maa->setTileReady(my_dst_tile);
         if (my_word_size == 8) {
-            maa->spd->setReady(my_dst_tile + 1);
+            maa->setTileReady(my_dst_tile + 1);
         }
         maa->finishInstruction(my_instruction, my_dst_tile);
         my_instruction = nullptr;

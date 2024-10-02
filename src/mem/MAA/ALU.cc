@@ -47,7 +47,7 @@ void ALUUnit::executeInstruction() {
         my_src1_tile = my_instruction->src1SpdID;
         my_src2_tile = my_instruction->src2SpdID;
         my_max = maa->spd->getSize(my_src1_tile);
-        my_word_size = my_instruction->getWordSize();
+        my_input_word_size = my_instruction->getWordSize();
         panic_if(my_src2_tile != -1 && my_max != maa->spd->getSize(my_src2_tile),
                  "%s: src1 size(%d) != src2 size(%d)!\n",
                  __func__, my_max, maa->spd->getSize(my_src2_tile));
@@ -70,8 +70,10 @@ void ALUUnit::executeInstruction() {
             my_instruction->optype == Instruction::OPType::MIN_OP ||
             my_instruction->optype == Instruction::OPType::MAX_OP) {
             (*maa->stats.ALU_NumInstsCompute[my_alu_id])++;
+            my_output_word_size = my_input_word_size;
         } else {
             (*maa->stats.ALU_NumInstsCompare[my_alu_id])++;
+            my_output_word_size = 4;
         }
 
         // Setting the state of the instruction and ALU unit
@@ -515,9 +517,9 @@ void ALUUnit::executeInstruction() {
         DPRINTF(MAAALU, "%s: finishing %s!\n", __func__, my_instruction->print());
         my_instruction->state = Instruction::Status::Finish;
         state = Status::Idle;
-        maa->spd->setReady(my_dst_tile);
-        if (my_word_size == 8) {
-            maa->spd->setReady(my_dst_tile + 1);
+        maa->setTileReady(my_dst_tile);
+        if (my_output_word_size == 8) {
+            maa->setTileReady(my_dst_tile + 1);
         }
         maa->spd->setSize(my_dst_tile, my_max);
         maa->finishInstruction(my_instruction, my_dst_tile);

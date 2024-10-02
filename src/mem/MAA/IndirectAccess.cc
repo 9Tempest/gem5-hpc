@@ -53,7 +53,7 @@ std::vector<OffsetTableEntry> OffsetTable::get_entry_recv(int first_itr) {
     int prev_itr = itr;
     while (itr != -1) {
         result.push_back(entries[itr]);
-        assert(entries_valid[itr] == true);
+        panic_if(entries_valid[itr] == false, "Entry %d is invalid!\n", itr);
         prev_itr = itr;
         itr = entries[itr].next_itr;
         // Invalidate the previous itr
@@ -105,17 +105,22 @@ void RowTableEntry::allocate(int _my_indirect_id,
         entries_valid[i] = false;
     }
 }
-bool RowTableEntry::insert(Addr addr,
-                           int itr,
-                           int wid) {
+bool RowTableEntry::find_addr(Addr addr) {
+    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+        if (entries_valid[i] == true && entries[i].addr == addr) {
+            return true;
+        }
+    }
+    return false;
+}
+bool RowTableEntry::insert(Addr addr, int itr, int wid) {
     int free_entry_id = -1;
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             offset_table->insert(itr, wid, entries[i].last_itr);
             entries[i].last_itr = itr;
-            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d inserted!\n",
-                    my_indirect_id, my_table_id, my_table_row_id, __func__,
-                    i);
+            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry[%d] inserted!\n",
+                    my_indirect_id, my_table_id, my_table_row_id, __func__, i);
             return true;
         } else if (entries_valid[i] == false && free_entry_id == -1) {
             free_entry_id = i;
@@ -129,20 +134,16 @@ bool RowTableEntry::insert(Addr addr,
     entries[free_entry_id].last_itr = itr;
     entries_valid[free_entry_id] = true;
     offset_table->insert(itr, wid, -1);
-    DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: new entry %d [addr(0x%lx)] inserted!\n",
-            my_indirect_id, my_table_id, my_table_row_id, __func__,
-            free_entry_id,
-            addr);
+    DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: new entry[%d] addr[0x%lx] inserted!\n",
+            my_indirect_id, my_table_id, my_table_row_id, __func__, free_entry_id, addr);
     (*indir_access->maa->stats.IND_NumCacheLineInserted[my_indirect_id])++;
     return true;
 }
 void RowTableEntry::check_reset() {
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
-        panic_if(entries_valid[i], "Entry %d is valid: addr(0x%lx)!\n",
-                 i, entries[i].addr);
+        panic_if(entries_valid[i], "Entry %d is valid: addr(0x%lx)!\n", i, entries[i].addr);
     }
-    panic_if(last_sent_entry_id != 0, "Last sent entry id is not 0: %d!\n",
-             last_sent_entry_id);
+    panic_if(last_sent_entry_id != 0, "Last sent entry id is not 0: %d!\n", last_sent_entry_id);
 }
 void RowTableEntry::reset() {
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
@@ -155,7 +156,7 @@ bool RowTableEntry::get_entry_send(Addr &addr) {
     for (; last_sent_entry_id < num_row_table_entries_per_row; last_sent_entry_id++) {
         if (entries_valid[last_sent_entry_id] == true) {
             addr = entries[last_sent_entry_id].addr;
-            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: sending entry %d [addr(0x%lx)]!\n",
+            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: sending entry[%d] addr[0x%lx]!\n",
                     my_indirect_id, my_table_id, my_table_row_id, __func__,
                     last_sent_entry_id, addr);
             last_sent_entry_id++;
@@ -168,8 +169,8 @@ std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr) {
     for (int i = 0; i < num_row_table_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             entries_valid[i] = false;
-            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry %d received, setting to invalid!\n",
-                    my_indirect_id, my_table_id, my_table_row_id, __func__, i);
+            DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry[%d] addr[0x%lx] received, setting to invalid!\n",
+                    my_indirect_id, my_table_id, my_table_row_id, __func__, i, addr);
             return offset_table->get_entry_recv(entries[i].first_itr);
         }
     }
@@ -216,45 +217,41 @@ void RowTable::allocate(int _my_indirect_id,
         entries_valid[i] = false;
     }
 }
-bool RowTable::insert(Addr Grow_addr,
-                      Addr addr,
-                      int itr,
-                      int wid) {
+bool RowTable::insert(Addr Grow_addr, Addr addr, int itr, int wid) {
+    // 1. Check if the (Row, CL) pair exists
+    for (int i = 0; i < num_row_table_rows; i++) {
+        if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
+            if (entries[i].find_addr(addr)) {
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] found in R[%d]!\n",
+                        my_indirect_id, my_table_id, __func__, Grow_addr, addr, i);
+                assert(entries[i].insert(addr, itr, wid));
+                return true;
+            }
+        }
+    }
+    // 2. Check if (Row) exists and can insert the new CL
+    // 2.1 At the same time, look for a free row
     int free_row_id = -1;
     for (int i = 0; i < num_row_table_rows; i++) {
         if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
             if (entries[i].insert(addr, itr, wid)) {
-                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] inserted in row[%d]!\n",
-                        my_indirect_id,
-                        my_table_id,
-                        __func__,
-                        Grow_addr,
-                        i);
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] R[%d] inserted new addr[0x%lx]!\n",
+                        my_indirect_id, my_table_id, __func__, Grow_addr, i, addr);
                 return true;
             }
         } else if (entries_valid[i] == false && free_row_id == -1) {
             free_row_id = i;
         }
     }
+    // 3. Check if we can insert the new Row or we need drain
     if (free_row_id == -1) {
+        DPRINTF(MAAIndirect, "I[%d] T[%d] %s: no entry exists or available for Grow[0x%lx] and addr[0x%lx], requires drain!\n",
+                my_indirect_id, my_table_id, __func__, Grow_addr, addr);
         return false;
-        printf("I[%d] T[%d] Error: no free row id found for addr(0x%lx) and Grow_addr(0x%lx)!\n",
-               my_indirect_id, my_table_id, addr, Grow_addr);
-        for (int i = 0; i < num_row_table_rows; i++) {
-            printf("Row[%d]: Grow_addr(0x%lx) Valid (%s), entries:",
-                   i, entries[i].Grow_addr, entries_valid[i] ? "T" : "F");
-            for (int j = 0; j < num_row_table_entries_per_row; j++) {
-                printf("  (%d: %s)", j, entries[i].entries_valid[j] ? "T" : "F");
-            }
-            printf("\n");
-        }
-        assert(false);
     }
-    DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] adding to new row[%d]!\n",
-            my_indirect_id, my_table_id,
-            __func__,
-            Grow_addr,
-            free_row_id);
+    // 4. Add new (Row), add new (CL)
+    DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] adding to new R[%d]!\n",
+            my_indirect_id, my_table_id, __func__, Grow_addr, free_row_id);
     entries[free_row_id].Grow_addr = Grow_addr;
     assert(entries[free_row_id].insert(addr, itr, wid) == true);
     entries_valid[free_row_id] = true;
@@ -308,21 +305,23 @@ bool RowTable::get_entry_send_first_row(Addr &addr) {
                 my_indirect_id, my_table_id, __func__, addr);
         return true;
     }
-    last_sent_row_id = 0;
+    panic_if(last_sent_row_id != 0, "I[%d] T[%d] %s: Last sent row id is not 0: %d!\n", my_indirect_id, my_table_id, __func__, last_sent_row_id);
     return false;
 }
-std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr,
-                                                       Addr addr) {
+std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr, Addr addr) {
     std::vector<OffsetTableEntry> results;
     for (int i = 0; i < num_row_table_rows; i++) {
         if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
-            DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] hit with row[%d]!\n",
-                    my_indirect_id,
-                    my_table_id,
-                    __func__,
-                    Grow_addr,
-                    i);
             std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr);
+            if (result.size() == 0) {
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] hit with R[%d] but no CLs returned!\n",
+                        my_indirect_id, my_table_id, __func__, Grow_addr, addr, i);
+                continue;
+            }
+            DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] hit with R[%d], %d entries returned!\n",
+                    my_indirect_id, my_table_id, __func__, Grow_addr, addr, i, result.size());
+            panic_if(results.size() != 0, "I[%d] T[%d] %s: duplicate entry is not allowed!\n",
+                     my_indirect_id, my_table_id, __func__);
             results.insert(results.begin(), result.begin(), result.end());
             if (entries[i].all_entries_received()) {
                 DPRINTF(MAAIndirect, "I[%d] T[%d] %s: all R[%d] entries received, setting to invalid!\n",
@@ -718,16 +717,16 @@ void IndirectAccessUnit::executeInstruction() {
         state = Status::Idle;
         check_reset();
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
-            maa->spd->setReady(my_dst_tile);
+            maa->setTileReady(my_dst_tile);
             if (my_word_size == 8) {
-                maa->spd->setReady(my_dst_tile + 1);
+                maa->setTileReady(my_dst_tile + 1);
             }
             maa->finishInstruction(my_instruction, my_dst_tile);
             maa->stats.cycles_INDRD += total_cycles;
         } else {
-            maa->spd->setReady(my_src_tile);
+            maa->setTileReady(my_src_tile);
             if (my_word_size == 8) {
-                maa->spd->setReady(my_src_tile + 1);
+                maa->setTileReady(my_src_tile + 1);
             }
             maa->finishInstruction(my_instruction);
             if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST) {
@@ -994,10 +993,10 @@ bool IndirectAccessUnit::recvData(const Addr addr,
             assert(false);
         }
     }
-    Cycles get_data_latency = maa->spd->getDataLatency(num_recv_spd_write_accesses);
+    Cycles get_data_latency = maa->spd->getDataLatency(num_recv_spd_read_accesses);
     my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
     (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
-    Cycles set_data_latency = maa->spd->setDataLatency(num_recv_spd_read_accesses);
+    Cycles set_data_latency = maa->spd->setDataLatency(num_recv_spd_write_accesses);
     my_SPD_write_finish_tick = maa->getClockEdge(set_data_latency);
     (*maa->stats.IND_CyclesSPDWriteAccess[my_indirect_id]) += set_data_latency;
     Cycles access_rt_latency = Cycles(num_recv_rt_accesses * rowtable_latency);

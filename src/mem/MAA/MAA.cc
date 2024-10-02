@@ -53,7 +53,9 @@ MAA::MAA(const MAAParams &p)
       system(p.system),
       mmu(p.mmu),
       my_instruction_pkt(nullptr),
+      my_ready_pkt(nullptr),
       my_outstanding_instruction_pkt(false),
+      my_outstanding_ready_pkt(false),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
       stats(this,
@@ -209,7 +211,7 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
             int element_id = offset % (num_tile_elements * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
-            assert(invalidator->recvData(tile_id, element_id, pkt->getPtr<uint8_t>()));
+            invalidator->recvData(tile_id, element_id, pkt->getPtr<uint8_t>());
         } else {
             // It's a data
             for (int i = 0; i < num_indirect_access_units; i++) {
@@ -383,9 +385,8 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 current_instruction->PC = pkt->req->getPC();
                 DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction->print());
                 respond_immediately = false;
+                panic_if(my_outstanding_instruction_pkt, "Received multiple instruction packets\n");
                 my_outstanding_instruction_pkt = true;
-                // my_instruction_pkt = new Packet(pkt, false, false);
-                // my_instruction_pkt->makeTimingResponse();
                 my_instruction_pkt = pkt;
                 scheduleDispatchInstructionEvent();
                 break;
@@ -431,13 +432,18 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->getSize() == sizeof(uint16_t));
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
-            int element_id = offset / sizeof(uint16_t);
-            uint16_t data = spd->getReady(element_id);
-            uint8_t *dataPtr = (uint8_t *)(&data);
-            pkt->setData(dataPtr);
+            my_ready_tile_id = offset / sizeof(uint16_t);
+            const uint16_t one = 1;
+            pkt->setData((const uint8_t *)&one);
             assert(pkt->needsResponse());
-            pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            if (spd->getReady(my_ready_tile_id)) {
+                pkt->makeTimingResponse();
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            } else {
+                panic_if(my_outstanding_ready_pkt, "Received multiple ready read packets\n");
+                my_outstanding_ready_pkt = true;
+                my_ready_pkt = pkt;
+            }
             break;
         }
         case AddressRangeType::Type::SCALAR_RANGE: {
@@ -474,16 +480,16 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             int element_id = offset % (num_tile_elements * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
-            uint8_t *dataPtr = spd->getDataPtr(tile_id, element_id);
-            pkt->setData(dataPtr);
-            assert(pkt->needsResponse());
-            pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->getDataLatency(1)));
             if (pkt->cmd == MemCmd::ReadSharedReq) {
                 invalidator->read(tile_id, element_id);
             } else {
                 invalidator->write(tile_id, element_id);
             }
+            uint8_t *dataPtr = spd->getDataPtr(tile_id, element_id);
+            pkt->setData(dataPtr);
+            assert(pkt->needsResponse());
+            pkt->makeTimingResponse();
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->getDataLatency(1)));
             break;
         }
         default:
@@ -957,7 +963,12 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
 }
 
 void MAA::CacheSidePort::allocate(int _maxOutstandingCacheSidePackets) {
-    maxOutstandingCacheSidePackets = _maxOutstandingCacheSidePackets - 16;
+    maxOutstandingCacheSidePackets = _maxOutstandingCacheSidePackets;
+    // 16384 is maximum transmitList of PacketQueue (CPU side port of LLC)
+    // Taken from gem5-hpc/src/mem/packet_queue.cc (changed from 1024 to 16384)
+    maxOutstandingCacheSidePackets = std::min(maxOutstandingCacheSidePackets, 16384);
+    // We let it to be 32 less than the maximum
+    maxOutstandingCacheSidePackets -= 32;
     funcBlockReasons[(int)FuncUnitType::STREAM] = new BlockReason[maa->num_stream_access_units];
     for (int i = 0; i < maa->num_stream_access_units; i++) {
         funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
@@ -1130,6 +1141,16 @@ void MAA::scheduleDispatchInstructionEvent(int latency) {
         if (new_when < old_when)
             reschedule(dispatchInstructionEvent, new_when);
     }
+}
+void MAA::setTileReady(int tileID) {
+    DPRINTF(MAAController, "%s: tile[%d] is ready!\n", __func__, tileID);
+    if (my_outstanding_ready_pkt && (my_ready_tile_id == tileID)) {
+        DPRINTF(MAAController, "%s: responding to outstanding ready packet!\n", __func__);
+        my_ready_pkt->makeTimingResponse();
+        cpuSidePort.schedTimingResp(my_ready_pkt, getClockEdge(Cycles(1)));
+        my_outstanding_ready_pkt = false;
+    }
+    spd->setReady(tileID);
 }
 Tick MAA::getClockEdge(Cycles cycles) const {
     return clockEdge(cycles);
