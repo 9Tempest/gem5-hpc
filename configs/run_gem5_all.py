@@ -146,8 +146,8 @@ all_sizes_str = ["20K", "2M"]
 all_distances = [256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
 all_distances_str = ["256", "1K", "4K", "16K", "64K", "256K", "1M", "4M"]
 
-for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-    for size, size_str in zip(all_sizes, all_sizes_str):
+for size, size_str in zip(all_sizes, all_sizes_str):
+    for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
         for distance, distance_str in zip(all_distances, all_distances_str):
             for mode in ["BASE", "MAA", "CMP"]:
                 directory = f"{DATA_DIR}/checkpoint/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
@@ -158,8 +158,8 @@ for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
                 # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
                 # add_command_checkpoint(directory, command, options)
 
-for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-    for size, size_str in zip(all_sizes, all_sizes_str):
+for size, size_str in zip(all_sizes, all_sizes_str):
+    for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
         for distance, distance_str in zip(all_distances, all_distances_str):
             for mode in ["BASE", "MAA", "DMP", "CMP"]:
                 new_mode = mode
@@ -176,19 +176,6 @@ for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
                 # directory = f"{DATA_DIR}/results/M{mode}/T{tile_size_str}/S{size_str}/FP64"
                 # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
                 # add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
-
-
-tests = ["gather_maa",
-        "scatter_maa",
-        "rmw_maa",
-        "gather_scatter_maa",
-        "gather_rmw_cond_maa",
-        "gather_rmw_directrangeloop_cond_maa",
-        "gather_rmw_indirectrangeloop_cond_maa",
-        "gather_rmw_cond_indirectrangeloop_cond_maa",
-        "gather_rmw_indirectcond_indirectrangeloop_indirectcond_maa"]
-
-
 
 
 if parallelism != 0:

@@ -424,18 +424,21 @@ public:
     Tick getClockEdge(Cycles cycles = Cycles(0)) const;
     Cycles getTicksToCycles(Tick t) const;
     Tick getCyclesToTicks(Cycles c) const;
+    void resetStats() override;
 
 protected:
     PacketPtr my_instruction_pkt;
     PacketPtr my_ready_pkt;
     bool my_outstanding_instruction_pkt;
     bool my_outstanding_ready_pkt;
+    Tick my_last_idle_tick;
     int my_ready_tile_id;
     void issueInstruction();
     void dispatchInstruction();
     EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;
     void scheduleIssueInstructionEvent(int latency = 0);
     void scheduleDispatchInstructionEvent(int latency = 0);
+    bool allFuncUnitsIdle();
 
 public:
     struct MAAStats : public statistics::Group {
@@ -465,6 +468,7 @@ public:
         statistics::Scalar cycles_ALUS;
         statistics::Scalar cycles_ALUV;
         statistics::Scalar cycles_INV;
+        statistics::Scalar cycles_IDLE;
         statistics::Scalar cycles;
 
         /** Average cycles per instruction. */

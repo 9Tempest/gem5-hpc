@@ -17,6 +17,7 @@
 #include "debug/MAACachePort.hh"
 #include "debug/MAAMemPort.hh"
 #include "debug/MAAController.hh"
+#include "sim/cur_tick.hh"
 #include <cassert>
 #include <cstdint>
 
@@ -997,13 +998,41 @@ MAA::CacheSidePort::CacheSidePort(const std::string &_name,
 // MAA
 //
 ///////////////
-
+bool MAA::allFuncUnitsIdle() {
+    if (invalidator->getState() != Invalidator::Status::Idle) {
+        return false;
+    }
+    for (int i = 0; i < num_stream_access_units; i++) {
+        if (streamAccessUnits[i].getState() != StreamAccessUnit::Status::Idle) {
+            return false;
+        }
+    }
+    for (int i = 0; i < num_indirect_access_units; i++) {
+        if (indirectAccessUnits[i].getState() != IndirectAccessUnit::Status::Idle) {
+            return false;
+        }
+    }
+    for (int i = 0; i < num_alu_units; i++) {
+        if (aluUnits[i].getState() != ALUUnit::Status::Idle) {
+            return false;
+        }
+    }
+    for (int i = 0; i < num_range_units; i++) {
+        if (rangeUnits[i].getState() != RangeFuserUnit::Status::Idle) {
+            return false;
+        }
+    }
+    return true;
+}
 void MAA::issueInstruction() {
+    bool were_all_units_idle = allFuncUnitsIdle();
+    bool are_all_units_idle = were_all_units_idle;
     if (invalidator->getState() == Invalidator::Status::Idle) {
         Instruction *inst = ifile->getReady(FuncUnitType::INVALIDATOR);
         if (inst != nullptr) {
             invalidator->setInstruction(inst);
             invalidator->scheduleExecuteInstructionEvent(1);
+            are_all_units_idle = false;
         }
     }
     for (int i = 0; i < num_stream_access_units; i++) {
@@ -1012,6 +1041,7 @@ void MAA::issueInstruction() {
             if (inst != nullptr) {
                 streamAccessUnits[i].setInstruction(inst);
                 streamAccessUnits[i].scheduleExecuteInstructionEvent(1);
+                are_all_units_idle = false;
             } else {
                 break;
             }
@@ -1023,6 +1053,7 @@ void MAA::issueInstruction() {
             if (inst != nullptr) {
                 indirectAccessUnits[i].setInstruction(inst);
                 indirectAccessUnits[i].scheduleExecuteInstructionEvent(1);
+                are_all_units_idle = false;
             } else {
                 break;
             }
@@ -1034,6 +1065,7 @@ void MAA::issueInstruction() {
             if (inst != nullptr) {
                 aluUnits[i].setInstruction(inst);
                 aluUnits[i].scheduleExecuteInstructionEvent(1);
+                are_all_units_idle = false;
             } else {
                 break;
             }
@@ -1045,10 +1077,14 @@ void MAA::issueInstruction() {
             if (inst != nullptr) {
                 rangeUnits[i].setInstruction(inst);
                 rangeUnits[i].scheduleExecuteInstructionEvent(1);
+                are_all_units_idle = false;
             } else {
                 break;
             }
         }
+    }
+    if (were_all_units_idle && !are_all_units_idle) {
+        stats.cycles_IDLE += getTicksToCycles(curTick() - my_last_idle_tick);
     }
 }
 void MAA::dispatchInstruction() {
@@ -1098,6 +1134,19 @@ void MAA::finishInstruction(Instruction *instruction,
     ifile->finishInstruction(instruction, dst1SpdID, dst2SpdID);
     scheduleIssueInstructionEvent();
     scheduleDispatchInstructionEvent();
+    if (allFuncUnitsIdle()) {
+        my_last_idle_tick = curTick();
+    }
+}
+void MAA::setTileReady(int tileID) {
+    DPRINTF(MAAController, "%s: tile[%d] is ready!\n", __func__, tileID);
+    if (my_outstanding_ready_pkt && (my_ready_tile_id == tileID)) {
+        DPRINTF(MAAController, "%s: responding to outstanding ready packet!\n", __func__);
+        my_ready_pkt->makeTimingResponse();
+        cpuSidePort.schedTimingResp(my_ready_pkt, getClockEdge(Cycles(1)));
+        my_outstanding_ready_pkt = false;
+    }
+    spd->setReady(tileID);
 }
 void MAA::setTileInvalidated(Instruction *instruction, int tileID) {
     if (tileID == instruction->src1SpdID) {
@@ -1119,6 +1168,9 @@ void MAA::setTileInvalidated(Instruction *instruction, int tileID) {
         assert(false);
     }
     scheduleIssueInstructionEvent();
+    if (allFuncUnitsIdle()) {
+        my_last_idle_tick = curTick();
+    }
 }
 void MAA::scheduleIssueInstructionEvent(int latency) {
     DPRINTF(MAAController, "%s: scheduling issue for the next %d cycles!\n", __func__, latency);
@@ -1142,16 +1194,6 @@ void MAA::scheduleDispatchInstructionEvent(int latency) {
             reschedule(dispatchInstructionEvent, new_when);
     }
 }
-void MAA::setTileReady(int tileID) {
-    DPRINTF(MAAController, "%s: tile[%d] is ready!\n", __func__, tileID);
-    if (my_outstanding_ready_pkt && (my_ready_tile_id == tileID)) {
-        DPRINTF(MAAController, "%s: responding to outstanding ready packet!\n", __func__);
-        my_ready_pkt->makeTimingResponse();
-        cpuSidePort.schedTimingResp(my_ready_pkt, getClockEdge(Cycles(1)));
-        my_outstanding_ready_pkt = false;
-    }
-    spd->setReady(tileID);
-}
 Tick MAA::getClockEdge(Cycles cycles) const {
     return clockEdge(cycles);
 }
@@ -1160,6 +1202,10 @@ Cycles MAA::getTicksToCycles(Tick t) const {
 }
 Tick MAA::getCyclesToTicks(Cycles c) const {
     return cyclesToTicks(c);
+}
+void MAA::resetStats() {
+    my_last_idle_tick = curTick();
+    ClockedObject::resetStats();
 }
 
 #define MAKE_INDIRECT_STAT_NAME(name) \
@@ -1200,6 +1246,7 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
       ADD_STAT(cycles_ALUS, statistics::units::Count::get(), "number of ALU Scalar instruction cycles"),
       ADD_STAT(cycles_ALUV, statistics::units::Count::get(), "number of ALU Vector instruction cycles"),
       ADD_STAT(cycles_INV, statistics::units::Count::get(), "number of Invalidation for instruction cycles"),
+      ADD_STAT(cycles_IDLE, statistics::units::Count::get(), "number of idle cycles"),
       ADD_STAT(cycles, statistics::units::Count::get(), "total number of instruction cycles"),
       ADD_STAT(avgCPI_INDRD, statistics::units::Count::get(), "average CPI for indirect read instructions"),
       ADD_STAT(avgCPI_INDWR, statistics::units::Count::get(), "average CPI for indirect write instructions"),
@@ -1228,6 +1275,7 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
     cycles_ALUS.flags(statistics::nozero);
     cycles_ALUV.flags(statistics::nozero);
     cycles_INV.flags(statistics::nozero);
+    cycles_IDLE.flags(statistics::nozero);
     cycles.flags(statistics::nozero);
 
     avgCPI_INDRD = cycles_INDRD / numInst_INDRD;
