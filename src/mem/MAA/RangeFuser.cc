@@ -101,8 +101,12 @@ void RangeFuserUnit::executeInstruction() {
                 }
             }
         }
+        // 4Byte conditions and indices -- 16 bytes per SPD access
+        num_spd_read_accesses = (num_spd_read_accesses + 15) / 16;
         Cycles spd_read_latency = maa->spd->getDataLatency(num_spd_read_accesses);
         (*maa->stats.RNG_CyclesSPDReadAccess[my_range_id]) += spd_read_latency;
+        // 4Byte conditions and indices -- 16 bytes per SPD access
+        num_spd_write_accesses = (num_spd_write_accesses + 15) / 16;
         Cycles spd_write_latency = maa->spd->setDataLatency(num_spd_write_accesses);
         (*maa->stats.RNG_CyclesSPDWriteAccess[my_range_id]) += spd_write_latency;
         Cycles compute_latency = Cycles(my_idx_j);

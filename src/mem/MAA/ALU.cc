@@ -48,6 +48,7 @@ void ALUUnit::executeInstruction() {
         my_src2_tile = my_instruction->src2SpdID;
         my_max = maa->spd->getSize(my_src1_tile);
         my_input_word_size = my_instruction->getWordSize();
+        my_input_words_per_cl = 64 / my_input_word_size;
         panic_if(my_src2_tile != -1 && my_max != maa->spd->getSize(my_src2_tile),
                  "%s: src1 size(%d) != src2 size(%d)!\n",
                  __func__, my_max, maa->spd->getSize(my_src2_tile));
@@ -75,6 +76,7 @@ void ALUUnit::executeInstruction() {
             (*maa->stats.ALU_NumInstsCompare[my_alu_id])++;
             my_output_word_size = 4;
         }
+        my_output_words_per_cl = 64 / my_output_word_size;
 
         // Setting the state of the instruction and ALU unit
         DPRINTF(MAAALU, "%s: state set to work for request %s!\n", __func__, my_instruction->print());
@@ -85,23 +87,24 @@ void ALUUnit::executeInstruction() {
     case Status::Work: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAALU, "%s: working %s!\n", __func__, my_instruction->print());
-        int num_spd_read_accesses = 0;
+        int num_spd_read_data_accesses = 0;
+        int num_spd_read_cond_accesses = 0;
         int num_spd_write_accesses = 0;
         for (int i = 0; i < my_max; i++) {
             if (my_cond_tile != -1) {
-                num_spd_read_accesses++;
+                num_spd_read_cond_accesses++;
             }
             if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, i) != 0) {
                 switch (my_instruction->datatype) {
                 case Instruction::DataType::UINT32_TYPE: {
                     uint32_t src1 = maa->spd->getData<uint32_t>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     uint32_t src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<uint32_t>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<uint32_t>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     uint32_t result_UINT32_compare;
                     uint32_t result_UINT32_compute;
@@ -160,13 +163,13 @@ void ALUUnit::executeInstruction() {
                 }
                 case Instruction::DataType::INT32_TYPE: {
                     int32_t src1 = maa->spd->getData<int32_t>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     int32_t src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<int32_t>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<int32_t>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     int32_t result_INT32;
                     uint32_t result_UINT32;
@@ -225,13 +228,13 @@ void ALUUnit::executeInstruction() {
                 }
                 case Instruction::DataType::FLOAT32_TYPE: {
                     float src1 = maa->spd->getData<float>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     float src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<float>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<float>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     float result_FLOAT32;
                     uint32_t result_UINT32;
@@ -290,13 +293,13 @@ void ALUUnit::executeInstruction() {
                 }
                 case Instruction::DataType::UINT64_TYPE: {
                     uint64_t src1 = maa->spd->getData<uint64_t>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     uint64_t src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<uint64_t>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<uint64_t>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     uint64_t result_UINT64;
                     uint32_t result_UINT32;
@@ -355,13 +358,13 @@ void ALUUnit::executeInstruction() {
                 }
                 case Instruction::DataType::INT64_TYPE: {
                     int64_t src1 = maa->spd->getData<int64_t>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     int64_t src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<int64_t>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<int64_t>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     int64_t result_INT64;
                     uint32_t result_UINT32;
@@ -420,13 +423,13 @@ void ALUUnit::executeInstruction() {
                 }
                 case Instruction::DataType::FLOAT64_TYPE: {
                     double src1 = maa->spd->getData<double>(my_src1_tile, i);
-                    num_spd_read_accesses++;
+                    num_spd_read_data_accesses++;
                     double src2;
                     if (my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR) {
                         src2 = maa->rf->getData<double>(my_instruction->src1RegID);
                     } else {
                         src2 = maa->spd->getData<double>(my_src2_tile, i);
-                        num_spd_read_accesses++;
+                        num_spd_read_data_accesses++;
                     }
                     double result_FLOAT64;
                     uint32_t result_UINT32;
@@ -488,8 +491,14 @@ void ALUUnit::executeInstruction() {
                 }
             }
         }
-        Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
+        // XByte -- 64/X bytes per SPD access
+        num_spd_read_data_accesses = (num_spd_read_data_accesses + my_input_words_per_cl - 1) / my_input_words_per_cl;
+        // 4Byte conditions -- 16 bytes per SPD access
+        num_spd_read_cond_accesses = (num_spd_read_cond_accesses + 15) / 16;
+        Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_data_accesses + num_spd_read_cond_accesses);
         (*maa->stats.ALU_CyclesSPDReadAccess[my_alu_id]) += get_data_latency;
+        // XByte -- 64/X bytes per SPD access
+        num_spd_write_accesses = (num_spd_write_accesses + my_output_words_per_cl - 1) / my_output_words_per_cl;
         Cycles set_data_latency = maa->spd->setDataLatency(num_spd_write_accesses);
         (*maa->stats.ALU_CyclesSPDWriteAccess[my_alu_id]) += set_data_latency;
         int num_ALU_iterations = my_max / num_ALU_lanes;

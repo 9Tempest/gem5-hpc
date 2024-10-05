@@ -187,9 +187,15 @@ SnoopFilter::lookupSnoop(const Packet *cpkt) {
     auto sf_it = cachedLocations.find(line_addr);
     bool is_hit = (sf_it != cachedLocations.end());
 
-    panic_if(!is_hit && (cachedLocations.size() >= maxEntryCount),
-             "snoop filter exceeded capacity of %d cache blocks\n",
-             maxEntryCount);
+    if (!is_hit && (cachedLocations.size() >= maxEntryCount)) {
+        printf("snoop filter exceeded capacity of %d cache blocks\n", maxEntryCount);
+        int i = 0;
+        for (auto it = cachedLocations.begin(); it != cachedLocations.end(); it++) {
+            printf("cachedLocations[%d] 0x%lx: %x.%x\n", i, it->first, it->second.requested, it->second.holder);
+            i++;
+        }
+        assert(false);
+    }
 
     // If the snoop filter has no entry, simply return a NULL
     // portlist, there is no point creating an entry only to remove it

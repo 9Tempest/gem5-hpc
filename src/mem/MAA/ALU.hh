@@ -49,7 +49,9 @@ protected:
     int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
     int my_max;
     int my_input_word_size;
+    int my_input_words_per_cl;
     int my_output_word_size;
+    int my_output_words_per_cl;
     Cycles ALU_lane_latency;
     int num_ALU_lanes;
 

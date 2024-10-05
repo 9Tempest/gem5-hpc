@@ -458,6 +458,7 @@ void IndirectAccessUnit::executeInstruction() {
         my_cond_tile = my_instruction->condSpdID;
         my_max = maa->spd->getSize(my_idx_tile);
         my_word_size = my_instruction->getWordSize();
+        my_words_per_cl = 64 / my_word_size;
         panic_if(my_cond_tile != -1 && my_max != maa->spd->getSize(my_cond_tile),
                  "I[%d] %s: idx size(%d) != cond size(%d)!\n",
                  my_indirect_id, __func__, my_max, maa->spd->getSize(my_cond_tile));
@@ -543,13 +544,19 @@ void IndirectAccessUnit::executeInstruction() {
                 bool inserted = row_table[my_row_table_idx].insert(Grow_addr, block_paddr, my_i, wid);
                 num_rowtable_accesses++;
                 if (inserted == false) {
+
+                    // 4Byte conditions and indices -- 16 bytes per SPD access
+                    num_spd_read_accesses = (num_spd_read_accesses + 15) / 16;
                     DPRINTF(MAAIndirect, "I[%d] %s: insertion failed due to no space, average entry/row = %.2f, number of SPD accesses: %d, switching to drain mode...\n",
                             my_indirect_id, __func__, row_table[my_row_table_idx].getAverageEntriesPerRow(), num_spd_read_accesses);
                     Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
                     my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
-                    my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
                     (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
+
+                    num_rowtable_accesses = ((num_rowtable_accesses + num_row_table_banks - 1) / num_row_table_banks) + 1;
+                    my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
                     (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
+
                     scheduleNextExecution(true);
                     prev_state = Status::Fill;
                     state = Status::Drain;
@@ -563,11 +570,17 @@ void IndirectAccessUnit::executeInstruction() {
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n",
                 my_indirect_id, __func__, my_instruction->print());
+
+        // 4Byte conditions and indices -- 16 bytes per SPD access
+        num_spd_read_accesses = (num_spd_read_accesses + 15) / 16;
         Cycles get_data_latency = maa->spd->getDataLatency(num_spd_read_accesses);
         my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
-        my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
         (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
+
+        num_rowtable_accesses = ((num_rowtable_accesses + num_row_table_banks - 1) / num_row_table_banks) + 1;
+        my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
         (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
+
         scheduleNextExecution(true);
         prev_state = Status::Fill;
         state = Status::Build;
@@ -596,6 +609,7 @@ void IndirectAccessUnit::executeInstruction() {
             createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: drain completed, going to the request state...\n", my_indirect_id, __func__);
+        num_rowtable_accesses = ((num_rowtable_accesses + num_row_table_banks - 1) / num_row_table_banks) + 1;
         my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
         (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
         prev_state = Status::Drain;
@@ -646,6 +660,7 @@ void IndirectAccessUnit::executeInstruction() {
             last_row_table_sent = (last_row_table_sent >= num_row_table_banks) ? 0 : last_row_table_sent;
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for %s!\n", my_indirect_id, __func__, my_instruction->print());
+        num_rowtable_accesses = ((num_rowtable_accesses + num_row_table_banks - 1) / num_row_table_banks) + 1;
         my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_rowtable_accesses * rowtable_latency));
         (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += num_rowtable_accesses * rowtable_latency;
         prev_state = Status::Build;
@@ -993,24 +1008,30 @@ bool IndirectAccessUnit::recvData(const Addr addr,
             assert(false);
         }
     }
+    // XByte -- 64/X bytes per SPD access
+    num_recv_spd_read_accesses = (num_recv_spd_read_accesses + my_words_per_cl - 1) / my_words_per_cl;
     Cycles get_data_latency = maa->spd->getDataLatency(num_recv_spd_read_accesses);
     my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
     (*maa->stats.IND_CyclesSPDReadAccess[my_indirect_id]) += get_data_latency;
+
+    // XByte -- 64/X bytes per SPD access
+    num_recv_spd_write_accesses = (num_recv_spd_write_accesses + my_words_per_cl - 1) / my_words_per_cl;
     Cycles set_data_latency = maa->spd->setDataLatency(num_recv_spd_write_accesses);
     my_SPD_write_finish_tick = maa->getClockEdge(set_data_latency);
     (*maa->stats.IND_CyclesSPDWriteAccess[my_indirect_id]) += set_data_latency;
+
+    // TODO: separate access_rt_latency for different banks
+    num_recv_rt_accesses = ((num_recv_rt_accesses + num_row_table_banks - 1) / num_row_table_banks) + 1;
     Cycles access_rt_latency = Cycles(num_recv_rt_accesses * rowtable_latency);
     (*maa->stats.IND_CyclesRTAccess[my_indirect_id]) += access_rt_latency;
     if (my_RT_access_finish_tick < curTick())
         my_RT_access_finish_tick = maa->getClockEdge(access_rt_latency);
     else
         my_RT_access_finish_tick += maa->getCyclesToTicks(access_rt_latency);
+
     if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
         Cycles total_latency = std::max(std::max(set_data_latency, get_data_latency), access_rt_latency);
-        RequestPtr real_req = std::make_shared<Request>(addr,
-                                                        block_size,
-                                                        flags,
-                                                        maa->requestorId);
+        RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
         PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
         write_pkt->allocate();
         write_pkt->setData(new_data);

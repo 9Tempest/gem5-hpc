@@ -233,6 +233,7 @@ protected:
     Request::Flags flags = 0;
     const Addr block_size = 64;
     int my_word_size = -1;
+    int my_words_per_cl = -1;
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
     int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;

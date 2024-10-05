@@ -145,11 +145,11 @@ def config_maa(options, system):
     system.membus.max_routing_table_size = max_mem_routing_table_size
 
     # Increasing snoop filter size to accommodate all LLC and MAA's SPD cachelines
-    SPD_data_size = opts["num_tiles"] * opts["num_tile_elements"] * 4
+    MAA_addr_size = int(opts["addr_ranges"][-1].end) - int(opts["addr_ranges"][0].start)
     system.tol3bus.snoop_filter.max_capacity = _get_cache_opts("l3", options)["size"]
     system.membus.snoop_filter.max_capacity = _get_cache_opts("l3", options)["size"]
-    system.tol3bus.snoop_filter.max_capacity += SPD_data_size
-    system.membus.snoop_filter.max_capacity += SPD_data_size
+    system.tol3bus.snoop_filter.max_capacity += MAA_addr_size
+    system.membus.snoop_filter.max_capacity += MAA_addr_size
     print(f"MAA max snoop filter capacity: {system.tol3bus.snoop_filter.max_capacity}")
     
     system.maa.cache_side = system.tol3bus.cpu_side_ports

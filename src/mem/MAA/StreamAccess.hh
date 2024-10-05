@@ -127,6 +127,7 @@ protected:
     Tick my_SPD_write_finish_tick;
     Tick my_RT_access_finish_tick;
     int my_word_size;
+    int my_words_per_cl;
     Tick my_decode_start_tick;
     Tick my_request_start_tick;
 
