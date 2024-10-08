@@ -415,11 +415,9 @@ public:
                   PortID idx = InvalidPortID) override;
 
     const AddrRangeList &getAddrRanges() const { return addrRanges; }
-    void setTileReady(int tileID);
-    void finishInstruction(Instruction *instruction,
-                           int dst1SpdID = -1,
-                           int dst2SpdID = -1);
-    void setTileInvalidated(Instruction *instruction, int tileID);
+    void setTileReady(int tileID, int wordSize);
+    void finishInstructionCompute(Instruction *instruction);
+    void finishInstructionInvalidate(Instruction *instruction, int tileID);
     bool sentMemSidePacket(PacketPtr pkt);
     Tick getClockEdge(Cycles cycles = Cycles(0)) const;
     Cycles getTicksToCycles(Tick t) const;
@@ -433,12 +431,18 @@ protected:
     bool my_outstanding_ready_pkt;
     Tick my_last_idle_tick;
     int my_ready_tile_id;
+    uint8_t getTileStatus(int tile_id, bool is_dst);
     void issueInstruction();
     void dispatchInstruction();
     EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;
     void scheduleIssueInstructionEvent(int latency = 0);
     void scheduleDispatchInstructionEvent(int latency = 0);
     bool allFuncUnitsIdle();
+    bool *streamAccessIdle;
+    bool *indirectAccessIdle;
+    bool *aluUnitsIdle;
+    bool *rangeUnitsIdle;
+    bool invalidatorIdle;
 
 public:
     struct MAAStats : public statistics::Group {
@@ -592,6 +596,9 @@ public:
  */
 inline Addr addrBlockAlign(Addr addr, Addr block_size) {
     return addr & ~(block_size - 1);
+}
+inline int getCeiling(int a, int b) {
+    return (a + b - 1) / b;
 }
 } // namespace gem5
 

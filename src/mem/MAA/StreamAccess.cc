@@ -59,7 +59,6 @@ std::vector<RequestTableEntry> RequestTable::get_entries(Addr base_addr) {
             break;
         }
     }
-    assert(result.size() > 0);
     return result;
 }
 bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
@@ -145,9 +144,34 @@ void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_tile_elemen
     my_translation_done = false;
     my_instruction = nullptr;
 }
+Cycles StreamAccessUnit::updateLatency(int num_spd_read_accesses,
+                                       int num_spd_write_accesses,
+                                       int num_requesttable_accesses) {
+    if (num_spd_read_accesses != 0) {
+        // 4Byte conditions -- 16 bytes per SPD access
+        Cycles get_data_latency = maa->spd->getDataLatency(getCeiling(num_spd_read_accesses, 16));
+        my_SPD_read_finish_tick = maa->getClockEdge(get_data_latency);
+        (*maa->stats.STR_CyclesSPDReadAccess[my_stream_id]) += get_data_latency;
+    }
+    if (num_spd_write_accesses != 0) {
+        // XByte -- 64/X bytes per SPD access
+        Cycles set_data_latency = maa->spd->setDataLatency(my_dst_tile, getCeiling(num_spd_write_accesses, my_words_per_cl));
+        my_SPD_write_finish_tick = maa->getClockEdge(set_data_latency);
+        (*maa->stats.STR_CyclesSPDWriteAccess[my_stream_id]) += set_data_latency;
+    }
+    if (num_requesttable_accesses != 0) {
+        Cycles access_requesttable_latency = Cycles(num_requesttable_accesses);
+        if (my_RT_access_finish_tick < curTick())
+            my_RT_access_finish_tick = maa->getClockEdge(access_requesttable_latency);
+        else
+            my_RT_access_finish_tick += maa->getCyclesToTicks(access_requesttable_latency);
+        (*maa->stats.STR_CyclesRTAccess[my_stream_id]) += access_requesttable_latency;
+    }
+    Tick finish_tick = std::max(std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick), my_RT_access_finish_tick);
+    return maa->getTicksToCycles(finish_tick - curTick());
+}
 bool StreamAccessUnit::scheduleNextExecution(bool force) {
-    Tick finish_tick = std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick);
-    finish_tick = std::max(finish_tick, my_RT_access_finish_tick);
+    Tick finish_tick = std::max(std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick), my_RT_access_finish_tick);
     if (curTick() < finish_tick) {
         scheduleExecuteInstructionEvent(maa->getTicksToCycles(finish_tick - curTick()));
         return true;
@@ -186,7 +210,7 @@ void StreamAccessUnit::executeInstruction() {
         my_min = maa->rf->getData<int>(my_instruction->src1RegID);
         my_max = maa->rf->getData<int>(my_instruction->src2RegID);
         my_stride = maa->rf->getData<int>(my_instruction->src3RegID);
-        my_word_size = my_instruction->getWordSize();
+        my_word_size = my_instruction->getWordSize(my_dst_tile);
         my_words_per_cl = 64 / my_word_size;
         (*maa->stats.STR_NumInsts[my_stream_id])++;
         maa->stats.numInst_STRRD++;
@@ -212,7 +236,7 @@ void StreamAccessUnit::executeInstruction() {
         [[fallthrough]];
     }
     case Status::Request: {
-        DPRINTF(MAAStream, "S[%d] %s: filling %s!\n", my_stream_id, __func__, my_instruction->print());
+        DPRINTF(MAAStream, "S[%d] %s: requesting %s!\n", my_stream_id, __func__, my_instruction->print());
         if (scheduleNextExecution() || request_table->is_full()) {
             break;
         }
@@ -220,10 +244,15 @@ void StreamAccessUnit::executeInstruction() {
             my_request_start_tick = curTick();
         }
         int num_spd_read_accesses = 0;
-        int num_request_table_word_accesses = 0;
         int num_request_table_cacheline_accesses = 0;
         for (; my_i < my_max && my_idx < maa->num_tile_elements; my_i += my_stride, my_idx++) {
             if (my_cond_tile != -1) {
+                if (maa->spd->getElementFinished(my_cond_tile, my_idx, 4, (uint8_t)FuncUnitType::STREAM, my_stream_id) == false) {
+                    DPRINTF(MAAStream, "%s: cond tile[%d] element[%d] not ready, returning!\n", __func__, my_cond_tile, my_idx);
+                    updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
+                    scheduleNextSend();
+                    return;
+                }
                 num_spd_read_accesses++;
             }
             if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_idx) != 0) {
@@ -233,8 +262,8 @@ void StreamAccessUnit::executeInstruction() {
                     if (my_last_block_vaddr != 0) {
                         my_sent_requests++;
                         Addr paddr = translatePacket(my_last_block_vaddr);
-                        createReadPacket(paddr, num_request_table_word_accesses);
                         num_request_table_cacheline_accesses++;
+                        createReadPacket(paddr, num_request_table_cacheline_accesses);
                     }
                     my_last_block_vaddr = block_vaddr;
                 }
@@ -243,42 +272,54 @@ void StreamAccessUnit::executeInstruction() {
                 if (request_table->add_entry(my_idx, paddr, word_id) == false) {
                     DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
                             my_stream_id, my_idx, block_vaddr, paddr, word_id);
-
-                    // 4Byte conditions -- 16 bytes per SPD access
-                    num_spd_read_accesses = (num_spd_read_accesses + 15) / 16;
-                    Cycles spd_read_accesses_latency = maa->spd->getDataLatency(num_spd_read_accesses);
-                    my_SPD_read_finish_tick = maa->getClockEdge(spd_read_accesses_latency);
-                    (*maa->stats.STR_CyclesSPDReadAccess[my_stream_id]) += spd_read_accesses_latency;
-
-                    my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_request_table_cacheline_accesses));
-                    (*maa->stats.STR_CyclesRTAccess[my_stream_id]) += num_request_table_cacheline_accesses;
-
+                    updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
                     scheduleNextExecution();
                     scheduleNextSend();
                     (*maa->stats.STR_NumDrains[my_stream_id])++;
                     return;
                 } else {
-                    num_request_table_word_accesses++;
                     DPRINTF(MAAStream, "S[%d] RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
                             my_stream_id, my_idx, block_vaddr, paddr, word_id);
+                }
+            } else {
+                DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_stream_id, __func__, my_dst_tile, my_idx, 0);
+                switch (my_instruction->datatype) {
+                case Instruction::DataType::UINT32_TYPE: {
+                    maa->spd->setData<uint32_t>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                case Instruction::DataType::INT32_TYPE: {
+                    maa->spd->setData<int32_t>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                case Instruction::DataType::FLOAT32_TYPE: {
+                    maa->spd->setData<float>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                case Instruction::DataType::UINT64_TYPE: {
+                    maa->spd->setData<uint64_t>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                case Instruction::DataType::INT64_TYPE: {
+                    maa->spd->setData<int64_t>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                case Instruction::DataType::FLOAT64_TYPE: {
+                    maa->spd->setData<double>(my_dst_tile, my_idx, 0);
+                    break;
+                }
+                default:
+                    assert(false);
                 }
             }
         }
         if (my_last_block_vaddr != 0) {
             my_sent_requests++;
             Addr paddr = translatePacket(my_last_block_vaddr);
-            createReadPacket(paddr, num_request_table_word_accesses);
+            createReadPacket(paddr, num_request_table_cacheline_accesses);
             my_last_block_vaddr = 0;
         }
-        // spd read is words -- 4Byte conditions -- 16 bytes per SPD access
-        num_spd_read_accesses = (num_spd_read_accesses + 15) / 16;
-        Cycles spd_read_accesses_latency = maa->spd->getDataLatency(num_spd_read_accesses);
-        my_SPD_read_finish_tick = maa->getClockEdge(spd_read_accesses_latency);
-        (*maa->stats.STR_CyclesSPDReadAccess[my_stream_id]) += spd_read_accesses_latency;
-
-        my_RT_access_finish_tick = maa->getClockEdge(Cycles(num_request_table_cacheline_accesses));
-        (*maa->stats.STR_CyclesRTAccess[my_stream_id]) += num_request_table_cacheline_accesses;
-
+        updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
         scheduleNextExecution();
         scheduleNextSend();
         if (my_received_responses != my_sent_requests) {
@@ -308,11 +349,7 @@ void StreamAccessUnit::executeInstruction() {
         my_decode_start_tick = 0;
         state = Status::Idle;
         maa->spd->setSize(my_dst_tile, my_idx);
-        maa->setTileReady(my_dst_tile);
-        if (my_word_size == 8) {
-            maa->setTileReady(my_dst_tile + 1);
-        }
-        maa->finishInstruction(my_instruction, my_dst_tile);
+        maa->finishInstructionCompute(my_instruction);
         my_instruction = nullptr;
         request_table->check_reset();
         break;
@@ -390,20 +427,7 @@ bool StreamAccessUnit::recvData(const Addr addr,
     }
     my_received_responses++;
 
-    // XByte -- 64/X bytes per SPD access
-    int num_spd_write_accesses = (entries.size() + my_words_per_cl - 1) / my_words_per_cl;
-    Cycles access_spd_latency = maa->spd->setDataLatency(num_spd_write_accesses);
-    (*maa->stats.STR_CyclesSPDWriteAccess[my_stream_id]) += access_spd_latency;
-    my_SPD_write_finish_tick = maa->getClockEdge(access_spd_latency);
-
-    // this is 1 because we need only 1 access to get all words of a cacheline
-    Cycles access_rt_latency = Cycles(1); // Cycles(entries.size());
-    (*maa->stats.STR_CyclesRTAccess[my_stream_id]) += access_rt_latency;
-    if (my_RT_access_finish_tick < curTick())
-        my_RT_access_finish_tick = maa->getClockEdge(access_rt_latency);
-    else
-        my_RT_access_finish_tick += maa->getCyclesToTicks(access_rt_latency);
-
+    updateLatency(0, entries.size(), 1);
     createReadPacketEvict(addr);
     scheduleNextSend();
     if (was_request_table_full) {

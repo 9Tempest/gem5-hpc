@@ -102,6 +102,10 @@ public:
 
     void setInstruction(Instruction *_instruction);
 
+    Cycles updateLatency(int num_spd_read_accesses,
+                         int num_spd_write_accesses,
+                         int num_requesttable_accesses);
+    bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
     void scheduleSendPacketEvent(int latency = 0);
     bool recvData(const Addr addr,
@@ -141,7 +145,6 @@ protected:
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
     EventFunctionWrapper sendPacketEvent;
-    bool scheduleNextExecution(bool force = false);
     bool scheduleNextSend();
 };
 } // namespace gem5

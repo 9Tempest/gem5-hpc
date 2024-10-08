@@ -188,10 +188,10 @@ SnoopFilter::lookupSnoop(const Packet *cpkt) {
     bool is_hit = (sf_it != cachedLocations.end());
 
     if (!is_hit && (cachedLocations.size() >= maxEntryCount)) {
-        printf("snoop filter exceeded capacity of %d cache blocks\n", maxEntryCount);
+        DPRINTFN("snoop filter cached locations %d >= %d cache blocks\n", cachedLocations.size(), maxEntryCount);
         int i = 0;
         for (auto it = cachedLocations.begin(); it != cachedLocations.end(); it++) {
-            printf("cachedLocations[%d] 0x%lx: %x.%x\n", i, it->first, it->second.requested, it->second.holder);
+            DPRINTFN("cachedLocations[%d] 0x%lx: %x.%x\n", i, it->first, it->second.requested, it->second.holder);
             i++;
         }
         assert(false);

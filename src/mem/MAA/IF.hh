@@ -99,16 +99,29 @@ public:
         "Service",
         "Finish",
         "MAX"};
+    enum class TileStatus : uint8_t {
+        WaitForInvalidation = 0,
+        Invalidating = 1,
+        WaitForService = 2,
+        Service = 3,
+        Finished = 4,
+        MAX
+    };
+    std::string tile_status_names[6] = {
+        "WFI",
+        "INV",
+        "WFS",
+        "SRV",
+        "FNS",
+        "MAX"};
     Addr baseAddr;
     int16_t src1RegID, src2RegID, src3RegID, dst1RegID, dst2RegID;
     int16_t src1SpdID, src2SpdID;
-    bool src1Ready, src2Ready;
-    bool src1Invalidated, src2Invalidated;
+    TileStatus src1Status, src2Status;
     int16_t dst1SpdID, dst2SpdID;
-    bool dst1Invalidated, dst2Invalidated;
+    TileStatus dst1Status, dst2Status;
     int16_t condSpdID;
-    bool condReady;
-    bool condInvalidated;
+    TileStatus condStatus;
     // {STREAM_LD, INDIR_LD, INDIR_ST, INDIR_RMW, RANGE_LOOP, CONDITION}
     OpcodeType opcode;
     // {ADD, SUB, MUL, DIV, MIN, MAX, GT, GTE, LT, LTE, EQ}
@@ -118,26 +131,17 @@ public:
     // {Idle, Translation, Fill, Request, Response}
     Status state;
     // {ALU, STREAM, INDIRECT}
-    FuncUnitType funcUnit;
+    FuncUnitType funcUniType;
+    int funcUniID;
     ContextID CID;
     Addr PC;
     int if_id;
     Instruction();
     std::string print() const;
-    int getWordSize() {
-        switch (datatype) {
-        case DataType::UINT32_TYPE:
-        case DataType::INT32_TYPE:
-        case DataType::FLOAT32_TYPE:
-            return 4;
-        case DataType::UINT64_TYPE:
-        case DataType::INT64_TYPE:
-        case DataType::FLOAT64_TYPE:
-            return 8;
-        default:
-            return 0;
-        }
-    }
+    int getWordSize(int tile_id);
+
+protected:
+    int WordSize();
 };
 
 class IF {
@@ -145,6 +149,7 @@ protected:
     Instruction *instructions;
     unsigned int num_instructions;
     bool *valids;
+    Instruction::TileStatus getTileStatus(int tile_id, uint8_t tile_status);
 
 public:
     IF(unsigned int _num_instructions) : num_instructions(_num_instructions) {
@@ -161,10 +166,11 @@ public:
         delete[] valids;
     }
     bool pushInstruction(Instruction _instruction);
-    Instruction *getReady(FuncUnitType funcUnit);
-    void finishInstruction(Instruction *instruction,
-                           int dst1SpdID,
-                           int dst2SpdID);
+    Instruction *getReady(FuncUnitType funcUniType);
+    void finishInstructionCompute(Instruction *instruction);
+    void finishInstructionInvalidate(Instruction *instruction, int tile_id, uint8_t tile_status);
+    void issueInstructionCompute(Instruction *instruction);
+    void issueInstructionInvalidate(Instruction *instruction, int tile_id);
 };
 
 class AddressRangeType {

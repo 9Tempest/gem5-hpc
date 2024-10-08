@@ -35,27 +35,38 @@ protected:
 public:
     ALUUnit();
 
-    void allocate(MAA *_maa, int _my_alu_id, Cycles _ALU_lane_latency, int _num_ALU_lanes);
+    void allocate(MAA *_maa, int _my_alu_id, Cycles _ALU_lane_latency, int _num_ALU_lanes, int _num_tile_elements);
 
     Status getState() const { return state; }
 
     void setInstruction(Instruction *_instruction);
 
+    bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
 
 protected:
     Instruction *my_instruction;
     int my_alu_id;
     int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
-    int my_max;
+    bool my_cond_tile_ready, my_src1_tile_ready, my_src2_tile_ready;
+    int my_i, my_max;
     int my_input_word_size;
     int my_input_words_per_cl;
     int my_output_word_size;
     int my_output_words_per_cl;
     Cycles ALU_lane_latency;
     int num_ALU_lanes;
+    Tick my_SPD_read_finish_tick;
+    Tick my_SPD_write_finish_tick;
+    Tick my_ALU_finish_tick;
+    Tick my_decode_start_tick;
+    int num_tile_elements;
 
     void executeInstruction();
+    void updateLatency(int num_spd_read_data_accesses,
+                       int num_spd_read_cond_accesses,
+                       int num_spd_write_accesses,
+                       int num_alu_accesses);
     EventFunctionWrapper executeInstructionEvent;
 };
 } // namespace gem5

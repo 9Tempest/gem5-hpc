@@ -84,23 +84,13 @@ void Invalidator::executeInstruction() {
         DPRINTF(MAAInvalidator, "%s: decoding %s!\n", __func__, my_instruction->print());
 
         // Decoding the instruction
-        my_invalidating_tile = my_instruction->dst1Invalidated == false ? my_instruction->dst1SpdID : -1;
-        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->dst2Invalidated == false) ? my_instruction->dst2SpdID : my_invalidating_tile;
-        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src1Invalidated == false) ? my_instruction->src1SpdID : my_invalidating_tile;
-        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src2Invalidated == false) ? my_instruction->src2SpdID : my_invalidating_tile;
-        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->condInvalidated == false) ? my_instruction->condSpdID : my_invalidating_tile;
+        my_invalidating_tile = my_instruction->dst1Status == Instruction::TileStatus::Invalidating ? my_instruction->dst1SpdID : -1;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->dst2Status == Instruction::TileStatus::Invalidating) ? my_instruction->dst2SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src1Status == Instruction::TileStatus::Invalidating) ? my_instruction->src1SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->src2Status == Instruction::TileStatus::Invalidating) ? my_instruction->src2SpdID : my_invalidating_tile;
+        my_invalidating_tile = (my_invalidating_tile == -1 && my_instruction->condStatus == Instruction::TileStatus::Invalidating) ? my_instruction->condSpdID : my_invalidating_tile;
         panic_if(my_invalidating_tile == -1, "No invalidating tile found!\n");
-        if ((my_instruction->opcode == Instruction::OpcodeType::ALU_SCALAR ||
-             my_instruction->opcode == Instruction::OpcodeType::ALU_VECTOR) &&
-            (my_instruction->optype == Instruction::OPType::GT_OP ||
-             my_instruction->optype == Instruction::OPType::GTE_OP ||
-             my_instruction->optype == Instruction::OPType::LT_OP ||
-             my_instruction->optype == Instruction::OPType::LTE_OP ||
-             my_instruction->optype == Instruction::OPType::EQ_OP)) {
-            my_word_size = 4;
-        } else {
-            my_word_size = my_instruction->getWordSize();
-        }
+        my_word_size = my_instruction->getWordSize(my_invalidating_tile);
 
         // Initialization
         my_i = 0;
@@ -151,9 +141,9 @@ void Invalidator::executeInstruction() {
         assert(my_instruction != nullptr);
         DPRINTF(MAAInvalidator, "%s: responding %s!\n", __func__, my_instruction->print());
         if (my_received_responses == my_total_invalidations_sent) {
-            DPRINTF(MAAInvalidator, "%s: state set to idle for request %s!\n", __func__, my_instruction->print());
             state = Status::Idle;
-            maa->setTileInvalidated(my_instruction, my_invalidating_tile);
+            maa->finishInstructionInvalidate(my_instruction, my_invalidating_tile);
+            DPRINTF(MAAInvalidator, "%s: state set to idle for request %s!\n", __func__, my_instruction->print());
             my_instruction = nullptr;
             Cycles total_cycles = maa->getTicksToCycles(curTick() - my_decode_start_tick);
             maa->stats.cycles += total_cycles;
@@ -227,7 +217,7 @@ bool Invalidator::recvData(int tile_id, int element_id, uint8_t *dataptr) {
 }
 void Invalidator::scheduleExecuteInstructionEvent(int latency) {
     DPRINTF(MAAInvalidator, "%s: scheduling execute for the Invalidator Unit in the next %d cycles!\n", __func__, latency);
-    Tick new_when = curTick() + latency;
+    Tick new_when = maa->getClockEdge(Cycles(latency));
     panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
     maa->schedule(executeInstructionEvent, new_when);
     // if (!executeInstructionEvent.scheduled()) {

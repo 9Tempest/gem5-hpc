@@ -212,6 +212,7 @@ public:
                   Cycles _cache_snoop_latency,
                   MAA *_maa);
     Status getState() const { return state; }
+    bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
     void scheduleSendReadPacketEvent(int latency = 0);
     void scheduleSendWritePacketEvent(int latency = 0);
@@ -237,6 +238,7 @@ protected:
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
     int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;
+    bool my_cond_tile_ready, my_idx_tile_ready, my_src_tile_ready;
     int my_expected_responses;
     int my_received_responses;
     std::vector<int> my_sorted_indices;
@@ -264,9 +266,12 @@ protected:
     EventFunctionWrapper sendReadPacketEvent;
     EventFunctionWrapper sendWritePacketEvent;
     void check_reset();
-    bool scheduleNextExecution(bool force = false);
     bool scheduleNextSendRead();
     bool scheduleNextSendWrite();
+    Cycles updateLatency(int num_spd_read_data_accesses,
+                         int num_spd_read_condidx_accesses,
+                         int num_spd_write_accesses,
+                         int num_rowtable_accesses);
 
 public:
     void createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop);

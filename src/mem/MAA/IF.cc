@@ -1,6 +1,7 @@
 #include "mem/MAA/IF.hh"
 #include "mem/MAA/MAA.hh"
 #include "debug/MAAController.hh"
+#include "mem/MAA/SPD.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -16,22 +17,19 @@ Instruction::Instruction() : baseAddr(0),
                              dst2RegID(-1),
                              src1SpdID(-1),
                              src2SpdID(-1),
-                             src1Ready(false),
-                             src2Ready(false),
-                             src1Invalidated(false),
-                             src2Invalidated(false),
+                             src1Status(TileStatus::WaitForInvalidation),
+                             src2Status(TileStatus::WaitForInvalidation),
                              dst1SpdID(-1),
                              dst2SpdID(-1),
-                             dst1Invalidated(false),
-                             dst2Invalidated(false),
+                             dst1Status(TileStatus::WaitForInvalidation),
+                             dst2Status(TileStatus::WaitForInvalidation),
                              condSpdID(-1),
-                             condReady(false),
-                             condInvalidated(false),
+                             condStatus(TileStatus::WaitForInvalidation),
                              opcode(OpcodeType::MAX),
                              optype(OPType::MAX),
                              datatype(DataType::MAX),
                              state(Status::Idle),
-                             funcUnit(FuncUnitType::MAX),
+                             funcUniType(FuncUnitType::MAX),
                              CID(-1),
                              PC(0),
                              if_id(-1) {}
@@ -42,37 +40,115 @@ std::string Instruction::print() const {
              optype == OPType::MAX ? "" : " optype(" + optype_names[(int)optype] + ")",
              " datatype(" + datatype_names[(int)datatype] + ")",
              " state(" + status_names[(int)state] + ")",
-             src1SpdID == -1 ? "" : " srcSPD1(" + std::to_string(src1SpdID) + ")",
-             src2SpdID == -1 ? "" : " srcSPD2(" + std::to_string(src2SpdID) + ")",
+             src1SpdID == -1 ? "" : " srcSPD1(" + std::to_string(src1SpdID) + "/" + tile_status_names[(uint8_t)src1Status] + ")",
+             src2SpdID == -1 ? "" : " srcSPD2(" + std::to_string(src2SpdID) + "/" + tile_status_names[(uint8_t)src2Status] + ")",
              src1RegID == -1 ? "" : " srcREG1(" + std::to_string(src1RegID) + ")",
              src2RegID == -1 ? "" : " srcREG2(" + std::to_string(src2RegID) + ")",
              src3RegID == -1 ? "" : " srcREG3(" + std::to_string(src3RegID) + ")",
-             dst1SpdID == -1 ? "" : " dstSPD1(" + std::to_string(dst1SpdID) + ")",
-             dst2SpdID == -1 ? "" : " dstSPD2(" + std::to_string(dst2SpdID) + ")",
+             dst1SpdID == -1 ? "" : " dstSPD1(" + std::to_string(dst1SpdID) + "/" + tile_status_names[(uint8_t)dst1Status] + ")",
+             dst2SpdID == -1 ? "" : " dstSPD2(" + std::to_string(dst2SpdID) + "/" + tile_status_names[(uint8_t)dst2Status] + ")",
              dst1RegID == -1 ? "" : " dstREG1(" + std::to_string(dst1RegID) + ")",
              dst2RegID == -1 ? "" : " dstREG2(" + std::to_string(dst2RegID) + ")",
-             condSpdID == -1 ? "" : " condSPD(" + std::to_string(condSpdID) + ")");
+             condSpdID == -1 ? "" : " condSPD(" + std::to_string(condSpdID) + "/" + tile_status_names[(uint8_t)condStatus] + ")");
     return str.str();
+}
+int Instruction::getWordSize(int tile_id) {
+    panic_if(tile_id == -1, "Invalid tile_id %d!\n", tile_id);
+    if (tile_id == condSpdID) {
+        return 4;
+    } else if (tile_id == src1SpdID) {
+        switch (opcode) {
+        case OpcodeType::ALU_SCALAR:
+        case OpcodeType::ALU_VECTOR: {
+            return WordSize();
+        }
+        case OpcodeType::INDIR_LD:
+        case OpcodeType::INDIR_ST:
+        case OpcodeType::INDIR_RMW:
+        case OpcodeType::RANGE_LOOP: {
+            return 4;
+        }
+        default:
+            assert(false);
+        }
+    } else if (tile_id == src2SpdID) {
+        switch (opcode) {
+        case OpcodeType::INDIR_ST:
+        case OpcodeType::INDIR_RMW:
+        case OpcodeType::ALU_VECTOR: {
+            return WordSize();
+        }
+        case OpcodeType::RANGE_LOOP: {
+            return 4;
+        }
+        default:
+            assert(false);
+        }
+    } else if (tile_id == dst1SpdID) {
+        switch (opcode) {
+        case OpcodeType::ALU_SCALAR:
+        case OpcodeType::ALU_VECTOR: {
+            if (optype == OPType::GT_OP || optype == OPType::GTE_OP || optype == OPType::LT_OP || optype == OPType::LTE_OP || optype == OPType::EQ_OP) {
+                return 4;
+            } else {
+                return WordSize();
+            }
+        }
+        case OpcodeType::STREAM_LD:
+        case OpcodeType::INDIR_LD: {
+            return WordSize();
+        }
+        case OpcodeType::RANGE_LOOP: {
+            return 4;
+        }
+        default:
+            assert(false);
+        }
+    } else if (tile_id == dst2SpdID) {
+        switch (opcode) {
+        case OpcodeType::RANGE_LOOP: {
+            return 4;
+        }
+        default:
+            assert(false);
+        }
+    } else {
+        assert(false);
+    }
+}
+int Instruction::WordSize() {
+    switch (datatype) {
+    case DataType::UINT32_TYPE:
+    case DataType::INT32_TYPE:
+    case DataType::FLOAT32_TYPE:
+        return 4;
+    case DataType::UINT64_TYPE:
+    case DataType::INT64_TYPE:
+    case DataType::FLOAT64_TYPE:
+        return 8;
+    default:
+        assert(false);
+    }
 }
 bool IF::pushInstruction(Instruction _instruction) {
     switch (_instruction.opcode) {
     case Instruction::OpcodeType::STREAM_LD: {
-        _instruction.funcUnit = FuncUnitType::STREAM;
+        _instruction.funcUniType = FuncUnitType::STREAM;
         break;
     }
     case Instruction::OpcodeType::INDIR_LD:
     case Instruction::OpcodeType::INDIR_ST:
     case Instruction::OpcodeType::INDIR_RMW: {
-        _instruction.funcUnit = FuncUnitType::INDIRECT;
+        _instruction.funcUniType = FuncUnitType::INDIRECT;
         break;
     }
     case Instruction::OpcodeType::RANGE_LOOP: {
-        _instruction.funcUnit = FuncUnitType::RANGE;
+        _instruction.funcUniType = FuncUnitType::RANGE;
         break;
     }
     case Instruction::OpcodeType::ALU_SCALAR:
     case Instruction::OpcodeType::ALU_VECTOR: {
-        _instruction.funcUnit = FuncUnitType::ALU;
+        _instruction.funcUniType = FuncUnitType::ALU;
         break;
     }
     default: {
@@ -91,6 +167,7 @@ bool IF::pushInstruction(Instruction _instruction) {
                     (instructions[i].dst2SpdID != -1 && _instruction.dst1SpdID == instructions[i].dst2SpdID) ||
                     (instructions[i].src1SpdID != -1 && _instruction.dst1SpdID == instructions[i].src1SpdID) ||
                     (instructions[i].src2SpdID != -1 && _instruction.dst1SpdID == instructions[i].src2SpdID)) {
+                    DPRINTF(MAAController, "%s: %s cannot be pushed b/c of %s!\n", __func__, _instruction.print(), instructions[i].print());
                     return false;
                 }
             }
@@ -99,12 +176,14 @@ bool IF::pushInstruction(Instruction _instruction) {
                     (instructions[i].dst2SpdID != -1 && _instruction.dst2SpdID == instructions[i].dst2SpdID) ||
                     (instructions[i].src1SpdID != -1 && _instruction.dst2SpdID == instructions[i].src1SpdID) ||
                     (instructions[i].src2SpdID != -1 && _instruction.dst2SpdID == instructions[i].src2SpdID)) {
+                    DPRINTF(MAAController, "%s: %s cannot be pushed b/c of %s!\n", __func__, _instruction.print(), instructions[i].print());
                     return false;
                 }
             }
         }
     }
     if (free_instruction_slot == -1) {
+        DPRINTF(MAAController, "%s: %s cannot be pushed b/c of no space!\n", __func__, _instruction.print());
         return false;
     }
     assert(free_instruction_slot < num_instructions);
@@ -114,31 +193,40 @@ bool IF::pushInstruction(Instruction _instruction) {
     DPRINTF(MAAController, "%s: %s pushed to instruction[%d]!\n", __func__, _instruction.print(), free_instruction_slot);
     return true;
 }
-Instruction *IF::getReady(FuncUnitType funcUnit) {
-    if (funcUnit == FuncUnitType::INVALIDATOR) {
+Instruction *IF::getReady(FuncUnitType funcUniType) {
+    if (funcUniType == FuncUnitType::INVALIDATOR) {
         for (int i = 0; i < num_instructions; i++) {
-            if (valids[i] &&
-                (instructions[i].dst1Invalidated == false || instructions[i].dst2Invalidated == false ||
-                 instructions[i].src1Invalidated == false || instructions[i].src2Invalidated == false ||
-                 instructions[i].condInvalidated == false)) {
-                // instruction state does not matter anymore as we only have one invalidator
-                return &instructions[i];
+            if (valids[i] && instructions[i].state == Instruction::Status::Idle) {
+                int tile_id = -1;
+                if (instructions[i].dst1Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[i].dst1SpdID;
+                } else if (instructions[i].dst2Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[i].dst2SpdID;
+                } else if (instructions[i].src1Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[i].src1SpdID;
+                } else if (instructions[i].src2Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[i].src2SpdID;
+                } else if (instructions[i].condStatus == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[i].condSpdID;
+                }
+                if (tile_id != -1) {
+                    issueInstructionInvalidate(&instructions[i], tile_id);
+                    DPRINTF(MAAController, "%s: returned instruction[%d] %s for invalidation!\n", __func__, i, instructions[i].print());
+                    return &instructions[i];
+                }
             }
         }
     } else {
         for (int i = 0; i < num_instructions; i++) {
             if (valids[i] &&
-                instructions[i].src1Ready &&
-                instructions[i].src2Ready &&
-                instructions[i].src1Invalidated &&
-                instructions[i].src2Invalidated &&
-                instructions[i].dst1Invalidated &&
-                instructions[i].dst2Invalidated &&
-                instructions[i].condReady &&
-                instructions[i].condInvalidated &&
                 instructions[i].state == Instruction::Status::Idle &&
-                instructions[i].funcUnit == funcUnit) {
-                instructions[i].state = Instruction::Status::Service;
+                (instructions[i].src1SpdID == -1 || instructions[i].src1Status == Instruction::TileStatus::Service || instructions[i].src1Status == Instruction::TileStatus::Finished) &&
+                (instructions[i].src2SpdID == -1 || instructions[i].src2Status == Instruction::TileStatus::Service || instructions[i].src2Status == Instruction::TileStatus::Finished) &&
+                (instructions[i].condSpdID == -1 || instructions[i].condStatus == Instruction::TileStatus::Service || instructions[i].condStatus == Instruction::TileStatus::Finished) &&
+                (instructions[i].dst1SpdID == -1 || instructions[i].dst1Status == Instruction::TileStatus::WaitForService) &&
+                (instructions[i].dst2SpdID == -1 || instructions[i].dst2Status == Instruction::TileStatus::WaitForService) &&
+                instructions[i].funcUniType == funcUniType) {
+                issueInstructionCompute(&instructions[i]);
                 DPRINTF(MAAController, "%s: returned instruction[%d] %s for execute!\n", __func__, i, instructions[i].print());
                 return &instructions[i];
             }
@@ -146,38 +234,137 @@ Instruction *IF::getReady(FuncUnitType funcUnit) {
     }
     return nullptr;
 }
-void IF::finishInstruction(Instruction *instruction,
-                           int dst1SpdID,
-                           int dst2SpdID) {
+void IF::finishInstructionCompute(Instruction *instruction) {
     instruction->state = Instruction::Status::Finish;
     valids[instruction->if_id] = false;
-    if (dst1SpdID != -1) {
+    if (instruction->dst1SpdID != -1) {
         for (int i = 0; i < num_instructions; i++) {
             if (valids[i]) {
-                if (instructions[i].src1SpdID == dst1SpdID) {
-                    instructions[i].src1Ready = true;
+                if (instructions[i].src1SpdID == instruction->dst1SpdID) {
+                    instructions[i].src1Status = Instruction::TileStatus::Finished;
                 }
-                if (instructions[i].src2SpdID == dst1SpdID) {
-                    instructions[i].src2Ready = true;
+                if (instructions[i].src2SpdID == instruction->dst1SpdID) {
+                    instructions[i].src2Status = Instruction::TileStatus::Finished;
                 }
-                if (instructions[i].condSpdID == dst1SpdID) {
-                    instructions[i].condReady = true;
+                if (instructions[i].condSpdID == instruction->dst1SpdID) {
+                    instructions[i].condStatus = Instruction::TileStatus::Finished;
                 }
             }
         }
     }
-    if (dst2SpdID != -1) {
+    if (instruction->dst2SpdID != -1) {
         for (int i = 0; i < num_instructions; i++) {
             if (valids[i]) {
-                if (instructions[i].src1SpdID == dst2SpdID) {
-                    instructions[i].src1Ready = true;
+                if (instructions[i].src1SpdID == instruction->dst2SpdID) {
+                    instructions[i].src1Status = Instruction::TileStatus::Finished;
                 }
-                if (instructions[i].src2SpdID == dst2SpdID) {
-                    instructions[i].src2Ready = true;
+                if (instructions[i].src2SpdID == instruction->dst2SpdID) {
+                    instructions[i].src2Status = Instruction::TileStatus::Finished;
                 }
-                if (instructions[i].condSpdID == dst2SpdID) {
-                    instructions[i].condReady = true;
+                if (instructions[i].condSpdID == instruction->dst2SpdID) {
+                    instructions[i].condStatus = Instruction::TileStatus::Finished;
                 }
+            }
+        }
+    }
+}
+Instruction::TileStatus IF::getTileStatus(int tile_id, uint8_t tile_status) {
+    if (tile_status == (uint8_t)SPD::TileStatus::Idle) {
+        return Instruction::TileStatus::WaitForService;
+    } else if (tile_status == (uint8_t)SPD::TileStatus::Service) {
+        return Instruction::TileStatus::Service;
+    } else if (tile_status == (uint8_t)SPD::TileStatus::Finished) {
+        return Instruction::TileStatus::Finished;
+    } else {
+        assert(false);
+    }
+}
+void IF::finishInstructionInvalidate(Instruction *instruction, int tile_id, uint8_t tile_status) {
+    instruction->state = Instruction::Status::Idle;
+    Instruction::TileStatus new_tile_status = getTileStatus(tile_id, tile_status);
+    for (int i = 0; i < num_instructions; i++) {
+        if (valids[i]) {
+            if (instructions[i].src1SpdID == tile_id && instructions[i].src1Status == Instruction::TileStatus::Invalidating) {
+                instructions[i].src1Status = new_tile_status;
+            }
+            if (instructions[i].src2SpdID == tile_id && instructions[i].src2Status == Instruction::TileStatus::Invalidating) {
+                instructions[i].src2Status = new_tile_status;
+            }
+            if (instructions[i].condSpdID == tile_id && instructions[i].condStatus == Instruction::TileStatus::Invalidating) {
+                instructions[i].condStatus = new_tile_status;
+            }
+            if (instructions[i].dst1SpdID == tile_id && instructions[i].dst1Status == Instruction::TileStatus::Invalidating) {
+                instructions[i].dst1Status = new_tile_status;
+            }
+            if (instructions[i].dst2SpdID == tile_id && instructions[i].dst2Status == Instruction::TileStatus::Invalidating) {
+                instructions[i].dst2Status = new_tile_status;
+            }
+        }
+    }
+}
+void IF::issueInstructionCompute(Instruction *instruction) {
+    instruction->state = Instruction::Status::Service;
+    if (instruction->dst1SpdID != -1) {
+        for (int i = 0; i < num_instructions; i++) {
+            if (valids[i]) {
+                if (instructions[i].src1SpdID == instruction->dst1SpdID) {
+                    instructions[i].src1Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].src2SpdID == instruction->dst1SpdID) {
+                    instructions[i].src2Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].condSpdID == instruction->dst1SpdID) {
+                    instructions[i].condStatus = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].dst1SpdID == instruction->dst1SpdID) {
+                    instructions[i].dst1Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].dst2SpdID == instruction->dst1SpdID) {
+                    instructions[i].dst2Status = Instruction::TileStatus::Service;
+                }
+            }
+        }
+    }
+    if (instruction->dst2SpdID != -1) {
+        for (int i = 0; i < num_instructions; i++) {
+            if (valids[i]) {
+                if (instructions[i].src1SpdID == instruction->dst2SpdID) {
+                    instructions[i].src1Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].src2SpdID == instruction->dst2SpdID) {
+                    instructions[i].src2Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].condSpdID == instruction->dst2SpdID) {
+                    instructions[i].condStatus = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].dst1SpdID == instruction->dst2SpdID) {
+                    instructions[i].dst1Status = Instruction::TileStatus::Service;
+                }
+                if (instructions[i].dst2SpdID == instruction->dst2SpdID) {
+                    instructions[i].dst2Status = Instruction::TileStatus::Service;
+                }
+            }
+        }
+    }
+}
+void IF::issueInstructionInvalidate(Instruction *instruction, int tile_id) {
+    instruction->state = Instruction::Status::Service;
+    for (int i = 0; i < num_instructions; i++) {
+        if (valids[i]) {
+            if (instructions[i].src1SpdID == tile_id && instructions[i].src1Status == Instruction::TileStatus::WaitForInvalidation) {
+                instructions[i].src1Status = Instruction::TileStatus::Invalidating;
+            }
+            if (instructions[i].src2SpdID == tile_id && instructions[i].src2Status == Instruction::TileStatus::WaitForInvalidation) {
+                instructions[i].src2Status = Instruction::TileStatus::Invalidating;
+            }
+            if (instructions[i].condSpdID == tile_id && instructions[i].condStatus == Instruction::TileStatus::WaitForInvalidation) {
+                instructions[i].condStatus = Instruction::TileStatus::Invalidating;
+            }
+            if (instructions[i].dst1SpdID == tile_id && instructions[i].dst1Status == Instruction::TileStatus::WaitForInvalidation) {
+                instructions[i].dst1Status = Instruction::TileStatus::Invalidating;
+            }
+            if (instructions[i].dst2SpdID == tile_id && instructions[i].dst2Status == Instruction::TileStatus::WaitForInvalidation) {
+                instructions[i].dst2Status = Instruction::TileStatus::Invalidating;
             }
         }
     }

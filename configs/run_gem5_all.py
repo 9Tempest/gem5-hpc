@@ -2,7 +2,7 @@ import argparse
 import os
 from threading import Thread, Lock
 
-parallelism = 48
+parallelism = 24
 GEM5_DIR = "/home/arkhadem/gem5-hpc"
 DATA_DIR = "/data1/arkhadem/gem5-hpc"
 LOG_DIR = "/data1/arkhadem/gem5-hpc/logs"
@@ -141,41 +141,51 @@ def add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size
 
 all_tiles = [1024, 2048, 4096, 8192, 16384]
 all_tiles_str = ["1K", "2K", "4K", "8K", "16K"]
-all_sizes = [20000, 2000000]
-all_sizes_str = ["20K", "2M"]
+all_sizes = [200000] #, 2000000]
+all_sizes_str = ["200K"] #, "2M"]
 all_distances = [256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
 all_distances_str = ["256", "1K", "4K", "16K", "64K", "256K", "1M", "4M"]
+all_kernels =   ["gather",
+                "scatter",
+                "rmw",
+                "gather_scatter",
+                "gather_rmw",
+                "gather_rmw_cond",
+                "gather_rmw_directrangeloop_cond",
+                "gather_rmw_indirectrangeloop_cond",
+                "gather_rmw_cond_indirectrangeloop_cond",
+                "gather_rmw_indirectcond_indirectrangeloop_indirectcond"]
 
-for size, size_str in zip(all_sizes, all_sizes_str):
-    for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-        for distance, distance_str in zip(all_distances, all_distances_str):
-            for mode in ["BASE", "MAA", "CMP"]:
-                directory = f"{DATA_DIR}/checkpoint/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-                command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
-                options = f"{size} {distance} {mode}"
-                add_command_checkpoint(directory, command, options)
-                # directory = f"{DATA_DIR}/checkpoint/M{mode}/T{tile_size_str}/S{size_str}/FP64"
-                # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
-                # add_command_checkpoint(directory, command, options)
+for kernel in all_kernels:
+    for size, size_str in zip(all_sizes, all_sizes_str):
+        for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
+            for distance, distance_str in zip(all_distances, all_distances_str):
+                for mode in ["BASE", "MAA", "CMP"]:
+                    directory = f"{DATA_DIR}/checkpoint/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
+                    command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
+                    options = f"{size} {distance} {mode} {kernel}"
+                    add_command_checkpoint(directory, command, options)
+                    # directory = f"{DATA_DIR}/checkpoint/{kernel}/M{mode}/T{tile_size_str}/S{size_str}/FP64"
+                    # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
+                    # add_command_checkpoint(directory, command, options)
+    for size, size_str in zip(all_sizes, all_sizes_str):
+        for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
+            for distance, distance_str in zip(all_distances, all_distances_str):
+                for mode in ["BASE", "MAA", "DMP", "CMP"]:
+                    new_mode = mode
+                    if mode == "DMP":
+                        new_mode = f"BASE"
+                    options = f"{size} {distance} {new_mode} {kernel}"
 
-for size, size_str in zip(all_sizes, all_sizes_str):
-    for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-        for distance, distance_str in zip(all_distances, all_distances_str):
-            for mode in ["BASE", "MAA", "DMP", "CMP"]:
-                new_mode = mode
-                if mode == "DMP":
-                    new_mode = f"BASE"
-                options = f"{size} {distance} {new_mode}"
-
-                checkpoint = f"{DATA_DIR}/checkpoint/M{new_mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-                directory = f"{DATA_DIR}/results/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-                command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
-                add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
-                
-                # checkpoint = f"{DATA_DIR}/checkpoint/M{new_mode}/T{tile_size_str}/S{size_str}/FP64"
-                # directory = f"{DATA_DIR}/results/M{mode}/T{tile_size_str}/S{size_str}/FP64"
-                # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
-                # add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
+                    checkpoint = f"{DATA_DIR}/checkpoint/{kernel}/M{new_mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
+                    directory = f"{DATA_DIR}/results/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
+                    command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
+                    add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
+                    
+                    # checkpoint = f"{DATA_DIR}/checkpoint/{kernel}/M{new_mode}/T{tile_size_str}/S{size_str}/FP64"
+                    # directory = f"{DATA_DIR}/results/M{mode}/T{tile_size_str}/S{size_str}/FP64"
+                    # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
+                    # add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
 
 
 if parallelism != 0:

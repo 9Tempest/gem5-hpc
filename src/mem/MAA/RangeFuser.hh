@@ -42,15 +42,23 @@ public:
 
     void setInstruction(Instruction *_instruction);
 
+    bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
 
 protected:
     Instruction *my_instruction;
     int my_dst_i_tile, my_dst_j_tile, my_cond_tile, my_min_tile, my_max_tile;
+    bool my_cond_tile_ready, my_min_tile_ready, my_max_tile_ready;
     int my_last_i, my_last_j, my_stride;
     int my_max_i, my_idx_j;
     unsigned int num_tile_elements;
-
+    Tick my_SPD_read_finish_tick;
+    Tick my_SPD_write_finish_tick;
+    Tick my_compute_finish_tick;
+    Tick my_decode_start_tick;
+    void updateLatency(int num_spd_read_accesses,
+                       int num_spd_write_accesses,
+                       int num_compute_accesses);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
 };

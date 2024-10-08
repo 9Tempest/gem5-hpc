@@ -5,16 +5,36 @@
 #include <cstdint>
 #include <cstring>
 #include "base/logging.hh"
+#include "base/trace.hh"
 #include "base/types.hh"
+#include "debug/SPD.hh"
 
 namespace gem5 {
 class MAA;
 
 class SPD {
+public:
+    enum class TileStatus : uint8_t {
+        Idle = 0,
+        Service = 1,
+        Finished = 2,
+        MAX
+    };
+    std::string tile_status_names[4] = {
+        "Idle",
+        "Service",
+        "Finished",
+        "MAX"};
+
 protected:
     uint8_t *tiles_data;
-    uint16_t *tiles_ready;
+    TileStatus *tiles_status;
+    bool *tiles_dirty;
+    bool *tiles_ready;
     uint16_t *tiles_size;
+    bool *element_finished;
+    std::vector<uint8_t> *waiting_units_funcs;
+    std::vector<int> *waiting_units_ids;
     unsigned int num_tiles;
     unsigned int num_tile_elements;
     Tick *read_port_busy_until;
@@ -48,12 +68,24 @@ public:
     void setData(int tile_id, int element_id, T _data) {
         check_tile_element_id<T>(tile_id, element_id);
         *((T *)(tiles_data + tile_id * num_tile_elements * 4 + element_id * sizeof(T))) = _data;
+        int tile_element_id = tile_id * num_tile_elements + element_id * sizeof(T) / 4;
+        element_finished[tile_element_id] = true;
+        DPRINTF(SPD, "%s: tile[%d] element[%d] tile_element[%d] finished\n", __func__, tile_id, element_id, tile_element_id);
     }
+    void wakeup_waiting_units(int tile_id);
     Cycles getDataLatency(int num_accesses);
-    Cycles setDataLatency(int num_accesses);
-    uint16_t getReady(int tile_id);
-    void setReady(int tile_id);
-    void unsetReady(int tile_id);
+    Cycles setDataLatency(int tile_id, int num_accesses);
+    TileStatus getTileStatus(int tile_id);
+    bool getElementFinished(int tile_id, int element_id, int word_size, uint8_t func, int id);
+    void setTileIdle(int tile_id, int word_size);
+    void setTileService(int tile_id, int word_size);
+    void setTileFinished(int tile_id, int word_size);
+    void setTileDirty(int tile_id, int word_size);
+    void setTileClean(int tile_id, int word_size);
+    bool getTileDirty(int tile_id);
+    void setTileReady(int tile_id, int word_size);
+    void setTileNotReady(int tile_id, int word_size);
+    bool getTileReady(int tile_id);
     uint16_t getSize(int tile_id);
     void setSize(int tile_id, uint16_t size);
 
