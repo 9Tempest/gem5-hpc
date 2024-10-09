@@ -210,6 +210,7 @@ void StreamAccessUnit::executeInstruction() {
         my_min = maa->rf->getData<int>(my_instruction->src1RegID);
         my_max = maa->rf->getData<int>(my_instruction->src2RegID);
         my_stride = maa->rf->getData<int>(my_instruction->src3RegID);
+        DPRINTF(MAAStream, "S[%d] %s: min: %d, max: %d, stride: %d!\n", my_stream_id, __func__, my_min, my_max, my_stride);
         my_word_size = my_instruction->getWordSize(my_dst_tile);
         my_words_per_cl = 64 / my_word_size;
         (*maa->stats.STR_NumInsts[my_stream_id])++;
@@ -403,8 +404,7 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
     }
     return true;
 }
-bool StreamAccessUnit::recvData(const Addr addr,
-                                uint8_t *dataptr) {
+bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr) {
     bool was_request_table_full = request_table->is_full();
     std::vector<RequestTableEntry> entries = request_table->get_entries(addr);
     if (entries.empty()) {

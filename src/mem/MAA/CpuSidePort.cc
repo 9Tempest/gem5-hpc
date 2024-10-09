@@ -396,7 +396,7 @@ bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type,
     }
     sendTimingSnoopReq(pkt);
     DPRINTF(MAACpuPort, "%s Send is successfull...\n", __func__);
-    if (!pkt->cacheResponding())
+    if (pkt->cacheResponding())
         outstandingCpuSidePackets++;
     return true;
 }
@@ -421,6 +421,7 @@ void MAA::CpuSidePort::setUnblocked() {
 }
 
 void MAA::CpuSidePort::allocate(int _maxOutstandingCpuSidePackets) {
+    outstandingCpuSidePackets = 0;
     maxOutstandingCpuSidePackets = _maxOutstandingCpuSidePackets - 16;
     funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa.num_indirect_access_units];
     for (int i = 0; i < maa.num_indirect_access_units; i++) {

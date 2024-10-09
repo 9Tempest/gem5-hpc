@@ -103,7 +103,7 @@ public:
 
 class RF {
 protected:
-    uint32_t *data;
+    uint8_t *data;
     unsigned int num_regs;
 
 public:
@@ -126,6 +126,17 @@ public:
     void setData(int reg_id, T _data) {
         check_reg_id<T>(reg_id);
         *((T *)(data + reg_id * 4)) = _data;
+        if (sizeof(T) == 4) {
+            DPRINTF(SPD, "%s: reg[%d] 32-bit = %u/%d/%f\n", __func__, reg_id,
+                    *((uint32_t *)(data + reg_id * 4)), *((int32_t *)(data + reg_id * 4)), *((float *)(data + reg_id * 4)));
+        } else {
+            DPRINTF(SPD, "%s: reg[%d] 32-bit = %u/%d/%f\n", __func__, reg_id,
+                    *((uint32_t *)(data + reg_id * 4)), *((int32_t *)(data + reg_id * 4)), *((float *)(data + reg_id * 4)));
+            DPRINTF(SPD, "%s: reg[%d] 32-bit = %u/%d/%f\n", __func__, reg_id + 1,
+                    *((uint32_t *)(data + reg_id * 4 + 4)), *((int32_t *)(data + reg_id * 4 + 4)), *((float *)(data + reg_id * 4 + 4)));
+            DPRINTF(SPD, "%s: reg[%d] 64-bit = %lu/%ld/%lf\n", __func__, reg_id,
+                    *((uint64_t *)(data + reg_id * 4)), *((int64_t *)(data + reg_id * 4)), *((double *)(data + reg_id * 4)));
+        }
     }
 
 public:

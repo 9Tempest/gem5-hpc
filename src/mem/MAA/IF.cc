@@ -166,7 +166,8 @@ bool IF::pushInstruction(Instruction _instruction) {
                 if ((instructions[i].dst1SpdID != -1 && _instruction.dst1SpdID == instructions[i].dst1SpdID) ||
                     (instructions[i].dst2SpdID != -1 && _instruction.dst1SpdID == instructions[i].dst2SpdID) ||
                     (instructions[i].src1SpdID != -1 && _instruction.dst1SpdID == instructions[i].src1SpdID) ||
-                    (instructions[i].src2SpdID != -1 && _instruction.dst1SpdID == instructions[i].src2SpdID)) {
+                    (instructions[i].src2SpdID != -1 && _instruction.dst1SpdID == instructions[i].src2SpdID) ||
+                    (instructions[i].condSpdID != -1 && _instruction.dst1SpdID == instructions[i].condSpdID)) {
                     DPRINTF(MAAController, "%s: %s cannot be pushed b/c of %s!\n", __func__, _instruction.print(), instructions[i].print());
                     return false;
                 }
@@ -175,7 +176,8 @@ bool IF::pushInstruction(Instruction _instruction) {
                 if ((instructions[i].dst1SpdID != -1 && _instruction.dst2SpdID == instructions[i].dst1SpdID) ||
                     (instructions[i].dst2SpdID != -1 && _instruction.dst2SpdID == instructions[i].dst2SpdID) ||
                     (instructions[i].src1SpdID != -1 && _instruction.dst2SpdID == instructions[i].src1SpdID) ||
-                    (instructions[i].src2SpdID != -1 && _instruction.dst2SpdID == instructions[i].src2SpdID)) {
+                    (instructions[i].src2SpdID != -1 && _instruction.dst2SpdID == instructions[i].src2SpdID) ||
+                    (instructions[i].condSpdID != -1 && _instruction.dst2SpdID == instructions[i].condSpdID)) {
                     DPRINTF(MAAController, "%s: %s cannot be pushed b/c of %s!\n", __func__, _instruction.print(), instructions[i].print());
                     return false;
                 }

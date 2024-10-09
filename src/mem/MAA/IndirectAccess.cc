@@ -603,13 +603,9 @@ void IndirectAccessUnit::executeInstruction() {
                 DPRINTF(MAAIndirect, "I[%d] %s: my_i (%d) >= my_max (%d), finished!\n", my_indirect_id, __func__, my_i, my_max);
                 break;
             }
-            // if (my_i >= num_tile_elements) {
-            //     DPRINTF(MAAIndirect, "I[%d] %s: my_i (%d) >= num_tile_elements (%d), finished!\n", my_indirect_id, __func__, my_i, num_tile_elements);
-            //     break;
-            // }
             bool cond_ready = my_cond_tile == -1 || maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
             bool idx_ready = cond_ready && maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-            bool src_ready = idx_ready || (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD ||
+            bool src_ready = idx_ready && (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD ||
                                            maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id));
             if (cond_ready == false) {
                 DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile, my_i);
@@ -1136,7 +1132,7 @@ bool IndirectAccessUnit::recvData(const Addr addr,
             createReadPacketEvict(addr);
             (*maa->stats.IND_Evicts[my_indirect_id])++;
             scheduleNextSendRead();
-        } else {
+        } else if (my_outstanding_read_pkts.size() == 0) {
             if (my_received_responses == my_expected_responses) {
                 DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again!\n", my_indirect_id, __func__);
                 scheduleNextExecution(true);

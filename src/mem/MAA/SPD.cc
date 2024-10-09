@@ -258,8 +258,8 @@ SPD::~SPD() {
 //
 ///////////////
 RF::RF(unsigned int _num_regs) : num_regs(_num_regs) {
-    data = new uint32_t[num_regs];
-    memset(data, 0, num_regs * sizeof(uint32_t));
+    data = new uint8_t[num_regs * 4];
+    memset(data, 0, num_regs * 4 * sizeof(uint8_t));
 }
 RF::~RF() {
     assert(data != nullptr);
