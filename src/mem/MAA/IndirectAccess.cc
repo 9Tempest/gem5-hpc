@@ -89,7 +89,7 @@ void OffsetTable::reset() {
 void RowTableEntry::allocate(int _my_indirect_id,
                              int _my_table_id,
                              int _my_table_row_id,
-                             int _num_row_table_entries_per_row,
+                             int _num_RT_entries_per_row,
                              OffsetTable *_offset_table,
                              IndirectAccessUnit *_indir_access) {
     my_indirect_id = _my_indirect_id;
@@ -97,16 +97,16 @@ void RowTableEntry::allocate(int _my_indirect_id,
     my_table_row_id = _my_table_row_id;
     offset_table = _offset_table;
     indir_access = _indir_access;
-    num_row_table_entries_per_row = _num_row_table_entries_per_row;
-    entries = new Entry[num_row_table_entries_per_row];
-    entries_valid = new bool[num_row_table_entries_per_row];
+    num_RT_entries_per_row = _num_RT_entries_per_row;
+    entries = new Entry[num_RT_entries_per_row];
+    entries_valid = new bool[num_RT_entries_per_row];
     last_sent_entry_id = 0;
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         entries_valid[i] = false;
     }
 }
 bool RowTableEntry::find_addr(Addr addr) {
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             return true;
         }
@@ -115,7 +115,7 @@ bool RowTableEntry::find_addr(Addr addr) {
 }
 bool RowTableEntry::insert(Addr addr, int itr, int wid) {
     int free_entry_id = -1;
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             offset_table->insert(itr, wid, entries[i].last_itr);
             entries[i].last_itr = itr;
@@ -140,20 +140,20 @@ bool RowTableEntry::insert(Addr addr, int itr, int wid) {
     return true;
 }
 void RowTableEntry::check_reset() {
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         panic_if(entries_valid[i], "Entry %d is valid: addr(0x%lx)!\n", i, entries[i].addr);
     }
     panic_if(last_sent_entry_id != 0, "Last sent entry id is not 0: %d!\n", last_sent_entry_id);
 }
 void RowTableEntry::reset() {
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         entries_valid[i] = false;
     }
     last_sent_entry_id = 0;
 }
 bool RowTableEntry::get_entry_send(Addr &addr) {
-    assert(last_sent_entry_id <= num_row_table_entries_per_row);
-    for (; last_sent_entry_id < num_row_table_entries_per_row; last_sent_entry_id++) {
+    assert(last_sent_entry_id <= num_RT_entries_per_row);
+    for (; last_sent_entry_id < num_RT_entries_per_row; last_sent_entry_id++) {
         if (entries_valid[last_sent_entry_id] == true) {
             addr = entries[last_sent_entry_id].addr;
             DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: sending entry[%d] addr[0x%lx]!\n",
@@ -166,7 +166,7 @@ bool RowTableEntry::get_entry_send(Addr &addr) {
     return false;
 }
 std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr) {
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         if (entries_valid[i] == true && entries[i].addr == addr) {
             entries_valid[i] = false;
             DPRINTF(MAAIndirect, "I[%d] T[%d] R[%d] %s: entry[%d] addr[0x%lx] received, setting to invalid!\n",
@@ -178,7 +178,7 @@ std::vector<OffsetTableEntry> RowTableEntry::get_entry_recv(Addr addr) {
 }
 
 bool RowTableEntry::all_entries_received() {
-    for (int i = 0; i < num_row_table_entries_per_row; i++) {
+    for (int i = 0; i < num_RT_entries_per_row; i++) {
         if (entries_valid[i] == true) {
             return false;
         }
@@ -194,36 +194,36 @@ bool RowTableEntry::all_entries_received() {
 ///////////////
 void RowTable::allocate(int _my_indirect_id,
                         int _my_table_id,
-                        int _num_row_table_rows,
-                        int _num_row_table_entries_per_row,
+                        int _num_RT_rows_per_bank,
+                        int _num_RT_entries_per_row,
                         OffsetTable *_offset_table,
                         IndirectAccessUnit *_indir_access) {
     my_indirect_id = _my_indirect_id;
     my_table_id = _my_table_id;
     offset_table = _offset_table;
     indir_access = _indir_access;
-    num_row_table_rows = _num_row_table_rows;
-    num_row_table_entries_per_row = _num_row_table_entries_per_row;
-    entries = new RowTableEntry[num_row_table_rows];
-    entries_valid = new bool[num_row_table_rows];
+    num_RT_rows_per_bank = _num_RT_rows_per_bank;
+    num_RT_entries_per_row = _num_RT_entries_per_row;
+    entries = new RowTableEntry[num_RT_rows_per_bank];
+    entries_valid = new bool[num_RT_rows_per_bank];
     last_sent_row_id = 0;
-    for (int i = 0; i < num_row_table_rows; i++) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
         entries[i].allocate(my_indirect_id,
                             my_table_id,
                             i,
-                            num_row_table_entries_per_row,
+                            num_RT_entries_per_row,
                             offset_table,
                             indir_access);
         entries_valid[i] = false;
     }
 }
-bool RowTable::insert(Addr Grow_addr, Addr addr, int itr, int wid) {
+bool RowTable::insert(Addr grow_addr, Addr addr, int itr, int wid) {
     // 1. Check if the (Row, CL) pair exists
-    for (int i = 0; i < num_row_table_rows; i++) {
-        if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
+        if (entries_valid[i] == true && entries[i].grow_addr == grow_addr) {
             if (entries[i].find_addr(addr)) {
-                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] found in R[%d]!\n",
-                        my_indirect_id, my_table_id, __func__, Grow_addr, addr, i);
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: grow[0x%lx] addr[0x%lx] found in R[%d]!\n",
+                        my_indirect_id, my_table_id, __func__, grow_addr, addr, i);
                 assert(entries[i].insert(addr, itr, wid));
                 return true;
             }
@@ -232,11 +232,11 @@ bool RowTable::insert(Addr Grow_addr, Addr addr, int itr, int wid) {
     // 2. Check if (Row) exists and can insert the new CL
     // 2.1 At the same time, look for a free row
     int free_row_id = -1;
-    for (int i = 0; i < num_row_table_rows; i++) {
-        if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
+        if (entries_valid[i] == true && entries[i].grow_addr == grow_addr) {
             if (entries[i].insert(addr, itr, wid)) {
-                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] R[%d] inserted new addr[0x%lx]!\n",
-                        my_indirect_id, my_table_id, __func__, Grow_addr, i, addr);
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: grow[0x%lx] R[%d] inserted new addr[0x%lx]!\n",
+                        my_indirect_id, my_table_id, __func__, grow_addr, i, addr);
                 return true;
             }
         } else if (entries_valid[i] == false && free_row_id == -1) {
@@ -245,14 +245,14 @@ bool RowTable::insert(Addr Grow_addr, Addr addr, int itr, int wid) {
     }
     // 3. Check if we can insert the new Row or we need drain
     if (free_row_id == -1) {
-        DPRINTF(MAAIndirect, "I[%d] T[%d] %s: no entry exists or available for Grow[0x%lx] and addr[0x%lx], requires drain!\n",
-                my_indirect_id, my_table_id, __func__, Grow_addr, addr);
+        DPRINTF(MAAIndirect, "I[%d] T[%d] %s: no entry exists or available for grow[0x%lx] and addr[0x%lx], requires drain. Avg CL/Row: %d!\n",
+                my_indirect_id, my_table_id, __func__, grow_addr, addr, getAverageEntriesPerRow());
         return false;
     }
     // 4. Add new (Row), add new (CL)
-    DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] adding to new R[%d]!\n",
-            my_indirect_id, my_table_id, __func__, Grow_addr, free_row_id);
-    entries[free_row_id].Grow_addr = Grow_addr;
+    DPRINTF(MAAIndirect, "I[%d] T[%d] %s: grow[0x%lx] adding to new R[%d]!\n",
+            my_indirect_id, my_table_id, __func__, grow_addr, free_row_id);
+    entries[free_row_id].grow_addr = grow_addr;
     assert(entries[free_row_id].insert(addr, itr, wid) == true);
     entries_valid[free_row_id] = true;
     (*indir_access->maa->stats.IND_NumRowsInserted[my_indirect_id])++;
@@ -260,34 +260,34 @@ bool RowTable::insert(Addr Grow_addr, Addr addr, int itr, int wid) {
 }
 float RowTable::getAverageEntriesPerRow() {
     float total_entries = 0.0000;
-    for (int i = 0; i < num_row_table_rows; i++) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
         if (entries_valid[i] == true) {
-            for (int j = 0; j < num_row_table_entries_per_row; j++) {
+            for (int j = 0; j < num_RT_entries_per_row; j++) {
                 total_entries += entries[i].entries_valid[j] ? 1 : 0;
             }
         }
     }
-    return total_entries / num_row_table_rows;
+    return total_entries / num_RT_rows_per_bank;
 }
 void RowTable::check_reset() {
-    for (int i = 0; i < num_row_table_rows; i++) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
         entries[i].check_reset();
-        panic_if(entries_valid[i], "Row[%d] is valid: Grow_addr(0x%lx)!\n",
-                 i, entries[i].Grow_addr);
+        panic_if(entries_valid[i], "Row[%d] is valid: grow_addr(0x%lx)!\n",
+                 i, entries[i].grow_addr);
     }
     panic_if(last_sent_row_id != 0, "Last sent row id is not 0: %d!\n",
              last_sent_row_id);
 }
 void RowTable::reset() {
-    for (int i = 0; i < num_row_table_rows; i++) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
         entries[i].reset();
         entries_valid[i] = false;
     }
     last_sent_row_id = 0;
 }
 bool RowTable::get_entry_send(Addr &addr) {
-    assert(last_sent_row_id <= num_row_table_rows);
-    for (; last_sent_row_id < num_row_table_rows; last_sent_row_id++) {
+    assert(last_sent_row_id <= num_RT_rows_per_bank);
+    for (; last_sent_row_id < num_RT_rows_per_bank; last_sent_row_id++) {
         if (entries_valid[last_sent_row_id] &&
             entries[last_sent_row_id].get_entry_send(addr)) {
             DPRINTF(MAAIndirect, "I[%d] T[%d] %s: row %d retuned!\n", my_indirect_id, my_table_id, __func__, last_sent_row_id);
@@ -308,18 +308,18 @@ bool RowTable::get_entry_send_first_row(Addr &addr) {
     panic_if(last_sent_row_id != 0, "I[%d] T[%d] %s: Last sent row id is not 0: %d!\n", my_indirect_id, my_table_id, __func__, last_sent_row_id);
     return false;
 }
-std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr Grow_addr, Addr addr) {
+std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr grow_addr, Addr addr) {
     std::vector<OffsetTableEntry> results;
-    for (int i = 0; i < num_row_table_rows; i++) {
-        if (entries_valid[i] == true && entries[i].Grow_addr == Grow_addr) {
+    for (int i = 0; i < num_RT_rows_per_bank; i++) {
+        if (entries_valid[i] == true && entries[i].grow_addr == grow_addr) {
             std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr);
             if (result.size() == 0) {
-                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] hit with R[%d] but no CLs returned!\n",
-                        my_indirect_id, my_table_id, __func__, Grow_addr, addr, i);
+                DPRINTF(MAAIndirect, "I[%d] T[%d] %s: grow[0x%lx] addr[0x%lx] hit with R[%d] but no CLs returned!\n",
+                        my_indirect_id, my_table_id, __func__, grow_addr, addr, i);
                 continue;
             }
-            DPRINTF(MAAIndirect, "I[%d] T[%d] %s: Grow[0x%lx] addr[0x%lx] hit with R[%d], %d entries returned!\n",
-                    my_indirect_id, my_table_id, __func__, Grow_addr, addr, i, result.size());
+            DPRINTF(MAAIndirect, "I[%d] T[%d] %s: grow[0x%lx] addr[0x%lx] hit with R[%d], %d entries returned!\n",
+                    my_indirect_id, my_table_id, __func__, grow_addr, addr, i, result.size());
             panic_if(results.size() != 0, "I[%d] T[%d] %s: duplicate entry is not allowed!\n",
                      my_indirect_id, my_table_id, __func__);
             results.insert(results.begin(), result.begin(), result.end());
@@ -342,56 +342,279 @@ IndirectAccessUnit::IndirectAccessUnit()
     : executeInstructionEvent([this] { executeInstruction(); }, name()),
       sendReadPacketEvent([this] { sendOutstandingReadPacket(); }, name()),
       sendWritePacketEvent([this] { sendOutstandingWritePacket(); }, name()) {
-    row_table = nullptr;
+    RT_bank_org = nullptr;
+    num_RT_banks = nullptr;
+    num_RT_rows_total = nullptr;
+    num_RT_possible_grows = nullptr;
+    num_RT_subbanks = nullptr;
+    num_RT_bank_columns = nullptr;
+    RT_config_addr = nullptr;
+    RT_config_cache = nullptr;
+    RT_config_cache_tick = nullptr;
+    RT = nullptr;
+    offset_table = nullptr;
+    my_RT_req_sent = nullptr;
+    my_RT_bank_order = nullptr;
     my_instruction = nullptr;
+}
+IndirectAccessUnit::~IndirectAccessUnit() {
+    assert(RT_bank_org != nullptr);
+    for (int i = 0; i < num_RT_configs; i++) {
+        assert(RT_bank_org[i] != nullptr);
+        delete[] RT_bank_org[i];
+    }
+    delete[] RT_bank_org;
+    assert(num_RT_banks != nullptr);
+    delete[] num_RT_banks;
+    assert(num_RT_rows_total != nullptr);
+    delete[] num_RT_rows_total;
+    assert(num_RT_possible_grows != nullptr);
+    delete[] num_RT_possible_grows;
+    assert(num_RT_subbanks != nullptr);
+    delete[] num_RT_subbanks;
+    assert(num_RT_bank_columns != nullptr);
+    delete[] num_RT_bank_columns;
+    assert(RT_config_addr != nullptr);
+    delete[] RT_config_addr;
+    assert(RT_config_cache != nullptr);
+    delete[] RT_config_cache;
+    assert(RT_config_cache_tick != nullptr);
+    delete[] RT_config_cache_tick;
+    assert(RT != nullptr);
+    for (int i = 0; i < num_RT_configs; i++) {
+        assert(RT[i] != nullptr);
+        delete[] RT[i];
+    }
+    delete[] RT;
+    assert(offset_table != nullptr);
+    delete offset_table;
+    assert(my_RT_req_sent != nullptr);
+    for (int i = 0; i < num_RT_configs; i++) {
+        assert(my_RT_req_sent[i] != nullptr);
+        delete[] my_RT_req_sent[i];
+    }
+    delete[] my_RT_req_sent;
+    assert(my_RT_bank_order != nullptr);
+    delete[] my_RT_bank_order;
 }
 void IndirectAccessUnit::allocate(int _my_indirect_id,
                                   int _num_tile_elements,
-                                  int _num_row_table_rows,
-                                  int _num_row_table_entries_per_row,
+                                  int _num_row_table_rows_per_bank,
+                                  int _num_row_table_entries_per_subbank_row,
+                                  int _num_row_table_config_cache_entries,
                                   Cycles _rowtable_latency,
                                   Cycles _cache_snoop_latency,
                                   MAA *_maa) {
     my_indirect_id = _my_indirect_id;
     maa = _maa;
     num_tile_elements = _num_tile_elements;
-    num_row_table_rows = _num_row_table_rows;
-    num_row_table_entries_per_row = _num_row_table_entries_per_row;
-    num_row_table_banks = maa->m_org[ADDR_CHANNEL_LEVEL] *
-                          maa->m_org[ADDR_RANK_LEVEL] * 2;
+    num_RT_rows_per_bank = _num_row_table_rows_per_bank;
+    num_RT_entries_per_subbank_row = _num_row_table_entries_per_subbank_row;
+    num_RT_config_cache_entries = _num_row_table_config_cache_entries;
     rowtable_latency = _rowtable_latency;
     cache_snoop_latency = _cache_snoop_latency;
-    offset_table = new OffsetTable();
-    offset_table->allocate(my_indirect_id, num_tile_elements, this);
-    row_table = new RowTable[num_row_table_banks];
-    my_row_table_req_sent = new bool[num_row_table_banks];
-    for (int i = 0; i < num_row_table_banks; i++) {
-        row_table[i].allocate(my_indirect_id,
-                              i,
-                              num_row_table_rows,
-                              num_row_table_entries_per_row,
-                              offset_table,
-                              this);
-        my_row_table_req_sent[i] = false;
-    }
     my_translation_done = false;
     prev_state = Status::max;
     state = Status::Idle;
     my_instruction = nullptr;
     dst_tile_id = -1;
-    my_row_table_bank_order.clear();
-    for (int bankgroup = 0; bankgroup < 2; bankgroup++) {
-        for (int rank = 0; rank < maa->m_org[ADDR_RANK_LEVEL]; rank++) {
-            for (int channel = 0; channel < maa->m_org[ADDR_CHANNEL_LEVEL]; channel++) {
-                my_row_table_bank_order.push_back(
-                    getRowTableIdx(channel, rank, bankgroup));
+
+    offset_table = new OffsetTable();
+    offset_table->allocate(my_indirect_id, num_tile_elements, this);
+
+    // Row Table initialization
+    int min_num_RT_banks = maa->m_org[ADDR_CHANNEL_LEVEL] * maa->m_org[ADDR_RANK_LEVEL] * 2;
+    Addr max_num_RT_possible_grows = 2 * maa->m_org[ADDR_BANK_LEVEL] * maa->m_org[ADDR_ROW_LEVEL];
+    total_num_RT_subbanks = maa->m_org[ADDR_CHANNEL_LEVEL] * maa->m_org[ADDR_RANK_LEVEL] *
+                            maa->m_org[ADDR_BANKGROUP_LEVEL] * maa->m_org[ADDR_BANK_LEVEL];
+    num_RT_configs = log2((double)total_num_RT_subbanks / (double)min_num_RT_banks) + 1;
+
+    RT_config_addr = new Addr[num_RT_config_cache_entries];
+    RT_config_cache = new int[num_RT_config_cache_entries];
+    RT_config_cache_tick = new Tick[num_RT_config_cache_entries];
+    for (int i = 0; i < num_RT_config_cache_entries; i++) {
+        RT_config_addr[i] = 0;
+        RT_config_cache[i] = -1;
+        RT_config_cache_tick[i] = 0;
+    }
+
+    RT = new RowTable *[num_RT_configs];
+    my_RT_req_sent = new bool *[num_RT_configs];
+    my_RT_bank_order = new std::vector<int>[num_RT_configs];
+    RT_bank_org = new int *[num_RT_configs];
+    num_RT_banks = new int[num_RT_configs];
+    num_RT_rows_total = new int[num_RT_configs];
+    num_RT_subbanks = new int[num_RT_configs];
+    num_RT_bank_columns = new int[num_RT_configs];
+    num_RT_possible_grows = new Addr[num_RT_configs];
+
+    int current_num_RT_banks = min_num_RT_banks;
+    int current_num_RT_rows_total = current_num_RT_banks * num_RT_rows_per_bank;
+    Addr current_num_RT_possible_grows = max_num_RT_possible_grows;
+    int current_num_RT_subbanks = total_num_RT_subbanks / min_num_RT_banks;
+    int current_num_RT_entries_per_row = num_RT_entries_per_subbank_row * current_num_RT_subbanks;
+    initial_RT_config = -1;
+    for (int i = 0; i < num_RT_configs; i++) {
+        RT[i] = new RowTable[current_num_RT_banks];
+        my_RT_req_sent[i] = new bool[current_num_RT_banks];
+        num_RT_banks[i] = current_num_RT_banks;
+        num_RT_rows_total[i] = current_num_RT_rows_total;
+        num_RT_subbanks[i] = current_num_RT_subbanks;
+        num_RT_bank_columns[i] = current_num_RT_entries_per_row;
+        num_RT_possible_grows[i] = current_num_RT_possible_grows;
+        if (current_num_RT_entries_per_row == 4) {
+            initial_RT_config = i;
+        }
+        panic_if(current_num_RT_entries_per_row <= 0, "I[%d] TC[%d] %s: current_num_RT_entries_per_row is %d!\n",
+                 my_indirect_id, i, __func__, current_num_RT_entries_per_row);
+        for (int j = 0; j < current_num_RT_banks; j++) {
+            RT[i][j].allocate(my_indirect_id, j, num_RT_rows_per_bank, current_num_RT_entries_per_row, offset_table, this);
+            my_RT_req_sent[i][j] = false;
+        }
+
+        // How many banks corresponding to which level exist in
+        // this configuration (RowTable Bank Organization)
+        RT_bank_org[i] = new int[ADDR_MAX_LEVEL];
+        int remaining_banks = current_num_RT_banks;
+        for (int k = 0; k < ADDR_MAX_LEVEL; k++) {
+            if (remaining_banks > maa->m_org[k]) {
+                RT_bank_org[i][k] = maa->m_org[k];
+                assert(remaining_banks % maa->m_org[k] == 0);
+                remaining_banks /= maa->m_org[k];
+            } else if (remaining_banks > 0) {
+                RT_bank_org[i][k] = remaining_banks;
+                remaining_banks = 0;
+            } else {
+                RT_bank_org[i][k] = 1;
+            }
+        }
+        DPRINTF(MAAIndirect, "I[%d] TC[%d]: %d banks x %d subbanks x %d rows x %d columns -- CH: %d, RA: %d, BG: %d, BA: %d, RO: %d, CO: %d\n",
+                my_indirect_id, i, num_RT_banks[i], num_RT_subbanks[i], num_RT_rows_per_bank, num_RT_bank_columns[i],
+                RT_bank_org[i][ADDR_CHANNEL_LEVEL], RT_bank_org[i][ADDR_RANK_LEVEL],
+                RT_bank_org[i][ADDR_BANKGROUP_LEVEL], RT_bank_org[i][ADDR_BANK_LEVEL],
+                RT_bank_org[i][ADDR_ROW_LEVEL], RT_bank_org[i][ADDR_COLUMN_LEVEL]);
+
+        my_RT_bank_order[i].clear();
+        for (int bank = 0; bank < maa->m_org[ADDR_BANK_LEVEL]; bank++) {
+            for (int bankgroup = 0; bankgroup < maa->m_org[ADDR_BANKGROUP_LEVEL]; bankgroup++) {
+                for (int rank = 0; rank < maa->m_org[ADDR_RANK_LEVEL]; rank++) {
+                    for (int channel = 0; channel < maa->m_org[ADDR_CHANNEL_LEVEL]; channel++) {
+                        int RT_index = getRowTableIdx(i, channel, rank, bankgroup, bank);
+                        if (std::find(my_RT_bank_order[i].begin(),
+                                      my_RT_bank_order[i].end(),
+                                      RT_index) == my_RT_bank_order[i].end()) {
+                            my_RT_bank_order[i].push_back(RT_index);
+                        }
+                    }
+                }
+            }
+        }
+        panic_if(my_RT_bank_order[i].size() != num_RT_banks[i],
+                 "I[%d] TC[%d] %s: my_RT_bank_order(%d) != num_RT_banks(%d)!\n",
+                 my_indirect_id, i, __func__, my_RT_bank_order[i].size(), num_RT_banks[i]);
+        current_num_RT_banks *= 2;
+        current_num_RT_rows_total *= 2;
+        current_num_RT_subbanks /= 2;
+        current_num_RT_entries_per_row /= 2;
+        current_num_RT_possible_grows /= 2;
+    }
+    DPRINTF(MAAIndirect, "I[%d] %s: initial_RT_config(%d)!\n", my_indirect_id, __func__, initial_RT_config);
+}
+int IndirectAccessUnit::getRowTableIdx(int RT_config, int channel, int rank, int bankgroup, int bank) {
+    int RT_index = 0;
+    RT_index += (channel % RT_bank_org[RT_config][ADDR_CHANNEL_LEVEL]);
+    RT_index *= (RT_bank_org[RT_config][ADDR_RANK_LEVEL]);
+    RT_index += (rank % RT_bank_org[RT_config][ADDR_RANK_LEVEL]);
+    RT_index *= (RT_bank_org[RT_config][ADDR_BANKGROUP_LEVEL]);
+    RT_index += (bankgroup % RT_bank_org[RT_config][ADDR_BANKGROUP_LEVEL]);
+    RT_index *= (RT_bank_org[RT_config][ADDR_BANK_LEVEL]);
+    RT_index += (bank % RT_bank_org[RT_config][ADDR_BANK_LEVEL]);
+    panic_if(RT_index >= num_RT_banks[RT_config],
+             "I[%d] TC[%d] %s: RT_index(%d) >= num_RT_banks(%d)!\n",
+             my_indirect_id, RT_config, __func__, RT_index, num_RT_banks[RT_config]);
+    return RT_index;
+}
+Addr IndirectAccessUnit::getGrowAddr(int RT_config, int bankgroup, int bank, int row) {
+    Addr grow_addr = 0;
+    grow_addr = (bankgroup / RT_bank_org[RT_config][ADDR_BANKGROUP_LEVEL]);
+    grow_addr *= maa->m_org[ADDR_BANK_LEVEL];
+    grow_addr += (bank / RT_bank_org[RT_config][ADDR_BANK_LEVEL]);
+    grow_addr *= maa->m_org[ADDR_ROW_LEVEL];
+    grow_addr += (row / RT_bank_org[RT_config][ADDR_ROW_LEVEL]);
+    assert(RT_bank_org[RT_config][ADDR_ROW_LEVEL] == 1);
+    panic_if(grow_addr >= num_RT_possible_grows[RT_config],
+             "I[%d] TC[%d] %s: grow_addr(%lu) >= num_RT_possible_grows(%lu)!\n",
+             my_indirect_id, RT_config, __func__, grow_addr, num_RT_possible_grows[RT_config]);
+    return grow_addr;
+}
+int IndirectAccessUnit::getRowTableConfig(Addr addr) {
+    int oldest_entry = -1;
+    Tick oldest_tick = 0;
+    Tick current_tick = curTick();
+    for (int i = 0; i < num_RT_config_cache_entries; i++) {
+        if (RT_config_addr[i] == addr) {
+            RT_config_cache_tick[i] = current_tick;
+            return RT_config_cache[i];
+        } else if (RT_config_cache_tick[i] <= oldest_tick) {
+            oldest_tick = RT_config_cache_tick[i];
+            oldest_entry = i;
+        }
+    }
+    assert(oldest_entry != -1);
+    RT_config_addr[oldest_entry] = addr;
+    RT_config_cache[oldest_entry] = initial_RT_config;
+    RT_config_cache_tick[oldest_entry] = current_tick;
+    return initial_RT_config;
+}
+void IndirectAccessUnit::setRowTableConfig(Addr addr, int num_CLs, int num_ROWs) {
+    int new_config = -1;
+    if (num_ROWs >= num_RT_rows_total[num_RT_configs - 1]) {
+        new_config = num_RT_configs - 1;
+    } else {
+        for (int i = 0; i < num_RT_configs - 1; i++) {
+            if (num_ROWs < ((num_RT_rows_total[i] + num_RT_rows_total[i + 1]) / 2)) {
+                new_config = i;
+                break;
             }
         }
     }
+
+#if 0
+    // This approach does not work. If D is too large, there will be many unique CLs
+    // and many unique ROWs. The CL/ROW is still large, but since num_ROWs >> number
+    // of RT banks x RT subbanks x rows/subbank, there will be a lot of drains.
+    int num_CLs_per_ROW = num_CLs / num_ROWs;
+    if (num_CLs_per_ROW >= num_RT_bank_columns[0]) {
+        new_config = 0;
+    } else if (num_CLs_per_ROW < num_RT_bank_columns[num_RT_configs - 1]) {
+        new_config = num_RT_configs - 1;
+    } else {
+        for (int i = 1; i < num_RT_configs; i++) {
+            if (num_CLs_per_ROW < num_RT_bank_columns[i - 1] &&
+                num_CLs_per_ROW >= num_RT_bank_columns[i]) {
+                new_config = i;
+            }
+        }
+    }
+#endif
+
+    assert(new_config != -1);
+    for (int i = 0; i < num_RT_config_cache_entries; i++) {
+        if (RT_config_addr[i] == addr) {
+            RT_config_cache[i] = new_config;
+            DPRINTF(MAAIndirect, "I[%d] %s: addr(0x%lx) set to config(%d) with (%d/%d) CLs, (%d/%d) ROWs, (%d/%d) CLs/ROW!\n",
+                    my_indirect_id, __func__, addr, new_config, num_CLs, num_RT_bank_columns[new_config] * num_RT_banks[new_config],
+                    num_ROWs, num_RT_rows_total[new_config], num_CLs / num_ROWs, num_RT_bank_columns[new_config]);
+            return;
+        }
+    }
+    panic_if(true, "I[%d] %s: addr(0x%lx) not found in the cache!\n", my_indirect_id, __func__, addr);
 }
 void IndirectAccessUnit::check_reset() {
-    for (int i = 0; i < num_row_table_banks; i++) {
-        row_table[i].check_reset();
+    for (int i = 0; i < num_RT_configs; i++) {
+        for (int j = 0; j < num_RT_banks[i]; j++) {
+            RT[i][j].check_reset();
+        }
     }
     offset_table->check_reset();
     panic_if(my_outstanding_write_pkts.size() != 0, "Outstanding write packets: %d!\n",
@@ -407,7 +630,8 @@ void IndirectAccessUnit::check_reset() {
 Cycles IndirectAccessUnit::updateLatency(int num_spd_read_data_accesses,
                                          int num_spd_read_condidx_accesses,
                                          int num_spd_write_accesses,
-                                         int num_rowtable_accesses) {
+                                         int num_rowtable_accesses,
+                                         int RT_access_parallelism) {
     if (num_spd_read_data_accesses != 0) {
         // XByte -- 64/X bytes per SPD access
         Cycles get_data_latency = maa->spd->getDataLatency(getCeiling(num_spd_read_data_accesses, my_words_per_cl));
@@ -427,7 +651,7 @@ Cycles IndirectAccessUnit::updateLatency(int num_spd_read_data_accesses,
         (*maa->stats.IND_CyclesSPDWriteAccess[my_indirect_id]) += set_data_latency;
     }
     if (num_rowtable_accesses != 0) {
-        num_rowtable_accesses = getCeiling(num_rowtable_accesses, num_row_table_banks);
+        num_rowtable_accesses = getCeiling(num_rowtable_accesses, RT_access_parallelism);
         Cycles access_rowtable_latency = Cycles(num_rowtable_accesses * rowtable_latency);
         if (my_RT_access_finish_tick < curTick())
             my_RT_access_finish_tick = maa->getClockEdge(access_rowtable_latency);
@@ -486,6 +710,7 @@ void IndirectAccessUnit::executeInstruction() {
         DPRINTF(MAAIndirect, "I[%d] %s: decoding %s!\n", my_indirect_id, __func__, my_instruction->print());
 
         // Decoding the instruction
+        my_base_addr = my_instruction->baseAddr;
         my_idx_tile = my_instruction->src1SpdID;
         my_src_tile = my_instruction->src2SpdID;
         my_dst_tile = my_instruction->dst1SpdID;
@@ -513,17 +738,17 @@ void IndirectAccessUnit::executeInstruction() {
         my_cond_tile_ready = (my_cond_tile == -1) ? true : false;
         my_idx_tile_ready = false;
         my_src_tile_ready = (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) ? true : false;
+        my_RT_config = getRowTableConfig(my_base_addr);
 
         // Initialization
         my_virtual_addr = 0;
-        my_base_addr = my_instruction->baseAddr;
         assert(my_outstanding_read_pkts.size() == 0);
         assert(my_outstanding_write_pkts.size() == 0);
         my_received_responses = my_expected_responses = 0;
         offset_table->reset();
-        for (int i = 0; i < num_row_table_banks; i++) {
-            row_table[i].reset();
-            my_row_table_req_sent[i] = false;
+        for (int i = 0; i < num_RT_banks[my_RT_config]; i++) {
+            RT[my_RT_config][i].reset();
+            my_RT_req_sent[my_RT_config][i] = false;
         }
         my_i = 0;
         my_max = -1;
@@ -616,7 +841,8 @@ void IndirectAccessUnit::executeInstruction() {
                 DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile, my_i);
             }
             if (cond_ready == false || idx_ready == false || src_ready == false) {
-                updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses);
+                // Row table parallelism = #banks. Each bank can be inserted once at a cycle
+                updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
                 return;
             }
             if (my_cond_tile != -1) {
@@ -633,23 +859,29 @@ void IndirectAccessUnit::executeInstruction() {
                         my_indirect_id, __func__, idx, block_paddr);
                 uint16_t wid = (vaddr - block_vaddr) / my_word_size;
                 std::vector<int> addr_vec = maa->map_addr(block_paddr);
-                Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
-                my_row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL]);
-                assert(my_row_table_idx < num_row_table_banks);
-                DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), Grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n",
+                my_RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL],
+                                           addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
+                Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL],
+                                             addr_vec[ADDR_ROW_LEVEL]);
+                DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n",
                         my_indirect_id, __func__,
                         block_vaddr, block_paddr,
                         addr_vec[ADDR_ROW_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_COLUMN_LEVEL], addr_vec[ADDR_CHANNEL_LEVEL],
-                        Grow_addr, my_i, idx, wid, my_row_table_idx);
-                bool inserted = row_table[my_row_table_idx].insert(Grow_addr, block_paddr, my_i, wid);
+                        grow_addr, my_i, idx, wid, my_RT_idx);
+                bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid);
                 num_rowtable_accesses++;
                 if (inserted == false) {
-                    updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses);
+                    // Row table parallelism = #banks. Each bank can be inserted once at a cycle
+                    updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
                     scheduleNextExecution(true);
                     prev_state = Status::Fill;
                     state = Status::Drain;
                     (*maa->stats.IND_NumDrains[my_indirect_id])++;
                     return;
+                } else {
+                    my_unique_WORD_addrs.insert(vaddr);
+                    my_unique_CL_addrs.insert(block_paddr);
+                    my_unique_ROW_addrs.insert(grow_addr + my_RT_idx * num_RT_possible_grows[my_RT_config]);
                 }
             } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
                 DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_indirect_id, __func__, my_dst_tile, my_i, 0);
@@ -691,7 +923,8 @@ void IndirectAccessUnit::executeInstruction() {
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n",
                 my_indirect_id, __func__, my_instruction->print());
 
-        updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses);
+        // Row table parallelism = #banks. Each bank can be inserted once at a cycle
+        updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
         scheduleNextExecution(true);
         prev_state = Status::Fill;
         state = Status::Build;
@@ -712,15 +945,16 @@ void IndirectAccessUnit::executeInstruction() {
         }
         int num_rowtable_accesses = 0;
         Addr addr;
-        while (row_table[my_row_table_idx].get_entry_send_first_row(addr)) {
+        while (RT[my_RT_config][my_RT_idx].get_entry_send_first_row(addr)) {
             DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n",
-                    my_indirect_id, __func__, my_row_table_idx, addr);
+                    my_indirect_id, __func__, my_RT_idx, addr);
             my_expected_responses++;
             num_rowtable_accesses++;
             createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: drain completed, going to the request state...\n", my_indirect_id, __func__);
-        updateLatency(0, 0, 0, num_rowtable_accesses);
+        // Row table parallelism = #sub-banks. Each sub-bank of the draining bank can be accessed once at a cycle
+        updateLatency(0, 0, 0, num_rowtable_accesses, num_RT_subbanks[my_RT_config]);
         prev_state = Status::Drain;
         state = Status::Request;
         scheduleNextSendRead();
@@ -740,36 +974,37 @@ void IndirectAccessUnit::executeInstruction() {
             (*maa->stats.IND_CyclesFill[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_fill_start_tick);
             my_fill_start_tick = 0;
         }
-        int last_row_table_sent = 0;
+        int last_RT_sent = 0;
         int num_rowtable_accesses = 0;
         Addr addr;
         while (true) {
             if (checkAllRowTablesSent()) {
                 break;
             }
-            for (; last_row_table_sent < num_row_table_banks; last_row_table_sent++) {
-                int row_table_idx = my_row_table_bank_order[last_row_table_sent];
-                assert(row_table_idx < num_row_table_banks);
-                DPRINTF(MAAIndirect, "I[%d] %s: Checking row table bank[%d]!\n", my_indirect_id, __func__, row_table_idx);
-                if (my_row_table_req_sent[row_table_idx] == false) {
-                    if (row_table[row_table_idx].get_entry_send(addr)) {
+            for (; last_RT_sent < num_RT_banks[my_RT_config]; last_RT_sent++) {
+                int RT_idx = my_RT_bank_order[my_RT_config][last_RT_sent];
+                assert(RT_idx < num_RT_banks[my_RT_config]);
+                DPRINTF(MAAIndirect, "I[%d] %s: Checking row table bank[%d]!\n", my_indirect_id, __func__, RT_idx);
+                if (my_RT_req_sent[my_RT_config][RT_idx] == false) {
+                    if (RT[my_RT_config][RT_idx].get_entry_send(addr)) {
                         DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n",
-                                my_indirect_id, __func__, row_table_idx, addr);
+                                my_indirect_id, __func__, RT_idx, addr);
                         my_expected_responses++;
                         num_rowtable_accesses++;
                         createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
                     } else {
-                        DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, row_table_idx);
-                        my_row_table_req_sent[row_table_idx] = true;
+                        DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, RT_idx);
+                        my_RT_req_sent[my_RT_config][RT_idx] = true;
                     }
                 } else {
-                    DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has already sent the requests!\n", my_indirect_id, __func__, row_table_idx);
+                    DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has already sent the requests!\n", my_indirect_id, __func__, RT_idx);
                 }
             }
-            last_row_table_sent = (last_row_table_sent >= num_row_table_banks) ? 0 : last_row_table_sent;
+            last_RT_sent = (last_RT_sent >= num_RT_banks[my_RT_config]) ? 0 : last_RT_sent;
         }
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for %s!\n", my_indirect_id, __func__, my_instruction->print());
-        updateLatency(0, 0, 0, num_rowtable_accesses);
+        // Row table parallelism = total #banks. Each bank can give us a address in a cycle.
+        updateLatency(0, 0, 0, num_rowtable_accesses, total_num_RT_subbanks);
         prev_state = Status::Build;
         state = Status::Request;
         if (my_received_responses == my_expected_responses) {
@@ -849,6 +1084,13 @@ void IndirectAccessUnit::executeInstruction() {
         } else {
             maa->stats.cycles_INDRMW += total_cycles;
         }
+        setRowTableConfig(my_base_addr, my_unique_CL_addrs.size(), my_unique_ROW_addrs.size());
+        (*maa->stats.IND_NumUniqueWordsInserted[my_indirect_id]) += my_unique_WORD_addrs.size();
+        (*maa->stats.IND_NumUniqueCacheLineInserted[my_indirect_id]) += my_unique_CL_addrs.size();
+        (*maa->stats.IND_NumUniqueRowsInserted[my_indirect_id]) += my_unique_ROW_addrs.size();
+        my_unique_WORD_addrs.clear();
+        my_unique_CL_addrs.clear();
+        my_unique_ROW_addrs.clear();
         my_instruction = nullptr;
         break;
     }
@@ -857,18 +1099,14 @@ void IndirectAccessUnit::executeInstruction() {
     }
 }
 bool IndirectAccessUnit::checkAllRowTablesSent() {
-    for (int i = 0; i < num_row_table_banks; i++) {
-        if (my_row_table_req_sent[i] == false) {
+    for (int i = 0; i < num_RT_banks[my_RT_config]; i++) {
+        if (my_RT_req_sent[my_RT_config][i] == false) {
             return false;
         }
     }
     return true;
 }
-int IndirectAccessUnit::getRowTableIdx(int channel, int rank, int bankgroup) {
-    return (channel * maa->m_org[ADDR_RANK_LEVEL] * 2) +
-           (rank * 2) +
-           (bankgroup % 2);
-}
+
 void IndirectAccessUnit::createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
@@ -1002,14 +1240,14 @@ bool IndirectAccessUnit::recvData(const Addr addr,
                                   uint8_t *dataptr,
                                   bool is_block_cached) {
     std::vector addr_vec = maa->map_addr(addr);
-    Addr Grow_addr = maa->calc_Grow_addr(addr_vec);
-    int row_table_idx = getRowTableIdx(addr_vec[ADDR_CHANNEL_LEVEL],
-                                       addr_vec[ADDR_RANK_LEVEL],
-                                       addr_vec[ADDR_BANKGROUP_LEVEL]);
-    std::vector<OffsetTableEntry> entries = row_table[row_table_idx].get_entry_recv(Grow_addr, addr);
-    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), Grow(x%lx) from T[%d]!\n",
+    int RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL],
+                                addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
+    Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL],
+                                 addr_vec[ADDR_ROW_LEVEL]);
+    std::vector<OffsetTableEntry> entries = RT[my_RT_config][RT_idx].get_entry_recv(grow_addr, addr);
+    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), grow(x%lx) from T[%d]!\n",
             my_indirect_id, __func__, entries.size(),
-            addr, Grow_addr, row_table_idx);
+            addr, grow_addr, RT_idx);
     if (entries.size() == 0) {
         return false;
     }
@@ -1108,7 +1346,9 @@ bool IndirectAccessUnit::recvData(const Addr addr,
         }
     }
 
-    Cycles total_latency = updateLatency(num_recv_spd_read_accesses, 0, num_recv_spd_write_accesses, num_recv_rt_accesses);
+    // Row table parallelism = total #banks.
+    // We will have total #banks offset table walkers.
+    Cycles total_latency = updateLatency(num_recv_spd_read_accesses, 0, num_recv_spd_write_accesses, num_recv_rt_accesses, total_num_RT_subbanks);
     if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
         RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
         PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
@@ -1157,8 +1397,7 @@ Addr IndirectAccessUnit::translatePacket(Addr vaddr) {
     my_translation_done = false;
     return my_translated_addr;
 }
-void IndirectAccessUnit::finish(const Fault &fault,
-                                const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
+void IndirectAccessUnit::finish(const Fault &fault, const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
     assert(fault == NoFault);
     assert(my_translation_done == false);
     my_translation_done = true;
@@ -1213,27 +1452,4 @@ void IndirectAccessUnit::scheduleSendWritePacketEvent(int latency) {
         }
     }
 }
-
-// bool IndirectAccessUnit::checkBlockCached(Addr physical_addr) {
-//     RequestPtr real_req = std::make_shared<Request>(physical_addr,
-//                                                     block_size,
-//                                                     flags,
-//                                                     maa->requestorId);
-//     PacketPtr curr_pkt = new Packet(real_req, MemCmd::CleanEvict);
-//     curr_pkt->setExpressSnoop();
-//     curr_pkt->headerDelay = curr_pkt->payloadDelay = 0;
-//     DPRINTF(MAAIndirect, "I[%d] %s: sending snoop of %s\n", my_indirect_id, __func__, curr_pkt->print());
-//     maa->cpuSidePort.sendTimingSnoopReq(curr_pkt);
-//     // assert(curr_pkt->satisfied() == false);
-//     DPRINTF(MAAIndirect, "I[%d] %s: Snoop of %s returned with cache responding (%s), has sharers (%s), had writable (%s), satisfied (%s), is block cached (%s)\n",
-//             my_indirect_id,
-//             __func__,
-//             curr_pkt->print(),
-//             curr_pkt->cacheResponding() ? "True" : "False",
-//             curr_pkt->hasSharers() ? "True" : "False",
-//             curr_pkt->responderHadWritable() ? "True" : "False",
-//             curr_pkt->satisfied() ? "True" : "False",
-//             curr_pkt->isBlockCached() ? "True" : "False");
-//     return curr_pkt->isBlockCached();
-// }
 } // namespace gem5

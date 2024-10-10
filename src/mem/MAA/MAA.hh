@@ -391,8 +391,9 @@ public:
     unsigned int num_indirect_access_units;
     unsigned int num_range_units;
     unsigned int num_alu_units;
-    unsigned int num_row_table_rows;
-    unsigned int num_row_table_entries_per_row;
+    unsigned int num_row_table_rows_per_bank;
+    unsigned int num_row_table_entries_per_subbank_row;
+    unsigned int num_row_table_config_cache_entries;
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;
     Instruction *current_instruction;
@@ -491,10 +492,16 @@ public:
         std::vector<statistics::Scalar *> IND_NumWordsInserted;
         std::vector<statistics::Scalar *> IND_NumCacheLineInserted;
         std::vector<statistics::Scalar *> IND_NumRowsInserted;
+        std::vector<statistics::Scalar *> IND_NumUniqueWordsInserted;
+        std::vector<statistics::Scalar *> IND_NumUniqueCacheLineInserted;
+        std::vector<statistics::Scalar *> IND_NumUniqueRowsInserted;
         std::vector<statistics::Scalar *> IND_NumDrains;
         std::vector<statistics::Formula *> IND_AvgWordsPerCacheLine;
         std::vector<statistics::Formula *> IND_AvgCacheLinesPerRow;
         std::vector<statistics::Formula *> IND_AvgRowsPerInst;
+        std::vector<statistics::Formula *> IND_AvgUniqueWordsPerCacheLine;
+        std::vector<statistics::Formula *> IND_AvgUniqueCacheLinesPerRow;
+        std::vector<statistics::Formula *> IND_AvgUniqueRowsPerInst;
         std::vector<statistics::Formula *> IND_AvgDrainsPerInst;
 
         /** Indirect Unit -- Cycles of stages. */

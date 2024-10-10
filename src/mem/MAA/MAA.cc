@@ -47,8 +47,9 @@ MAA::MAA(const MAAParams &p)
       num_indirect_access_units(p.num_indirect_access_units),
       num_range_units(p.num_range_units),
       num_alu_units(p.num_alu_units),
-      num_row_table_rows(p.num_row_table_rows),
-      num_row_table_entries_per_row(p.num_row_table_entries_per_row),
+      num_row_table_rows_per_bank(p.num_row_table_rows_per_bank),
+      num_row_table_entries_per_subbank_row(p.num_row_table_entries_per_subbank_row),
+      num_row_table_config_cache_entries(p.num_row_table_config_cache_entries),
       rowtable_latency(p.rowtable_latency),
       cache_snoop_latency(p.cache_snoop_latency),
       system(p.system),
@@ -167,8 +168,9 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
     for (int i = 0; i < num_indirect_access_units; i++) {
         indirectAccessUnits[i].allocate(i,
                                         num_tile_elements,
-                                        num_row_table_rows,
-                                        num_row_table_entries_per_row,
+                                        num_row_table_rows_per_bank,
+                                        num_row_table_entries_per_subbank_row,
+                                        num_row_table_config_cache_entries,
                                         rowtable_latency,
                                         cache_snoop_latency,
                                         this);
@@ -189,13 +191,6 @@ std::vector<int> MAA::map_addr(Addr addr) {
         addr_vec[i] = slice_lower_bits(addr, m_addr_bits[i]);
     }
     return addr_vec;
-}
-Addr MAA::calc_Grow_addr(std::vector<int> addr_vec) {
-    assert(addr_vec.size() == 6);
-    Addr Grow_addr = (addr_vec[ADDR_BANKGROUP_LEVEL] >> 1) * m_org[ADDR_BANK_LEVEL];
-    Grow_addr = (Grow_addr + addr_vec[ADDR_BANK_LEVEL]) * m_org[ADDR_ROW_LEVEL];
-    Grow_addr += addr_vec[ADDR_ROW_LEVEL];
-    return Grow_addr;
 }
 bool MAA::allFuncUnitsIdle() {
     if (invalidator->getState() != Invalidator::Status::Idle) {
@@ -594,10 +589,16 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         IND_NumWordsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumWordsInserted"), statistics::units::Count::get(), "number of words inserted to the row table"));
         IND_NumCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumCacheLineInserted"), statistics::units::Count::get(), "number of cachelines inserted to the row table"));
         IND_NumRowsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumRowsInserted"), statistics::units::Count::get(), "number of rows inserted to the row table"));
+        IND_NumUniqueWordsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueWordsInserted"), statistics::units::Count::get(), "number of unique words inserted to the row table"));
+        IND_NumUniqueCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueCacheLineInserted"), statistics::units::Count::get(), "number of unique cachelines inserted to the row table"));
+        IND_NumUniqueRowsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueRowsInserted"), statistics::units::Count::get(), "number of unique rows inserted to the row table"));
         IND_NumDrains.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumDrains"), statistics::units::Count::get(), "number of drains due to row table full"));
         IND_AvgWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgWordsPerCacheLine"), statistics::units::Count::get(), "average number of words per cacheline"));
         IND_AvgCacheLinesPerRow.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCacheLinesPerRow"), statistics::units::Count::get(), "average number of cachelines per row"));
         IND_AvgRowsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgRowsPerInst"), statistics::units::Count::get(), "average number of rows per indirect instruction"));
+        IND_AvgUniqueWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueWordsPerCacheLine"), statistics::units::Count::get(), "average number of unique words per cacheline"));
+        IND_AvgUniqueCacheLinesPerRow.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueCacheLinesPerRow"), statistics::units::Count::get(), "average number of unique cachelines per row"));
+        IND_AvgUniqueRowsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueRowsPerInst"), statistics::units::Count::get(), "average number of unique rows per indirect instruction"));
         IND_AvgDrainsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgDrainsPerInst"), statistics::units::Count::get(), "average number of drains per indirect instruction"));
         IND_CyclesFill.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesFill"), statistics::units::Count::get(), "number of cycles in the FILL stage"));
         IND_CyclesDrain.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesDrain"), statistics::units::Count::get(), "number of cycles in the DRAIN stage"));
@@ -628,6 +629,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_NumWordsInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumCacheLineInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumRowsInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumUniqueWordsInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumUniqueCacheLineInserted[indirect_id]).flags(statistics::nozero);
+        (*IND_NumUniqueRowsInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumDrains[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesFill[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesDrain[indirect_id]).flags(statistics::nozero);
@@ -645,6 +649,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgWordsPerCacheLine[indirect_id]) = (*IND_NumWordsInserted[indirect_id]) / (*IND_NumCacheLineInserted[indirect_id]);
         (*IND_AvgCacheLinesPerRow[indirect_id]) = (*IND_NumCacheLineInserted[indirect_id]) / (*IND_NumRowsInserted[indirect_id]);
         (*IND_AvgRowsPerInst[indirect_id]) = (*IND_NumRowsInserted[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgUniqueWordsPerCacheLine[indirect_id]) = (*IND_NumUniqueWordsInserted[indirect_id]) / (*IND_NumUniqueCacheLineInserted[indirect_id]);
+        (*IND_AvgUniqueCacheLinesPerRow[indirect_id]) = (*IND_NumUniqueCacheLineInserted[indirect_id]) / (*IND_NumUniqueRowsInserted[indirect_id]);
+        (*IND_AvgUniqueRowsPerInst[indirect_id]) = (*IND_NumUniqueRowsInserted[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgDrainsPerInst[indirect_id]) = (*IND_NumDrains[indirect_id]) / (*IND_NumInsts[indirect_id]);
 
         (*IND_AvgCyclesFillPerInst[indirect_id]) = (*IND_CyclesFill[indirect_id]) / (*IND_NumInsts[indirect_id]);
@@ -665,6 +672,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgWordsPerCacheLine[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCacheLinesPerRow[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgRowsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgUniqueWordsPerCacheLine[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgUniqueCacheLinesPerRow[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgUniqueRowsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgDrainsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesFillPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesDrainPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);

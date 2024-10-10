@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <map>
+#include <set>
 
 #include "base/statistics.hh"
 #include "base/types.hh"
@@ -19,6 +21,7 @@
 #define ADDR_BANK_LEVEL      3
 #define ADDR_ROW_LEVEL       4
 #define ADDR_COLUMN_LEVEL    5
+#define ADDR_MAX_LEVEL       6
 
 namespace gem5 {
 
@@ -79,7 +82,7 @@ public:
     void allocate(int _my_indirect_id,
                   int _my_table_id,
                   int _my_table_row_id,
-                  int _num_row_table_entries_per_row,
+                  int _num_RT_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
     bool insert(Addr addr, int itr, int wid);
@@ -90,10 +93,10 @@ public:
     std::vector<OffsetTableEntry> get_entry_recv(Addr addr);
     bool all_entries_received();
     OffsetTable *offset_table;
-    Addr Grow_addr;
+    Addr grow_addr;
     Entry *entries;
     bool *entries_valid;
-    int num_row_table_entries_per_row;
+    int num_RT_entries_per_row;
     int last_sent_entry_id;
     IndirectAccessUnit *indir_access;
     int my_indirect_id, my_table_id, my_table_row_id;
@@ -113,17 +116,17 @@ public:
     }
     void allocate(int _my_indirect_id,
                   int _my_table_id,
-                  int _num_row_table_rows,
-                  int _num_row_table_entries_per_row,
+                  int _num_RT_rows_per_bank,
+                  int _num_RT_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
-    bool insert(Addr Grow_addr,
+    bool insert(Addr grow_addr,
                 Addr addr,
                 int itr,
                 int wid);
     bool get_entry_send(Addr &addr);
     bool get_entry_send_first_row(Addr &addr);
-    std::vector<OffsetTableEntry> get_entry_recv(Addr Grow_addr,
+    std::vector<OffsetTableEntry> get_entry_recv(Addr grow_addr,
                                                  Addr addr);
 
     void reset();
@@ -132,8 +135,8 @@ public:
     OffsetTable *offset_table;
     RowTableEntry *entries;
     bool *entries_valid;
-    int num_row_table_rows;
-    int num_row_table_entries_per_row;
+    int num_RT_rows_per_bank;
+    int num_RT_entries_per_row;
     int last_sent_row_id;
     IndirectAccessUnit *indir_access;
     int my_indirect_id, my_table_id;
@@ -185,12 +188,25 @@ protected:
             return lhs.tick < rhs.tick;
         }
     };
-    int num_row_table_banks;
+    int total_num_RT_subbanks;
+    int num_RT_configs;
+    int my_RT_config;
+    int initial_RT_config;
+    int **RT_bank_org;
+    int *num_RT_banks;
+    int *num_RT_rows_total;
+    Addr *num_RT_possible_grows;
+    int *num_RT_subbanks;
+    int *num_RT_bank_columns;
+    Addr *RT_config_addr;
+    int *RT_config_cache;
+    Tick *RT_config_cache_tick;
     int num_tile_elements;
-    int num_row_table_rows;
-    int num_row_table_entries_per_row;
+    int num_RT_rows_per_bank;
+    int num_RT_entries_per_subbank_row;
+    int num_RT_config_cache_entries;
     Status state, prev_state;
-    RowTable *row_table;
+    RowTable **RT;
     OffsetTable *offset_table;
     int dst_tile_id;
     Cycles rowtable_latency;
@@ -199,15 +215,12 @@ protected:
 public:
     MAA *maa;
     IndirectAccessUnit();
-    ~IndirectAccessUnit() {
-        if (row_table != nullptr) {
-            delete row_table;
-        }
-    }
+    ~IndirectAccessUnit();
     void allocate(int _my_indirect_id,
                   int _num_tile_elements,
-                  int _num_row_table_rows,
-                  int _num_row_table_entries_per_row,
+                  int _num_row_table_rows_per_bank,
+                  int _num_row_table_entries_per_subbank_row,
+                  int _num_row_table_config_cache_entries,
                   Cycles _rowtable_latency,
                   Cycles _cache_snoop_latency,
                   MAA *_maa);
@@ -242,9 +255,9 @@ protected:
     int my_expected_responses;
     int my_received_responses;
     std::vector<int> my_sorted_indices;
-    bool *my_row_table_req_sent;
-    std::vector<int> my_row_table_bank_order;
-    int my_i, my_row_table_idx;
+    bool **my_RT_req_sent;
+    std::vector<int> *my_RT_bank_order;
+    int my_i, my_RT_idx;
 
     bool my_translation_done;
     Addr my_translated_addr;
@@ -257,10 +270,16 @@ protected:
     Tick my_drain_start_tick;
     Tick my_build_start_tick;
     Tick my_request_start_tick;
+    std::set<Addr> my_unique_WORD_addrs;
+    std::set<Addr> my_unique_CL_addrs;
+    std::set<Addr> my_unique_ROW_addrs;
 
     Addr translatePacket(Addr vaddr);
     bool checkAllRowTablesSent();
-    int getRowTableIdx(int channel, int rank, int bankgroup);
+    int getRowTableIdx(int RT_config, int channel, int rank, int bankgroup, int bank);
+    Addr getGrowAddr(int RT_config, int bankgroup, int bank, int row);
+    int getRowTableConfig(Addr addr);
+    void setRowTableConfig(Addr addr, int num_CLs, int num_ROWs);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
     EventFunctionWrapper sendReadPacketEvent;
@@ -271,7 +290,8 @@ protected:
     Cycles updateLatency(int num_spd_read_data_accesses,
                          int num_spd_read_condidx_accesses,
                          int num_spd_write_accesses,
-                         int num_rowtable_accesses);
+                         int num_rowtable_accesses,
+                         int RT_access_parallelism);
 
 public:
     void createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop);

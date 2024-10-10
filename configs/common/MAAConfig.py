@@ -33,12 +33,15 @@ def _get_maa_opts(options):
     if hasattr(options, "maa_num_alu_units"):
         opts["num_alu_units"] = getattr(options, "maa_num_alu_units")
 
-    if hasattr(options, "maa_num_row_table_rows"):
-        opts["num_row_table_rows"] = getattr(options, "maa_num_row_table_rows")
-    
-    if hasattr(options, "maa_num_row_table_entries_per_row"):
-        opts["num_row_table_entries_per_row"] = getattr(options, "maa_num_row_table_entries_per_row")
-    
+    if hasattr(options, "maa_num_row_table_rows_per_bank"):
+        opts["num_row_table_rows_per_bank"] = getattr(options, "maa_num_row_table_rows_per_bank")
+
+    if hasattr(options, "maa_num_row_table_entries_per_subbank_row"):
+        opts["num_row_table_entries_per_subbank_row"] = getattr(options, "maa_num_row_table_entries_per_subbank_row")
+
+    if hasattr(options, "maa_num_row_table_config_cache_entries"):
+        opts["num_row_table_config_cache_entries"] = getattr(options, "maa_num_row_table_config_cache_entries")
+
     if hasattr(options, "maa_spd_read_latency"):
         opts["spd_read_latency"] = getattr(options, "maa_spd_read_latency")
 

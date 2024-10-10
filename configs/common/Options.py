@@ -219,8 +219,9 @@ def addNoISAOptions(parser):
     parser.add_argument("--maa_num_indirect_access_units", type=int, default=1, help="Number of indirect access units")
     parser.add_argument("--maa_num_range_units", type=int, default=1, help="Number of range units")
     parser.add_argument("--maa_num_alu_units", type=int, default=1, help="Number of alu units")
-    parser.add_argument("--maa_num_row_table_rows", type=int, default=64, help="Number of rows in each row table bank")
-    parser.add_argument("--maa_num_row_table_entries_per_row", type=int, default=16, help="Number of row table entries (bursts) per row table row")
+    parser.add_argument("--maa_num_row_table_rows_per_bank", type=int, default=64, help="Number of rows in each row table bank")
+    parser.add_argument("--maa_num_row_table_entries_per_subbank_row", type=int, default=2, help="Number of row table entries (bursts) per each sub-bank of row table")
+    parser.add_argument("--maa_num_row_table_config_cache_entries", type=int, default=16, help="Number of row table entry history in the configuration cache")
     parser.add_argument("--l1d_repl_policy",  default="LRURP",
                     choices=ObjectList.rp_list.get_names(),
                     help="""
