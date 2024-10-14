@@ -51,17 +51,14 @@ void MAA::recvMemTimingResp(PacketPtr pkt) {
         }
         bool received = false;
         for (int i = 0; i < num_indirect_access_units; i++) {
-            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
-                indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+            if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
                 if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
                     panic_if(received, "Received multiple responses for the same request\n");
                 }
             }
         }
         for (int i = 0; i < num_stream_access_units; i++) {
-            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
-                streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
                 panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
                          "Received multiple responses for the same request\n");
             }
@@ -132,9 +129,7 @@ void MAA::MemSidePort::setUnblocked(BlockReason reason) {
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         if (funcBlockReasons[i] != BlockReason::NOT_BLOCKED) {
             assert(funcBlockReasons[i] == reason);
-            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
-                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response);
+            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
             funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAAMemPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
             maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();

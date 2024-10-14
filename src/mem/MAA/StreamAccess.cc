@@ -276,7 +276,7 @@ void StreamAccessUnit::executeInstruction() {
                     updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
                     scheduleNextExecution();
                     scheduleNextSend();
-                    (*maa->stats.STR_NumDrains[my_stream_id])++;
+                    (*maa->stats.STR_NumRTFull[my_stream_id])++;
                     return;
                 } else {
                     DPRINTF(MAAStream, "S[%d] RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
@@ -321,15 +321,15 @@ void StreamAccessUnit::executeInstruction() {
             my_last_block_vaddr = 0;
         }
         updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
-        scheduleNextExecution();
         scheduleNextSend();
         if (my_received_responses != my_sent_requests) {
             DPRINTF(MAAStream, "S[%d] %s: Waiting for responses, received (%d) != send (%d)...\n", my_stream_id, __func__, my_received_responses, my_sent_requests);
-            break;
+        } else {
+            DPRINTF(MAAStream, "S[%d] %s: state set to respond for request %s!\n", my_stream_id, __func__, my_instruction->print());
+            state = Status::Response;
+            scheduleNextExecution(true);
         }
-        DPRINTF(MAAStream, "S[%d] %s: state set to respond for request %s!\n", my_stream_id, __func__, my_instruction->print());
-        state = Status::Response;
-        [[fallthrough]];
+        break;
     }
     case Status::Response: {
         assert(my_instruction != nullptr);

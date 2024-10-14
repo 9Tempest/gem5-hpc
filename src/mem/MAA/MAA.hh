@@ -495,25 +495,23 @@ public:
         std::vector<statistics::Scalar *> IND_NumUniqueWordsInserted;
         std::vector<statistics::Scalar *> IND_NumUniqueCacheLineInserted;
         std::vector<statistics::Scalar *> IND_NumUniqueRowsInserted;
-        std::vector<statistics::Scalar *> IND_NumDrains;
+        std::vector<statistics::Scalar *> IND_NumRTFull;
         std::vector<statistics::Formula *> IND_AvgWordsPerCacheLine;
         std::vector<statistics::Formula *> IND_AvgCacheLinesPerRow;
         std::vector<statistics::Formula *> IND_AvgRowsPerInst;
         std::vector<statistics::Formula *> IND_AvgUniqueWordsPerCacheLine;
         std::vector<statistics::Formula *> IND_AvgUniqueCacheLinesPerRow;
         std::vector<statistics::Formula *> IND_AvgUniqueRowsPerInst;
-        std::vector<statistics::Formula *> IND_AvgDrainsPerInst;
+        std::vector<statistics::Formula *> IND_AvgRTFullsPerInst;
 
         /** Indirect Unit -- Cycles of stages. */
         std::vector<statistics::Scalar *> IND_CyclesFill;
-        std::vector<statistics::Scalar *> IND_CyclesDrain;
         std::vector<statistics::Scalar *> IND_CyclesBuild;
         std::vector<statistics::Scalar *> IND_CyclesRequest;
         std::vector<statistics::Scalar *> IND_CyclesRTAccess;
         std::vector<statistics::Scalar *> IND_CyclesSPDReadAccess;
         std::vector<statistics::Scalar *> IND_CyclesSPDWriteAccess;
         std::vector<statistics::Formula *> IND_AvgCyclesFillPerInst;
-        std::vector<statistics::Formula *> IND_AvgCyclesDrainPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesBuildPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesRequestPerInst;
         std::vector<statistics::Formula *> IND_AvgCyclesRTAccessPerInst;
@@ -524,9 +522,15 @@ public:
         std::vector<statistics::Scalar *> IND_LoadsCacheHitResponding;
         std::vector<statistics::Scalar *> IND_LoadsCacheHitAccessing;
         std::vector<statistics::Scalar *> IND_LoadsMemAccessing;
+        std::vector<statistics::Scalar *> IND_LoadsCacheHitRespondingLatency;
+        std::vector<statistics::Scalar *> IND_LoadsCacheHitAccessingLatency;
+        std::vector<statistics::Scalar *> IND_LoadsMemAccessingLatency;
         std::vector<statistics::Formula *> IND_AvgLoadsCacheHitRespondingPerInst;
         std::vector<statistics::Formula *> IND_AvgLoadsCacheHitAccessingPerInst;
         std::vector<statistics::Formula *> IND_AvgLoadsMemAccessingPerInst;
+        std::vector<statistics::Formula *> IND_AvgLoadsCacheHitRespondingLatency;
+        std::vector<statistics::Formula *> IND_AvgLoadsCacheHitAccessingLatency;
+        std::vector<statistics::Formula *> IND_AvgLoadsMemAccessingLatency;
 
         /** Indirect Unit -- Store accesses. */
         std::vector<statistics::Scalar *> IND_StoresMemAccessing;
@@ -540,10 +544,10 @@ public:
         std::vector<statistics::Scalar *> STR_NumInsts;
         std::vector<statistics::Scalar *> STR_NumWordsInserted;
         std::vector<statistics::Scalar *> STR_NumCacheLineInserted;
-        std::vector<statistics::Scalar *> STR_NumDrains;
+        std::vector<statistics::Scalar *> STR_NumRTFull;
         std::vector<statistics::Formula *> STR_AvgWordsPerCacheLine;
         std::vector<statistics::Formula *> STR_AvgCacheLinesPerInst;
-        std::vector<statistics::Formula *> STR_AvgDrainsPerInst;
+        std::vector<statistics::Formula *> STR_AvgRTFullsPerInst;
 
         /** Stream Unit -- Cycles of stages. */
         std::vector<statistics::Scalar *> STR_CyclesRequest;

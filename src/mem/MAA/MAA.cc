@@ -592,23 +592,21 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         IND_NumUniqueWordsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueWordsInserted"), statistics::units::Count::get(), "number of unique words inserted to the row table"));
         IND_NumUniqueCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueCacheLineInserted"), statistics::units::Count::get(), "number of unique cachelines inserted to the row table"));
         IND_NumUniqueRowsInserted.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumUniqueRowsInserted"), statistics::units::Count::get(), "number of unique rows inserted to the row table"));
-        IND_NumDrains.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumDrains"), statistics::units::Count::get(), "number of drains due to row table full"));
+        IND_NumRTFull.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_NumRTFull"), statistics::units::Count::get(), "number of row table full events"));
         IND_AvgWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgWordsPerCacheLine"), statistics::units::Count::get(), "average number of words per cacheline"));
         IND_AvgCacheLinesPerRow.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCacheLinesPerRow"), statistics::units::Count::get(), "average number of cachelines per row"));
         IND_AvgRowsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgRowsPerInst"), statistics::units::Count::get(), "average number of rows per indirect instruction"));
         IND_AvgUniqueWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueWordsPerCacheLine"), statistics::units::Count::get(), "average number of unique words per cacheline"));
         IND_AvgUniqueCacheLinesPerRow.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueCacheLinesPerRow"), statistics::units::Count::get(), "average number of unique cachelines per row"));
         IND_AvgUniqueRowsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgUniqueRowsPerInst"), statistics::units::Count::get(), "average number of unique rows per indirect instruction"));
-        IND_AvgDrainsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgDrainsPerInst"), statistics::units::Count::get(), "average number of drains per indirect instruction"));
+        IND_AvgRTFullsPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgRTFullsPerInst"), statistics::units::Count::get(), "average number of row table full events per indirect instruction"));
         IND_CyclesFill.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesFill"), statistics::units::Count::get(), "number of cycles in the FILL stage"));
-        IND_CyclesDrain.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesDrain"), statistics::units::Count::get(), "number of cycles in the DRAIN stage"));
         IND_CyclesBuild.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesBuild"), statistics::units::Count::get(), "number of cycles in the BUILD stage"));
         IND_CyclesRequest.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesRequest"), statistics::units::Count::get(), "number of cycles in the REQUEST stage"));
         IND_CyclesRTAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesRTAccess"), statistics::units::Count::get(), "number of cycles spent on row table access"));
         IND_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles spent on SPD read access"));
         IND_CyclesSPDWriteAccess.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_CyclesSPDWriteAccess"), statistics::units::Count::get(), "number of cycles spent on SPD write access"));
         IND_AvgCyclesFillPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesFillPerInst"), statistics::units::Count::get(), "average number of cycles in the FILL stage per indirect instruction"));
-        IND_AvgCyclesDrainPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesDrainPerInst"), statistics::units::Count::get(), "average number of cycles in the DRAIN stage per indirect instruction"));
         IND_AvgCyclesBuildPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesBuildPerInst"), statistics::units::Count::get(), "average number of cycles in the BUILD stage per indirect instruction"));
         IND_AvgCyclesRequestPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesRequestPerInst"), statistics::units::Count::get(), "average number of cycles in the REQUEST stage per indirect instruction"));
         IND_AvgCyclesRTAccessPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgCyclesRTAccessPerInst"), statistics::units::Count::get(), "average number of cycles spent on row table access per indirect instruction"));
@@ -617,6 +615,12 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         IND_LoadsCacheHitResponding.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitResponding"), statistics::units::Count::get(), "number of loads hit in cache in the M/O state, responding back"));
         IND_LoadsCacheHitAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitAccessing"), statistics::units::Count::get(), "number of loads hit in cache in the E/S state, reaccessed cache"));
         IND_LoadsMemAccessing.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsMemAccessing"), statistics::units::Count::get(), "number of loads miss in cache, accessed from memory"));
+        IND_LoadsCacheHitRespondingLatency.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitRespondingLatency"), statistics::units::Count::get(), "latency of loads hit in cache in the M/O state, responding back"));
+        IND_LoadsCacheHitAccessingLatency.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsCacheHitAccessingLatency"), statistics::units::Count::get(), "latency of loads hit in cache in the E/S state, reaccessed cache"));
+        IND_LoadsMemAccessingLatency.push_back(new statistics::Scalar(this, MAKE_INDIRECT_STAT_NAME("IND_LoadsMemAccessingLatency"), statistics::units::Count::get(), "latency of loads miss in cache, accessed from memory"));
+        IND_AvgLoadsCacheHitRespondingLatency.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitRespondingLatency"), statistics::units::Count::get(), "average latency of loads hit in cache in the M/O state"));
+        IND_AvgLoadsCacheHitAccessingLatency.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitAccessingLatency"), statistics::units::Count::get(), "average latency of loads hit in cache in the E/S state"));
+        IND_AvgLoadsMemAccessingLatency.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsMemAccessingLatency"), statistics::units::Count::get(), "average latency of loads miss in cache"));
         IND_AvgLoadsCacheHitRespondingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitRespondingPerInst"), statistics::units::Count::get(), "average number of loads hit in cache in the M/O state per indirect instruction"));
         IND_AvgLoadsCacheHitAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsCacheHitAccessingPerInst"), statistics::units::Count::get(), "average number of loads hit in cache in the E/S state per indirect instruction"));
         IND_AvgLoadsMemAccessingPerInst.push_back(new statistics::Formula(this, MAKE_INDIRECT_STAT_NAME("IND_AvgLoadsMemAccessingPerInst"), statistics::units::Count::get(), "average number of loads miss in cache per indirect instruction"));
@@ -632,9 +636,8 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_NumUniqueWordsInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumUniqueCacheLineInserted[indirect_id]).flags(statistics::nozero);
         (*IND_NumUniqueRowsInserted[indirect_id]).flags(statistics::nozero);
-        (*IND_NumDrains[indirect_id]).flags(statistics::nozero);
+        (*IND_NumRTFull[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesFill[indirect_id]).flags(statistics::nozero);
-        (*IND_CyclesDrain[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesBuild[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesRequest[indirect_id]).flags(statistics::nozero);
         (*IND_CyclesRTAccess[indirect_id]).flags(statistics::nozero);
@@ -643,6 +646,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_LoadsCacheHitResponding[indirect_id]).flags(statistics::nozero);
         (*IND_LoadsCacheHitAccessing[indirect_id]).flags(statistics::nozero);
         (*IND_LoadsMemAccessing[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsCacheHitRespondingLatency[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsCacheHitAccessingLatency[indirect_id]).flags(statistics::nozero);
+        (*IND_LoadsMemAccessingLatency[indirect_id]).flags(statistics::nozero);
         (*IND_StoresMemAccessing[indirect_id]).flags(statistics::nozero);
         (*IND_Evicts[indirect_id]).flags(statistics::nozero);
 
@@ -652,10 +658,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgUniqueWordsPerCacheLine[indirect_id]) = (*IND_NumUniqueWordsInserted[indirect_id]) / (*IND_NumUniqueCacheLineInserted[indirect_id]);
         (*IND_AvgUniqueCacheLinesPerRow[indirect_id]) = (*IND_NumUniqueCacheLineInserted[indirect_id]) / (*IND_NumUniqueRowsInserted[indirect_id]);
         (*IND_AvgUniqueRowsPerInst[indirect_id]) = (*IND_NumUniqueRowsInserted[indirect_id]) / (*IND_NumInsts[indirect_id]);
-        (*IND_AvgDrainsPerInst[indirect_id]) = (*IND_NumDrains[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgRTFullsPerInst[indirect_id]) = (*IND_NumRTFull[indirect_id]) / (*IND_NumInsts[indirect_id]);
 
         (*IND_AvgCyclesFillPerInst[indirect_id]) = (*IND_CyclesFill[indirect_id]) / (*IND_NumInsts[indirect_id]);
-        (*IND_AvgCyclesDrainPerInst[indirect_id]) = (*IND_CyclesDrain[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgCyclesBuildPerInst[indirect_id]) = (*IND_CyclesBuild[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgCyclesRequestPerInst[indirect_id]) = (*IND_CyclesRequest[indirect_id]) / (*IND_NumInsts[indirect_id]);
 
@@ -666,6 +671,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgLoadsCacheHitRespondingPerInst[indirect_id]) = (*IND_LoadsCacheHitResponding[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgLoadsCacheHitAccessingPerInst[indirect_id]) = (*IND_LoadsCacheHitAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgLoadsMemAccessingPerInst[indirect_id]) = (*IND_LoadsMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
+        (*IND_AvgLoadsCacheHitRespondingLatency[indirect_id]) = (*IND_LoadsCacheHitRespondingLatency[indirect_id]) / (*IND_LoadsCacheHitResponding[indirect_id]);
+        (*IND_AvgLoadsCacheHitAccessingLatency[indirect_id]) = (*IND_LoadsCacheHitAccessingLatency[indirect_id]) / (*IND_LoadsCacheHitAccessing[indirect_id]);
+        (*IND_AvgLoadsMemAccessingLatency[indirect_id]) = (*IND_LoadsMemAccessingLatency[indirect_id]) / (*IND_LoadsMemAccessing[indirect_id]);
         (*IND_AvgStoresMemAccessingPerInst[indirect_id]) = (*IND_StoresMemAccessing[indirect_id]) / (*IND_NumInsts[indirect_id]);
         (*IND_AvgEvictssPerInst[indirect_id]) = (*IND_Evicts[indirect_id]) / (*IND_NumInsts[indirect_id]);
 
@@ -675,9 +683,8 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgUniqueWordsPerCacheLine[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgUniqueCacheLinesPerRow[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgUniqueRowsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
-        (*IND_AvgDrainsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgRTFullsPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesFillPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
-        (*IND_AvgCyclesDrainPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesBuildPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesRequestPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgCyclesRTAccessPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
@@ -686,6 +693,9 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*IND_AvgLoadsCacheHitRespondingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgLoadsCacheHitAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgLoadsMemAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsCacheHitRespondingLatency[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsCacheHitAccessingLatency[indirect_id]).flags(statistics::nozero | statistics::nonan);
+        (*IND_AvgLoadsMemAccessingLatency[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgStoresMemAccessingPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
         (*IND_AvgEvictssPerInst[indirect_id]).flags(statistics::nozero | statistics::nonan);
     }
@@ -693,10 +703,10 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         STR_NumInsts.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumInsts"), statistics::units::Count::get(), "number of instructions"));
         STR_NumWordsInserted.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumWordsInserted"), statistics::units::Count::get(), "number of words inserted to the request table"));
         STR_NumCacheLineInserted.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumCacheLineInserted"), statistics::units::Count::get(), "number of cachelines inserted to the request table"));
-        STR_NumDrains.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumDrains"), statistics::units::Count::get(), "number of drains due to request table full"));
+        STR_NumRTFull.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_NumRTFull"), statistics::units::Count::get(), "number of request table full events"));
         STR_AvgWordsPerCacheLine.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgWordsPerCacheLine"), statistics::units::Count::get(), "average number of words per cacheline"));
         STR_AvgCacheLinesPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgCacheLinesPerInst"), statistics::units::Count::get(), "average number of cachelines per stream instruction"));
-        STR_AvgDrainsPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgDrainsPerInst"), statistics::units::Count::get(), "average number of drains per stream instruction"));
+        STR_AvgRTFullsPerInst.push_back(new statistics::Formula(this, MAKE_STREAM_STAT_NAME("STR_AvgRTFullsPerInst"), statistics::units::Count::get(), "average number of request table full events per stream instruction"));
         STR_CyclesRequest.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesRequest"), statistics::units::Count::get(), "number of cycles in the REQUEST stage"));
         STR_CyclesRTAccess.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesRTAccess"), statistics::units::Count::get(), "number of cycles for request table access"));
         STR_CyclesSPDReadAccess.push_back(new statistics::Scalar(this, MAKE_STREAM_STAT_NAME("STR_CyclesSPDReadAccess"), statistics::units::Count::get(), "number of cycles for SPD read access"));
@@ -713,7 +723,7 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
         (*STR_NumInsts[stream_id]).flags(statistics::nozero);
         (*STR_NumWordsInserted[stream_id]).flags(statistics::nozero);
         (*STR_NumCacheLineInserted[stream_id]).flags(statistics::nozero);
-        (*STR_NumDrains[stream_id]).flags(statistics::nozero);
+        (*STR_NumRTFull[stream_id]).flags(statistics::nozero);
         (*STR_CyclesRequest[stream_id]).flags(statistics::nozero);
         (*STR_CyclesRTAccess[stream_id]).flags(statistics::nozero);
         (*STR_CyclesSPDReadAccess[stream_id]).flags(statistics::nozero);
@@ -723,7 +733,7 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
 
         (*STR_AvgWordsPerCacheLine[stream_id]) = (*STR_NumWordsInserted[stream_id]) / (*STR_NumCacheLineInserted[stream_id]);
         (*STR_AvgCacheLinesPerInst[stream_id]) = (*STR_NumCacheLineInserted[stream_id]) / (*STR_NumInsts[stream_id]);
-        (*STR_AvgDrainsPerInst[stream_id]) = (*STR_NumDrains[stream_id]) / (*STR_NumInsts[stream_id]);
+        (*STR_AvgRTFullsPerInst[stream_id]) = (*STR_NumRTFull[stream_id]) / (*STR_NumInsts[stream_id]);
 
         (*STR_AvgCyclesRequestPerInst[stream_id]) = (*STR_CyclesRequest[stream_id]) / (*STR_NumInsts[stream_id]);
         (*STR_AvgCyclesRTAccessPerInst[stream_id]) = (*STR_CyclesRTAccess[stream_id]) / (*STR_NumInsts[stream_id]);
@@ -735,7 +745,7 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
 
         (*STR_AvgWordsPerCacheLine[stream_id]).flags(statistics::nozero | statistics::nonan);
         (*STR_AvgCacheLinesPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
-        (*STR_AvgDrainsPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
+        (*STR_AvgRTFullsPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
         (*STR_AvgCyclesRequestPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
         (*STR_AvgCyclesRTAccessPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);
         (*STR_AvgCyclesSPDReadAccessPerInst[stream_id]).flags(statistics::nozero | statistics::nonan);

@@ -106,12 +106,15 @@ public:
     RowTable() {
         entries = nullptr;
         entries_valid = nullptr;
+        entries_full = nullptr;
     }
     ~RowTable() {
         if (entries != nullptr) {
             delete[] entries;
             assert(entries_valid != nullptr);
             delete[] entries_valid;
+            assert(entries_full != nullptr);
+            delete[] entries_full;
         }
     }
     void allocate(int _my_indirect_id,
@@ -124,8 +127,7 @@ public:
                 Addr addr,
                 int itr,
                 int wid);
-    bool get_entry_send(Addr &addr);
-    bool get_entry_send_first_row(Addr &addr);
+    bool get_entry_send(Addr &addr, bool drain);
     std::vector<OffsetTableEntry> get_entry_recv(Addr grow_addr,
                                                  Addr addr);
 
@@ -135,6 +137,7 @@ public:
     OffsetTable *offset_table;
     RowTableEntry *entries;
     bool *entries_valid;
+    bool *entries_full;
     int num_RT_rows_per_bank;
     int num_RT_entries_per_row;
     int last_sent_row_id;
@@ -148,19 +151,17 @@ public:
         Idle = 0,
         Decode = 1,
         Fill = 2,
-        Drain = 3,
-        Build = 4,
-        Request = 5,
-        Response = 6,
+        Build = 3,
+        Request = 4,
+        Response = 5,
         max
     };
 
 protected:
-    std::string status_names[8] = {
+    std::string status_names[7] = {
         "Idle",
         "Decode",
         "Fill",
-        "Drain",
         "Build",
         "Request",
         "Response",
@@ -205,12 +206,15 @@ protected:
     int num_RT_rows_per_bank;
     int num_RT_entries_per_subbank_row;
     int num_RT_config_cache_entries;
-    Status state, prev_state;
+    Status state;
     RowTable **RT;
     OffsetTable *offset_table;
     int dst_tile_id;
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;
+    std::map<Addr, Tick> LoadsCacheHitRespondingTimeHistory;
+    std::map<Addr, Tick> LoadsCacheHitAccessingTimeHistory;
+    std::map<Addr, Tick> LoadsMemAccessingTimeHistory;
 
 public:
     MAA *maa;
@@ -258,6 +262,7 @@ protected:
     bool **my_RT_req_sent;
     std::vector<int> *my_RT_bank_order;
     int my_i, my_RT_idx;
+    bool my_drain;
 
     bool my_translation_done;
     Addr my_translated_addr;
@@ -267,7 +272,6 @@ protected:
     Tick my_RT_access_finish_tick;
     Tick my_decode_start_tick;
     Tick my_fill_start_tick;
-    Tick my_drain_start_tick;
     Tick my_build_start_tick;
     Tick my_request_start_tick;
     std::set<Addr> my_unique_WORD_addrs;
@@ -275,7 +279,7 @@ protected:
     std::set<Addr> my_unique_ROW_addrs;
 
     Addr translatePacket(Addr vaddr);
-    bool checkAllRowTablesSent();
+    bool checkAndResetAllRowTablesSent();
     int getRowTableIdx(int RT_config, int channel, int rank, int bankgroup, int bank);
     Addr getGrowAddr(int RT_config, int bankgroup, int bank, int row);
     int getRowTableConfig(Addr addr);

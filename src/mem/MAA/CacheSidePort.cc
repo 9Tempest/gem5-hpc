@@ -52,8 +52,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         bool received = false;
         if (pkt->cmd == MemCmd::ReadResp) {
             for (int i = 0; i < num_stream_access_units; i++) {
-                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request ||
-                    streamAccessUnits[i].getState() == StreamAccessUnit::Status::Response) {
+                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
                     if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>())) {
                         panic_if(received, "Received multiple responses for the same request\n");
                         received = true;
@@ -63,9 +62,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         }
         if (received == false) {
             for (int i = 0; i < num_indirect_access_units; i++) {
-                if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain ||
-                    indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Response) {
+                if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
                     if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true)) {
                         panic_if(received, "Received multiple responses for the same request\n");
                     }
@@ -207,8 +204,7 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
         if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
             assert(funcBlockReasons[(int)FuncUnitType::INDIRECT][i] == reason);
-            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request ||
-                   maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Drain);
+            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
             funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
             maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();
