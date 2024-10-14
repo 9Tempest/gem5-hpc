@@ -216,8 +216,7 @@ void Queued::notify(const CacheAccessProbeArg &acc, const PrefetchInfo &pfi) {
             }
         }
 
-        bool can_cross_page = (mmu != nullptr) && crossPageCtrl;
-        ;
+        bool can_cross_page = (mmu != nullptr);
         if (can_cross_page || samePage(addr_prio.first, pfi.getAddr())) {
             PrefetchInfo new_pfi(pfi, addr_prio.first);
             statsQueued.pfIdentified++;

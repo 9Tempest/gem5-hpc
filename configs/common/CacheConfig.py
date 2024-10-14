@@ -166,7 +166,10 @@ def config_3L_cache(options, system):
             l2cache.write_buffers = l2cache.write_buffers * options.cpu_buffer_enlarge_factor
 
         if options.l1d_hwp_type == "StridePrefetcher":
-            dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
+            if options.maa:
+                dcache.prefetcher.degree = 16 # getattr(options, "stride_degree", 16)
+            else:
+                dcache.prefetcher.degree = getattr(options, "stride_degree", 4)
         if options.l1d_hwp_type == "DiffMatchingPrefetcher":
             dcache.prefetcher.set_probe_obj(
                 dcache, dcache, dcache
