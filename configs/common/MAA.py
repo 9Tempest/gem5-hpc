@@ -13,7 +13,7 @@ class SharedMAA(MAA):
     num_range_units = 1
     num_alu_units = 1
     num_row_table_rows_per_bank = 64
-    num_row_table_entries_per_subbank_row = 2
+    num_row_table_entries_per_subbank_row = 8
     num_row_table_config_cache_entries = 16
     spd_read_latency = 1
     spd_write_latency = 1

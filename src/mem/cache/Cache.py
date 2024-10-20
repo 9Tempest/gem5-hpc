@@ -143,6 +143,10 @@ class BaseCache(ClockedObject):
         [AllMemory], "Address range for the CPU-side port (to allow striping)"
     )
 
+    excl_addr_ranges = VectorParam.AddrRange(
+        [], "Address ranges that are excluded from this cache"
+    )
+
     system = Param.System(Parent.any, "System we belong to")
 
     # Determine if this cache sends out writebacks for clean lines, or

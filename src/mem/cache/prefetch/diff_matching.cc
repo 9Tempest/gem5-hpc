@@ -729,7 +729,7 @@ void DiffMatching::notifyFill(const CacheAccessProbeArg &arg, const uint8_t *dat
     if (debug::DMP) {
         unsigned data_offset_debug = pkt->req->getPaddr() & (blkSize - 1);
         do {
-            int64_t resp_data = (int64_t)((uint64_t)fill_data[data_offset_debug] + (((uint64_t)fill_data[data_offset_debug + 1]) << 8) + (((uint64_t)fill_data[data_offset_debug + 2]) << 16) + (((uint64_t)fill_data[data_offset_debug + 3]) << 24));
+            // int64_t resp_data = (int64_t)((uint64_t)fill_data[data_offset_debug] + (((uint64_t)fill_data[data_offset_debug + 1]) << 8) + (((uint64_t)fill_data[data_offset_debug + 2]) << 16) + (((uint64_t)fill_data[data_offset_debug + 3]) << 24));
             // DPRINTF(DMP, "notifyFill: PC %llx, PAddr %llx, DataOffset %d, Data %llx\n",
             //         pkt->req->getPC(), pkt->req->getPaddr(), data_offset_debug, resp_data);
             data_offset_debug += 4;

@@ -83,6 +83,9 @@ all_distances = [256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
 all_distances_str = ["256", "1K", "4K", "16K", "64K", "256K", "1M", "4M"]
 all_modes = ["BASE", "MAA", "DMP"]
 
+num_stats = 3
+target_stats = 2
+
 def parse_gem5_stats(stats, mode):
     cycles = 0
     maa_cycles = {}
@@ -101,18 +104,21 @@ def parse_gem5_stats(stats, mode):
     if os.path.exists(stats):    
         with open(stats, "r") as f:
             lines = f.readlines()
-            test_started = False
+            current_num_tests = 0
             for line in lines:
                 if "Begin Simulation Statistics" in line:
-                    if test_started:
+                    current_num_tests += 1
+                    if current_num_tests > target_stats:
                         break
-                    test_started = True
+                    else:
+                        continue
+                if current_num_tests < target_stats:
                     continue
                 words = line.split(" ")
                 words = [word for word in words if word != ""]
                 found = False
                 if "simTicks" == words[0]:
-                    cycles = int(words[1]) / 500
+                    cycles = int(words[1]) / 313
                     continue
                 for cache_stat in all_cache_stats.keys():
                     if all_cache_stats[cache_stat] == words[0]:
@@ -132,7 +138,7 @@ def parse_gem5_stats(stats, mode):
                             break
                 if found:
                     continue
-                if mode == "MAA":
+                if mode == "MAA" or mode == "maa":
                     if "system.maa.cycles" == words[0]:
                         maa_cycles["Total"] = int(words[1])
                         continue
@@ -170,12 +176,15 @@ def parse_ramulator_stats(stats):
         avg_occupancy = []
         with open(stats, "r") as f:
             lines = f.readlines()
-            test_started = False
+            current_num_tests = 0
             for line in lines:
-                if "id: Channel 0" in line:
-                    if test_started:
+                if "impl: GenericDRAM" in line:
+                    current_num_tests += 1
+                    if current_num_tests > target_stats:
                         break
-                    test_started = True
+                    else:
+                        continue
+                if current_num_tests < target_stats:
                     continue
                 words = line.split(" ")
                 words = [word for word in words if word != ""]
@@ -199,21 +208,61 @@ def parse_ramulator_stats(stats):
                 if "num_ACT_commands_T" in line:
                     num_acts.append(int(words[-1]))
                     continue
-        DRAM_RD = sum(num_reads)
-        DRAM_WR = sum(num_writes)
-        DRAM_ACT = sum(num_acts)
-        DRAM_RD_BW = (DRAM_RD * 64)  / (cycles * 625)
-        DRAM_RD_BW *= 1e12 # 625 is in PS
-        DRAM_RD_BW /= (1024 * 1024 * 1024) # BW is in GB/s
-        DRAM_WR_BW = (DRAM_WR * 64)  / (cycles * 625)
-        DRAM_WR_BW *= 1e12 # 625 is in PS
-        DRAM_WR_BW /= (1024 * 1024 * 1024) # BW is in GB/s
-        DRAM_total_BW = DRAM_RD_BW + DRAM_WR_BW
-        DRAM_RB_hitrate = 100.00 - (DRAM_ACT * 100.00 / (DRAM_RD + DRAM_WR))
-        assert DRAM_RB_hitrate >= 0, f"DRAM_RB_hitrate: 100 - {DRAM_ACT * 100.00} / {DRAM_RD + DRAM_WR} == {DRAM_RB_hitrate}"
-        DRAM_CTRL_occ = sum(avg_occupancy) / len(avg_occupancy)
+        if cycles != 0:
+            DRAM_RD = sum(num_reads)
+            DRAM_WR = sum(num_writes)
+            DRAM_ACT = sum(num_acts)
+            DRAM_RD_BW = (DRAM_RD * 64)  / (cycles * 625)
+            DRAM_RD_BW *= 1e12 # 625 is in PS
+            DRAM_RD_BW /= (1024 * 1024 * 1024) # BW is in GB/s
+            DRAM_WR_BW = (DRAM_WR * 64)  / (cycles * 625)
+            DRAM_WR_BW *= 1e12 # 625 is in PS
+            DRAM_WR_BW /= (1024 * 1024 * 1024) # BW is in GB/s
+            DRAM_total_BW = DRAM_RD_BW + DRAM_WR_BW
+            DRAM_RB_hitrate = 100.00 - (DRAM_ACT * 100.00 / (DRAM_RD + DRAM_WR))
+            assert DRAM_RB_hitrate >= 0, f"DRAM_RB_hitrate: 100 - {DRAM_ACT * 100.00} / {DRAM_RD + DRAM_WR} == {DRAM_RB_hitrate}"
+            DRAM_CTRL_occ = sum(avg_occupancy) / len(avg_occupancy)
 
     return DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ
+
+print("M,L2,L3,cycles", end=",")
+for maa_cycle in all_maa_cycles:
+    print(f"{maa_cycle}", end=",")
+for maa_indirect_cycle in all_maa_indirect_cycles:
+    print(f"IND_{maa_indirect_cycle}", end=",")
+for cache_stat in all_cache_stats.keys():
+    print(f"{cache_stat}", end=",")
+for instruction_type in all_instruction_types.keys():
+    print(f"{instruction_type}", end=",")
+print("LSQ-LD-OCC", end=",")
+print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ", end=",")
+print()
+
+for mode in ["maa", "base"]:
+    for l2 in ["l2", "nol2"]:
+        for l3 in ["l3", "nol3"]:
+            if mode == "base" and (l2 == "nol2" or l3 == "nol3"):
+                continue
+            stats = f"tests_16T_{l2}_{l3}_{mode}/stats.txt"
+            cycles, maa_cycles, maa_indirect_cycles, cache_stats, instruction_types = parse_gem5_stats(stats, mode)
+            logs = f"tests_16T_{l2}_{l3}_{mode}/logs_run.txt"
+            DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ = parse_ramulator_stats(logs)
+            print(f"{mode},{l2},{l3},{cycles}", end=",")
+            for maa_cycle in all_maa_cycles:
+                print(maa_cycles[maa_cycle], end=",")
+            for maa_indirect_cycle in all_maa_indirect_cycles:
+                print(maa_indirect_cycles[maa_indirect_cycle], end=",")
+            for cache_stat in all_cache_stats.keys():
+                print(cache_stats[cache_stat], end=",")
+            for instruction_type in all_instruction_types.keys():
+                print(instruction_types[instruction_type], end=",")
+            if cycles == 0:
+                print(0, end=",")
+            else:
+                print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-Latency"]) / cycles, end=",")
+            print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ}", end=",")
+            print()
+exit(-1)
 
 print("K,S,D,T,M,cycles", end=",")
 for maa_cycle in all_maa_cycles:

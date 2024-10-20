@@ -165,6 +165,11 @@ void Stride::calculatePrefetch(const PrefetchInfo &pfi,
 
         entry->lastAddr = pf_addr;
 
+        // Abort prefetch generation if stride does not match
+        if (stride_match == false) {
+            return;
+        }
+
         // Abort prefetch generation if below confidence threshold
         if (entry->confidence.calcSaturation() < threshConf) {
             return;

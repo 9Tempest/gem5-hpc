@@ -147,6 +147,7 @@ protected:
 public:
     CacheBlk() {
         invalidate();
+        clearAllCoherenceBits();
     }
 
     CacheBlk(const CacheBlk &) = delete;
@@ -223,6 +224,13 @@ public:
      * @param bits The coherence bits to be cleared.
      */
     void clearCoherenceBits(unsigned bits) { coherence &= ~bits; }
+
+    /**
+     * Clear the corresponding coherence bits.
+     *
+     * @param bits The coherence bits to be cleared.
+     */
+    void clearAllCoherenceBits() { coherence = 0; }
 
     /**
      * Checks the given coherence bits are set.
@@ -501,7 +509,6 @@ private:
 
     /** Whether this block is an unaccessed hardware prefetch. */
     bool _prefetched = 0;
-
 
     bool _prefetched_allocate = 0;
 

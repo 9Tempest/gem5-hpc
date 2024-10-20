@@ -47,6 +47,7 @@
 
 #include "base/compiler.hh"
 #include "base/logging.hh"
+#include "base/trace.hh"
 #include "debug/Cache.hh"
 #include "debug/CacheComp.hh"
 #include "debug/CachePort.hh"
@@ -112,6 +113,7 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
       noTargetMSHR(nullptr),
       missCount(p.max_miss_count),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
+      exclAddrRanges(p.excl_addr_ranges.begin(), p.excl_addr_ranges.end()),
       system(p.system),
       stats(*this) {
     // the MSHR queue has no reserve entries as we check the MSHR
@@ -210,6 +212,22 @@ bool BaseCache::inRange(Addr addr) const {
     return false;
 }
 
+bool BaseCache::inExclRange(Addr addr) const {
+    for (const auto &r : exclAddrRanges) {
+        if (r.contains(addr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BaseCache::isUncacheablePkt(PacketPtr pkt) const {
+    if (pkt->req->isUncacheable() || inExclRange(pkt->getAddr())) {
+        DPRINTF(Cache, "Request for uncacheable address %s\n", pkt->print());
+    }
+    return pkt->req->isUncacheable() || inExclRange(pkt->getAddr());
+}
+
 void BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time) {
 
     // handle special cases for LockedRMW transactions
@@ -293,7 +311,7 @@ void BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_ti
 void BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
                                     Tick forward_time, Tick request_time) {
     if (writeAllocator &&
-        pkt && pkt->isWrite() && !pkt->req->isUncacheable()) {
+        pkt && pkt->isWrite() && !isUncacheablePkt(pkt)) {
         writeAllocator->updateMode(pkt->getAddr(), pkt->getSize(),
                                    pkt->getBlockAddr(blkSize));
     }
@@ -352,7 +370,7 @@ void BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
         if (pkt->getRegion() != -1)
             stats.cmdRegionStats(pkt).mshrMisses[pkt->req->requestorId()]++;
 
-        if (prefetcher && pkt->isDemand())
+        if (prefetcher && pkt->isDemand() && !isUncacheablePkt(pkt))
             prefetcher->incrDemandMhsrMisses();
 
         if (pkt->isEviction() || pkt->cmd == MemCmd::WriteClean) {
@@ -392,7 +410,8 @@ void BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
 void BaseCache::recvTimingReq(PacketPtr pkt) {
     // anything that is merely forwarded pays for the forward latency and
     // the delay provided by the crossbar
-    Tick forward_time = clockEdge(forwardLatency) + pkt->headerDelay;
+    uint32_t pkt_header_delay = pkt->headerDelay;
+    Cycles forward_delay = forwardLatency;
 
     if (pkt->cmd == MemCmd::LockedRMWWriteReq) {
         // For LockedRMW accesses, we mark the block inaccessible after the
@@ -417,6 +436,10 @@ void BaseCache::recvTimingReq(PacketPtr pkt) {
         // access() will set the lat value.
         satisfied = access(pkt, blk, lat, writebacks);
 
+        if (isUncacheablePkt(pkt) && lat == 0) {
+            forward_delay = Cycles(0);
+        }
+
         // After the evicted blocks are selected, they must be forwarded
         // to the write buffer to ensure they logically precede anything
         // happening below
@@ -433,6 +456,8 @@ void BaseCache::recvTimingReq(PacketPtr pkt) {
     pkt->headerDelay = pkt->payloadDelay = 0;
 
     if (satisfied) {
+        panic_if(isUncacheablePkt(pkt), "Uncacheable packet satisfied");
+
         // notify before anything else as later handleTimingReqHit might turn
         // the packet in a responseC
         ppHit->notify(CacheAccessProbeArg(pkt, accessor));
@@ -446,13 +471,16 @@ void BaseCache::recvTimingReq(PacketPtr pkt) {
 
         handleTimingReqHit(pkt, blk, request_time);
     } else {
+        Tick forward_time = clockEdge(forward_delay) + pkt_header_delay;
         handleTimingReqMiss(pkt, blk, forward_time, request_time);
 
-        if (prefetcher) {
-            prefetcher->prefetchHit(CacheAccessProbeArg(pkt, accessor), true);
-        }
+        if (!isUncacheablePkt(pkt)) {
+            if (prefetcher) {
+                prefetcher->prefetchHit(CacheAccessProbeArg(pkt, accessor), true);
+            }
 
-        ppMiss->notify(CacheAccessProbeArg(pkt, accessor));
+            ppMiss->notify(CacheAccessProbeArg(pkt, accessor));
+        }
     }
 
     if (prefetcher) {
@@ -466,7 +494,9 @@ void BaseCache::recvTimingReq(PacketPtr pkt) {
 }
 
 void BaseCache::handleUncacheableWriteResp(PacketPtr pkt) {
-    Tick completion_time = clockEdge(responseLatency) +
+    // Tick completion_time = clockEdge(responseLatency) +
+    //                        pkt->headerDelay + pkt->payloadDelay;
+    Tick completion_time = clockEdge(Cycles(0)) +
                            pkt->headerDelay + pkt->payloadDelay;
 
     // Reset the bus additional time as it is now accounted for
@@ -494,7 +524,7 @@ void BaseCache::recvTimingResp(PacketPtr pkt) {
     // if this is a write, we should be looking at an uncacheable
     // write
     if (pkt->isWrite() && pkt->cmd != MemCmd::LockedRMWWriteResp) {
-        assert(pkt->req->isUncacheable());
+        assert(isUncacheablePkt(pkt));
         handleUncacheableWriteResp(pkt);
         return;
     }
@@ -513,7 +543,7 @@ void BaseCache::recvTimingResp(PacketPtr pkt) {
     // Initial target is used just for stats
     const QueueEntry::Target *initial_tgt = mshr->getTarget();
     const Tick miss_latency = curTick() - initial_tgt->recvTime;
-    if (pkt->req->isUncacheable()) {
+    if (isUncacheablePkt(pkt)) {
         assert(pkt->req->requestorId() < system->maxRequestors());
         stats.cmdStats(initial_tgt->pkt).mshrUncacheableLatency[pkt->req->requestorId()] += miss_latency;
         if (initial_tgt->pkt->getRegion() != -1)
@@ -748,6 +778,10 @@ void BaseCache::functionalAccess(PacketPtr pkt, bool from_cpu_side) {
 
 void BaseCache::updateBlockData(CacheBlk *blk, const PacketPtr cpkt,
                                 bool has_old_data) {
+
+    if (cpkt)
+        panic_if(isUncacheablePkt(cpkt), "Should not be updating block data for uncacheable packet");
+
     CacheDataUpdateProbeArg data_update(
         regenerateBlkAddr(blk), blk->isSecure(),
         blk->getSrcRequestorId(), accessor);
@@ -775,6 +809,7 @@ void BaseCache::updateBlockData(CacheBlk *blk, const PacketPtr cpkt,
 
 void BaseCache::cmpAndSwap(CacheBlk *blk, PacketPtr pkt) {
     assert(pkt->isRequest());
+    panic_if(isUncacheablePkt(pkt), "Should not be doing cmpAndSwap for uncacheable packet");
 
     uint64_t overwrite_val;
     bool overwrite_mem;
@@ -879,10 +914,9 @@ BaseCache::getNextQueueEntry() {
         PacketPtr pkt = prefetcher->getPacket();
         if (pkt) {
             Addr pf_addr = pkt->getBlockAddr(blkSize);
+            panic_if(inExclRange(pf_addr), "Should not see prefetch for excl range, addr %#x\n", pf_addr);
             if (tags->findBlock(pf_addr, pkt->isSecure())) {
-                DPRINTF(HWPrefetch, "Prefetch %#x has hit in cache, "
-                                    "dropped.\n",
-                        pf_addr);
+                DPRINTF(HWPrefetch, "Prefetch %#x has hit in cache, dropped.\n", pf_addr);
                 prefetcher->pfHitInCache();
 
                 CacheBlk *try_cache_blk = getCacheBlk(pf_addr, false);
@@ -1081,7 +1115,7 @@ bool BaseCache::updateCompressionData(CacheBlk *&blk, const uint64_t *data,
 
 void BaseCache::satisfyRequest(PacketPtr pkt, CacheBlk *blk, bool, bool) {
     assert(pkt->isRequest());
-
+    panic_if(isUncacheablePkt(pkt), "Should not be satisfying uncacheable packet");
     assert(blk && blk->isValid());
     // Occasionally this is not true... if we are a lower-level cache
     // satisfying a string of Read and ReadEx requests from
@@ -1223,6 +1257,8 @@ bool BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                        PacketList &writebacks) {
     // sanity check
     assert(pkt->isRequest());
+
+    panic_if(isUncacheablePkt(pkt), "Should not be accessing uncacheable packet in the base cache");
 
     gem5_assert(!(isReadOnly && pkt->isWrite()),
                 "Should never see a write in a read-only cache %s\n",
@@ -2538,7 +2574,8 @@ bool BaseCache::CpuSidePort::tryTiming(PacketPtr pkt) {
 bool BaseCache::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     assert(pkt->isRequest());
 
-    cache.ppL1Req->notify(CacheAccessProbeArg(pkt, cache.accessor));
+    if (!cache.isUncacheablePkt(pkt))
+        cache.ppL1Req->notify(CacheAccessProbeArg(pkt, cache.accessor));
 
     if (cache.system->bypassCaches()) {
         // Just forward the packet if caches are disabled.

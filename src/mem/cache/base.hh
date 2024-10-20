@@ -277,9 +277,11 @@ protected:
         virtual AddrRangeList getAddrRanges() const override;
 
         virtual bool sendTimingResp(PacketPtr pkt) override {
+            panic_if(pkt == nullptr, "No packet to send\n");
+            bool was_packet_uncacheable = cache.isUncacheablePkt(pkt);
             bool rep_res = CacheResponsePort::sendTimingResp(pkt);
 
-            if (rep_res) {
+            if (rep_res && was_packet_uncacheable == false) {
                 cache.ppL1Resp->notify(CacheAccessProbeArg(pkt, cache.accessor));
             }
             return rep_res;
@@ -855,6 +857,18 @@ protected:
     bool inRange(Addr addr) const;
 
     /**
+     * Determine if an address is in the ranges not covered by this
+     * cache.
+     *
+     * @param addr Address to check against
+     *
+     * @return If the address in question is in in exclude range
+     */
+    bool inExclRange(Addr addr) const;
+
+    bool isUncacheablePkt(PacketPtr pkt) const;
+
+    /**
      * Find next request ready time from among possible sources.
      */
     Tick nextQueueReadyTime() const;
@@ -955,6 +969,11 @@ protected:
      * The address range to which the cache responds on the CPU side.
      * Normally this is all possible memory addresses. */
     const AddrRangeList addrRanges;
+
+    /**
+     * The address range to which the cache does not respond on the CPU side.
+    */
+    const AddrRangeList exclAddrRanges;
 
 public:
     /** System we are currently operating in. */
@@ -1150,6 +1169,8 @@ public:
     }
 
     const AddrRangeList &getAddrRanges() const { return addrRanges; }
+
+    const AddrRangeList &getExclAddrRanges() const { return exclAddrRanges; }
 
     MSHR *allocateMissBuffer(PacketPtr pkt, Tick time, bool sched_send = true) {
         MSHR *mshr = mshrQueue.allocate(pkt->getBlockAddr(blkSize), blkSize,

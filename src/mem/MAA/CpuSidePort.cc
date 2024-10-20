@@ -115,30 +115,30 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         bool respond_immediately = true;
         assert(pkt->isMaskedWrite() == false);
         switch (address_range.getType()) {
-        // case AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE: {
-        //     Addr offset = address_range.getOffset();
-        //     int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
-        //     panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
-        //     int element_id = offset % (num_tile_elements * sizeof(uint32_t));
-        //     if (pkt->getSize() == 4) {
-        //         assert(element_id % sizeof(uint32_t) == 0);
-        //         element_id /= sizeof(uint32_t);
-        //         uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
-        //         int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
-        //         float data_FLOAT = pkt->getPtr<float>()[0];
-        //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %u/%d/%f\n", __func__, tile_id, element_id, data_UINT32, data_INT32, data_FLOAT);
-        //         spd->setData<uint32_t>(tile_id, element_id, data_UINT32);
-        //     } else {
-        //         assert(element_id % sizeof(uint64_t) == 0);
-        //         element_id /= sizeof(uint64_t);
-        //         uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
-        //         int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
-        //         double data_DOUBLE = pkt->getPtr<double>()[0];
-        //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %lu/%ld/%lf\n", __func__, tile_id, element_id, data_UINT64, data_INT64, data_DOUBLE);
-        //         spd->setData<uint64_t>(tile_id, element_id, data_UINT64);
-        //     }
-        //     assert(pkt->needsResponse());
-        //     pkt->makeTimingResponse();
+            // case AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE: {
+            //     Addr offset = address_range.getOffset();
+            //     int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+            //     panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
+            //     int element_id = offset % (num_tile_elements * sizeof(uint32_t));
+            //     if (pkt->getSize() == 4) {
+            //         assert(element_id % sizeof(uint32_t) == 0);
+            //         element_id /= sizeof(uint32_t);
+            //         uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
+            //         int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
+            //         float data_FLOAT = pkt->getPtr<float>()[0];
+            //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %u/%d/%f\n", __func__, tile_id, element_id, data_UINT32, data_INT32, data_FLOAT);
+            //         spd->setData<uint32_t>(tile_id, element_id, data_UINT32);
+            //     } else {
+            //         assert(element_id % sizeof(uint64_t) == 0);
+            //         element_id /= sizeof(uint64_t);
+            //         uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
+            //         int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
+            //         double data_DOUBLE = pkt->getPtr<double>()[0];
+            //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %lu/%ld/%lf\n", __func__, tile_id, element_id, data_UINT64, data_INT64, data_DOUBLE);
+            //         spd->setData<uint64_t>(tile_id, element_id, data_UINT64);
+            //     }
+            //     assert(pkt->needsResponse());
+            //     pkt->makeTimingResponse();
         //     cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->setDataLatency(1)));
         //     break;
         // }
@@ -163,7 +163,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             }
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            // Here we reset the timing of the packet.
+            Tick old_header_delay = pkt->headerDelay;
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         case AddressRangeType::Type::INSTRUCTION_RANGE: {
@@ -227,7 +230,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->needsResponse());
             if (respond_immediately) {
                 pkt->makeTimingResponse();
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                // Here we reset the timing of the packet.
+                Tick old_header_delay = pkt->headerDelay;
+                pkt->headerDelay = pkt->payloadDelay = 0;
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             }
             break;
         }
@@ -255,7 +261,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            // Here we reset the timing of the packet.
+            Tick old_header_delay = pkt->headerDelay;
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         case AddressRangeType::Type::SPD_READY_RANGE: {
@@ -268,7 +277,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->needsResponse());
             if (spd->getTileReady(my_ready_tile_id)) {
                 pkt->makeTimingResponse();
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                // Here we reset the timing of the packet.
+                Tick old_header_delay = pkt->headerDelay;
+                pkt->headerDelay = pkt->payloadDelay = 0;
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             } else {
                 panic_if(my_outstanding_ready_pkt, "Received multiple ready read packets\n");
                 my_outstanding_ready_pkt = true;
@@ -286,7 +298,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            // Here we reset the timing of the packet.
+            Tick old_header_delay = pkt->headerDelay;
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         default: {
@@ -320,7 +335,10 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             pkt->setData(dataPtr);
             assert(pkt->needsResponse());
             pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->getDataLatency(1)));
+            // Here we reset the timing of the packet.
+            Tick old_header_delay = pkt->headerDelay;
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         default:

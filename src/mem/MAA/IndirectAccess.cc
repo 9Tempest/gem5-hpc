@@ -471,7 +471,10 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
         num_RT_subbanks[i] = current_num_RT_subbanks;
         num_RT_bank_columns[i] = current_num_RT_entries_per_row;
         num_RT_possible_grows[i] = current_num_RT_possible_grows;
-        if (current_num_RT_entries_per_row == 4) {
+        // if (current_num_RT_entries_per_row == 4) {
+        //     initial_RT_config = i;
+        // }
+        if (current_num_RT_banks == 16) {
             initial_RT_config = i;
         }
         panic_if(current_num_RT_entries_per_row <= 0, "I[%d] TC[%d] %s: current_num_RT_entries_per_row is %d!\n",
@@ -527,7 +530,7 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
         current_num_RT_entries_per_row /= 2;
         current_num_RT_possible_grows /= 2;
     }
-    initial_RT_config = num_RT_configs - 1;
+    // initial_RT_config = num_RT_configs - 1;
     DPRINTF(MAAIndirect, "I[%d] %s: initial_RT_config(%d)!\n", my_indirect_id, __func__, initial_RT_config);
 }
 int IndirectAccessUnit::getRowTableIdx(int RT_config, int channel, int rank, int bankgroup, int bank) {
@@ -558,6 +561,8 @@ Addr IndirectAccessUnit::getGrowAddr(int RT_config, int bankgroup, int bank, int
     return grow_addr;
 }
 int IndirectAccessUnit::getRowTableConfig(Addr addr) {
+    return initial_RT_config;
+
     int oldest_entry = -1;
     Tick oldest_tick = 0;
     Tick current_tick = curTick();
@@ -577,6 +582,7 @@ int IndirectAccessUnit::getRowTableConfig(Addr addr) {
     return initial_RT_config;
 }
 void IndirectAccessUnit::setRowTableConfig(Addr addr, int num_CLs, int num_ROWs) {
+    return;
     int new_config = -1;
     if (num_ROWs >= num_RT_rows_total[num_RT_configs - 1]) {
         new_config = num_RT_configs - 1;
@@ -613,8 +619,10 @@ void IndirectAccessUnit::setRowTableConfig(Addr addr, int num_CLs, int num_ROWs)
         if (RT_config_addr[i] == addr) {
             RT_config_cache[i] = new_config;
             DPRINTF(MAAIndirect, "I[%d] %s: addr(0x%lx) set to config(%d) with (%d/%d) CLs, (%d/%d) ROWs, (%d/%d) CLs/ROW!\n",
-                    my_indirect_id, __func__, addr, new_config, num_CLs, num_RT_bank_columns[new_config] * num_RT_banks[new_config],
-                    num_ROWs, num_RT_rows_total[new_config], num_CLs / num_ROWs, num_RT_bank_columns[new_config]);
+                    my_indirect_id, __func__, addr, new_config,
+                    num_CLs, num_RT_bank_columns[new_config] * num_RT_banks[new_config] * num_RT_rows_per_bank,
+                    num_ROWs, num_RT_rows_total[new_config],
+                    num_CLs / num_ROWs, num_RT_bank_columns[new_config]);
             return;
         }
     }
@@ -1143,14 +1151,15 @@ bool IndirectAccessUnit::sendOutstandingReadPacket() {
             }
             // We can continue sending the next packets anyway
         } else if (read_pkt.is_cached) {
-            DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide\n", my_indirect_id, __func__, read_pkt.packet->print());
+            bool needs_response = read_pkt.packet->needsResponse();
+            DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide, needs response: %s\n", my_indirect_id, __func__, read_pkt.packet->print(), needs_response ? "True" : "False");
             if (maa->cacheSidePort.sendPacket((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
                 DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
                 // A send has failed, we cannot continue sending the next packets
                 return false;
             } else {
                 packet_sent = true;
-                if (read_pkt.packet->needsResponse()) {
+                if (needs_response) {
                     LoadsCacheHitAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
                 }
                 my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());

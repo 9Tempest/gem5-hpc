@@ -123,7 +123,6 @@ def get_maa_address(options):
 def config_maa(options, system):
     assert(options.l3cache)
     opts = _get_maa_opts(options)
-    opts["cache_snoop_latency"] = system.l3.tag_latency
     system.maa = SharedMAA(clk_domain=system.cpu_clk_domain, **opts)
 
     # CPU side is derived by the memory side of the memory bus
@@ -162,18 +161,12 @@ def config_maa(options, system):
     # Memory side derives the cpu side of the memory bus
     system.maa.mem_side = system.membusnc.cpu_side_ports
 
-    # SPD_data_addr_range = opts["addr_ranges"][0]
-    # system.l3.addr_ranges.append(SPD_data_addr_range)
-    # print("L3 ranges:")
-    # for range in system.l3.addr_ranges:
-    #     print(f"start({range.start}), end({range.end})")
-    # for i in range(options.num_cpus):
-    #     system.cpu[i].dcache.addr_ranges.append(SPD_data_addr_range)
-    #     print(f"CPU {i} dcache ranges:")
-    #     for range in system.cpu[i].dcache.addr_ranges:
-    #         print(f"start({range.start}), end({range.end})")
-    #     system.cpu[i].l2cache.addr_ranges.append(SPD_data_addr_range)
-    #     print(f"CPU {i} l2cache ranges:")
-    #     for range in system.cpu[i].l2cache.addr_ranges:
-    #         print(f"start({range.start}), end({range.end})")
-    # exit()
+    if options.maa_l2_uncacheable:
+        print("MAA L2 uncacheable")
+        for i in range(options.num_cpus):
+            for addr_range in opts["addr_ranges"]:
+                system.cpu[i].l2cache.excl_addr_ranges.append(addr_range)
+    if options.maa_l3_uncacheable:
+        print("MAA L3 uncacheable")
+        for addr_range in opts["addr_ranges"]:
+            system.l3.excl_addr_ranges.append(addr_range)

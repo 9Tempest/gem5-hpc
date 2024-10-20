@@ -385,6 +385,7 @@ void MAA::dispatchInstruction() {
                 spd->setTileNotReady(current_instruction->src2SpdID, current_instruction->getWordSize(current_instruction->src2SpdID));
             }
             my_instruction_pkt->makeTimingResponse();
+            my_instruction_pkt->headerDelay = my_instruction_pkt->payloadDelay = 0;
             cpuSidePort.schedTimingResp(my_instruction_pkt, getClockEdge(Cycles(1)));
             scheduleIssueInstructionEvent(1);
             my_outstanding_instruction_pkt = false;
@@ -444,6 +445,7 @@ void MAA::setTileReady(int tileID, int wordSize) {
     if (my_outstanding_ready_pkt && is_received) {
         DPRINTF(MAAController, "%s: responding to outstanding ready packet!\n", __func__);
         my_ready_pkt->makeTimingResponse();
+        my_instruction_pkt->headerDelay = my_instruction_pkt->payloadDelay = 0;
         cpuSidePort.schedTimingResp(my_ready_pkt, getClockEdge(Cycles(1)));
         my_outstanding_ready_pkt = false;
     }

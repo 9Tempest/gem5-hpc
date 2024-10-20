@@ -70,6 +70,9 @@ class L1_ICache(L1Cache):
 class L1_DCache(L1Cache):
     tag_latency = 4
     data_latency = 4
+    excl_addr_ranges = VectorParam.AddrRange(
+        [], "Address ranges that are excluded from this cache"
+    )
 
 
 class L2Cache(Cache):
@@ -81,6 +84,9 @@ class L2Cache(Cache):
     tgts_per_mshr = 12
     write_buffers = 8
     sequential_access = False
+    excl_addr_ranges = VectorParam.AddrRange(
+        [], "Address ranges that are excluded from this cache"
+    )
 
 # a starting point for an L3 cache
 class L3Cache(Cache):
@@ -92,6 +98,9 @@ class L3Cache(Cache):
     mshrs = 256
     tgts_per_mshr = 8
     write_buffers = 32
+    excl_addr_ranges = VectorParam.AddrRange(
+        [], "Address ranges that are excluded from this cache"
+    )
 
 class IOCache(Cache):
     assoc = 8

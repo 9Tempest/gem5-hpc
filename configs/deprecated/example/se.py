@@ -287,7 +287,9 @@ else:
     system.membus = SystemXBar()
     system.system_port = system.membus.cpu_side_ports
     if args.maa:
+        system.membus.width = 32
         system.membusnc = SystemXBarNC()
+        system.membusnc.width = 16
         system.membusnc.cpu_side_ports = system.membus.mem_side_ports
 
     if args.caches and args.l2cache and args.l3cache:

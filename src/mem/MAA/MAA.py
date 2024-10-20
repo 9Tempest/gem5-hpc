@@ -19,7 +19,7 @@ class MAA(ClockedObject):
     num_range_units = Param.Unsigned(1, "Number of range units")
     num_alu_units = Param.Unsigned(1, "Number of alu units")
     num_row_table_rows_per_bank = Param.Unsigned(64, "Number of rows in each row table bank")
-    num_row_table_entries_per_subbank_row = Param.Unsigned(2, "Number of row table entries (bursts) per each sub-bank of row table")
+    num_row_table_entries_per_subbank_row = Param.Unsigned(8, "Number of row table entries (bursts) per each sub-bank of row table")
     num_row_table_config_cache_entries = Param.Unsigned(16, "Number of row table entry history in the configuration cache")
     spd_read_latency = Param.Cycles(1, "SPD read latency")
     spd_write_latency = Param.Cycles(1, "SPD write latency")

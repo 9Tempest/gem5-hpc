@@ -474,6 +474,9 @@ bool CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id) {
         snoopFilter->updateResponse(pkt, *cpuSidePorts[cpu_side_port_id]);
     }
 
+    DPRINTF(CoherentXBar, "%s: headerLatency %lu headerDelay %u payloadDelay %u packetFinishDelay %ld \n",
+            __func__, headerLatency, pkt->headerDelay, pkt->payloadDelay, headerLatency + pkt->payloadDelay);
+
     // send the packet through the destination CPU-side port and pay for
     // any outstanding header delay
     Tick latency = pkt->headerDelay;

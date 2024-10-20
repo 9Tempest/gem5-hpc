@@ -56,6 +56,7 @@
 #include "debug/CacheTags.hh"
 #include "debug/CacheVerbose.hh"
 #include "enums/Clusivity.hh"
+#include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/mshr.hh"
 #include "mem/cache/tags/base.hh"
@@ -156,7 +157,7 @@ void Cache::satisfyRequest(PacketPtr pkt, CacheBlk *blk,
 bool Cache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                    PacketList &writebacks) {
 
-    if (pkt->req->isUncacheable()) {
+    if (BaseCache::isUncacheablePkt(pkt)) {
         assert(pkt->isRequest());
 
         gem5_assert(!(isReadOnly && pkt->isWrite()),
@@ -164,16 +165,17 @@ bool Cache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                     name());
 
         DPRINTF(Cache, "%s for %s\n", __func__, pkt->print());
+        lat = Cycles(0);
 
         // flush and invalidate any existing block
         CacheBlk *old_blk(tags->findBlock(pkt->getAddr(), pkt->isSecure()));
         if (old_blk && old_blk->isValid()) {
             BaseCache::evictBlock(old_blk, writebacks);
+            // lookupLatency is the latency in case the request is uncacheable.
+            lat = lookupLatency;
         }
 
         blk = nullptr;
-        // lookupLatency is the latency in case the request is uncacheable.
-        lat = lookupLatency;
         return false;
     }
 
@@ -299,7 +301,7 @@ void Cache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time) 
     // should never be satisfying an uncacheable access as we
     // flush and invalidate any existing block as part of the
     // lookup
-    assert(!pkt->req->isUncacheable());
+    assert(!BaseCache::isUncacheablePkt(pkt));
 
     BaseCache::handleTimingReqHit(pkt, blk, request_time);
 }
@@ -364,7 +366,7 @@ void Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
     if (pkt->cmd.isSWPrefetch()) {
         assert(pkt->needsResponse());
         assert(pkt->req->hasPaddr());
-        assert(!pkt->req->isUncacheable());
+        assert(!BaseCache::isUncacheablePkt(pkt));
 
         // There's no reason to add a prefetch as an additional target
         // to an existing MSHR. If an outstanding request is already
@@ -480,8 +482,7 @@ Cache::createMissPacket(PacketPtr cpu_pkt, CacheBlk *blk,
 
     bool blkValid = blk && blk->isValid();
 
-    if (cpu_pkt->req->isUncacheable() ||
-        (!blkValid && cpu_pkt->isUpgrade()) ||
+    if (BaseCache::isUncacheablePkt(cpu_pkt) || (!blkValid && cpu_pkt->isUpgrade()) ||
         cpu_pkt->cmd == MemCmd::InvalidateReq || cpu_pkt->isClean()) {
         // uncacheable requests and upgrades from upper-level caches
         // that missed completely just go through as is
@@ -560,13 +561,13 @@ Cache::handleAtomicReqMiss(PacketPtr pkt, CacheBlk *&blk,
     // deal with the packets that go through the write path of
     // the cache, i.e. any evictions and writes
     if (pkt->isEviction() || pkt->cmd == MemCmd::WriteClean ||
-        (pkt->req->isUncacheable() && pkt->isWrite())) {
+        (BaseCache::isUncacheablePkt(pkt) && pkt->isWrite())) {
         Cycles latency = ticksToCycles(memSidePort.sendAtomic(pkt));
 
         // at this point, if the request was an uncacheable write
         // request, it has been satisfied by a memory below and the
         // packet carries the response back
-        assert(!(pkt->req->isUncacheable() && pkt->isWrite()) ||
+        assert(!(BaseCache::isUncacheablePkt(pkt) && pkt->isWrite()) ||
                pkt->isResponse());
 
         return latency;
@@ -784,7 +785,7 @@ void Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk) {
                 completion_time += clockEdge(responseLatency) +
                                    (transfer_offset ? pkt->payloadDelay : 0);
 
-                assert(!tgt_pkt->req->isUncacheable());
+                assert(!BaseCache::isUncacheablePkt(tgt_pkt));
 
                 assert(tgt_pkt->req->requestorId() < system->maxRequestors());
                 stats.cmdStats(tgt_pkt).missLatency[tgt_pkt->req->requestorId()] += completion_time - target.recvTime;
@@ -989,7 +990,7 @@ void Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
         // responses)
         pkt = new Packet(req_pkt, false, req_pkt->isRead());
 
-    assert(req_pkt->req->isUncacheable() || req_pkt->isInvalidate() ||
+    assert(BaseCache::isUncacheablePkt(req_pkt) || req_pkt->isInvalidate() ||
            pkt->hasSharers());
     pkt->makeTimingResponse();
     if (pkt->isRead()) {
@@ -1090,6 +1091,12 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
 
     bool respond = false;
     bool blk_valid = blk && blk->isValid();
+    if (BaseCache::isUncacheablePkt(pkt)) {
+        panic_if(blk_valid, "%s got an uncacheable snoop request %s "
+                            "for a valid block %s",
+                 name(), pkt->print(), blk->print());
+    }
+
     if (pkt->isClean()) {
         if (blk_valid && blk->isSet(CacheBlk::DirtyBit)) {
             DPRINTF(CacheVerbose, "%s: packet (snoop) %s found block: %s\n",
@@ -1166,7 +1173,7 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // which means we go from Modified to Owned (and will respond
         // below), remain in Owned (and will respond below), from
         // Exclusive to Shared, or remain in Shared
-        if (!pkt->req->isUncacheable()) {
+        if (!BaseCache::isUncacheablePkt(pkt)) {
             blk->clearCoherenceBits(CacheBlk::WritableBit);
         }
         DPRINTF(Cache, "new state is %s\n", blk->print());
