@@ -24,6 +24,7 @@ Ramulator2::Ramulator2(const Params &p) : AbstractMemory(p),
                                           port(name() + ".port", *this),
                                           config_path(p.config_path),
                                           enlarge_buffer_factor(p.enlarge_buffer_factor),
+                                          system_id(p.system_id), system_count(p.system_count),
                                           retryReq(false), retryResp(false), startTick(0),
                                           nbrOutstandingReads(0), nbrOutstandingWrites(0),
                                           sendResponseEvent([this] { sendResponse(); }, name()),
@@ -52,6 +53,9 @@ void Ramulator2::init() {
     config["MemorySystem"]["Controller"]["queue_size"] = new_queue_size;
     ramulator2_frontend = Ramulator::Factory::create_frontend(config);
     ramulator2_memorysystem = Ramulator::Factory::create_memory_system(config);
+
+    ramulator2_memorysystem->m_system_id = system_id;
+    ramulator2_memorysystem->m_system_count = system_count;
 
     ramulator2_frontend->connect_memory_system(ramulator2_memorysystem);
     ramulator2_memorysystem->connect_frontend(ramulator2_frontend);

@@ -260,6 +260,8 @@ def config_mem(options, system):
                     mem_ctrl.config_path = opt_ramulator_config
                     print(f"Configuring Ramulator2 with {opt_ramulator_config}")
                     mem_ctrl.enlarge_buffer_factor = options.cpu_buffer_enlarge_factor
+                    mem_ctrl.system_id = i
+                    mem_ctrl.system_count = nbr_mem_ctrls
                 else:
                     mem_ctrl = dram_intf.controller()
 

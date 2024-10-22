@@ -189,6 +189,9 @@ bool StreamAccessUnit::scheduleNextSend() {
         }
         scheduleSendPacketEvent(latency);
         return true;
+    } else if (my_outstanding_evict_pkts.size() > 0) {
+        scheduleSendPacketEvent(Cycles(0));
+        return true;
     }
     return false;
 }
@@ -230,6 +233,8 @@ void StreamAccessUnit::executeInstruction() {
         my_RT_access_finish_tick = curTick();
         my_decode_start_tick = curTick();
         my_request_start_tick = 0;
+        assert(my_outstanding_read_pkts.size() == 0);
+        assert(my_outstanding_evict_pkts.size() == 0);
 
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
@@ -372,35 +377,57 @@ void StreamAccessUnit::createReadPacketEvict(Addr addr) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
     PacketPtr my_pkt = new Packet(real_req, MemCmd::CleanEvict);
-    my_outstanding_read_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(0))));
-    DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, my_pkt->print(), 0);
+    my_outstanding_evict_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(0))));
+    DPRINTF(MAAStream, "S[%d] %s: created %s to send\n", my_stream_id, __func__, my_pkt->print());
     (*maa->stats.STR_Evicts[my_stream_id])++;
 }
 bool StreamAccessUnit::sendOutstandingReadPacket() {
-    bool packet_sent = false;
+    bool read_packet_blocked = false;
+    bool read_packet_remaining = false;
+    bool evict_packet_sent = false;
+
     DPRINTF(MAAStream, "S[%d] %s: sending %d outstanding read packets...\n", my_stream_id, __func__, my_outstanding_read_pkts.size());
     while (my_outstanding_read_pkts.empty() == false) {
         StreamAccessUnit::StreamPacket read_pkt = *my_outstanding_read_pkts.begin();
-        DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n",
-                my_stream_id, __func__, read_pkt.packet->print(), read_pkt.tick);
+        DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n", my_stream_id, __func__, read_pkt.packet->print(), read_pkt.tick);
         if (read_pkt.tick > curTick()) {
-            scheduleNextSend();
-            return false;
+            DPRINTF(MAAStream, "S[%d] %s: waiting for %d cycles\n", my_stream_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
+            read_packet_remaining = true;
+            break;
         }
-        if (maa->cacheSidePort.sendPacket((uint8_t)FuncUnitType::STREAM,
-                                          my_stream_id,
-                                          read_pkt.packet) == false) {
-            DPRINTF(MAAStream, "S[%d] %s: send failed, leaving execution...\n", my_stream_id, __func__);
-            return false;
+        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, read_pkt.packet) == false) {
+            DPRINTF(MAAStream, "S[%d] %s: send failed, leaving send packet...\n", my_stream_id, __func__);
+            read_packet_blocked = true;
+            break;
         } else {
             my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
-            packet_sent = true;
         }
     }
-    if (packet_sent && (my_received_responses == my_sent_requests)) {
-        scheduleNextExecution(true);
-    } else {
-        DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_stream_id, __func__, my_sent_requests, my_received_responses, packet_sent);
+
+    DPRINTF(MAAStream, "S[%d] %s: sending %d outstanding evict packets...\n", my_stream_id, __func__, my_outstanding_evict_pkts.size());
+    while (my_outstanding_evict_pkts.empty() == false && read_packet_blocked == false) {
+        StreamAccessUnit::StreamPacket evict_pkt = *my_outstanding_evict_pkts.begin();
+        DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n", my_stream_id, __func__, evict_pkt.packet->print(), evict_pkt.tick);
+        panic_if(evict_pkt.tick > curTick(), "S[%d] %s: waiting for %d cycles\n", my_stream_id, __func__, maa->getTicksToCycles(evict_pkt.tick - curTick()));
+        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, evict_pkt.packet) == false) {
+            DPRINTF(MAAStream, "S[%d] %s: send failed, leaving send packet...\n", my_stream_id, __func__);
+            break;
+        } else {
+            my_outstanding_evict_pkts.erase(my_outstanding_evict_pkts.begin());
+            evict_packet_sent = true;
+        }
+    }
+
+    if (read_packet_remaining) {
+        scheduleNextSend();
+    }
+    if (evict_packet_sent) {
+        if (my_received_responses == my_sent_requests) {
+            DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
+            scheduleNextExecution(true);
+        } else {
+            DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d!\n", my_stream_id, __func__, my_received_responses, my_received_responses);
+        }
     }
     return true;
 }

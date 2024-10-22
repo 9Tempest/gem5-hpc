@@ -146,18 +146,11 @@ void MAA::CacheSidePort::recvReqRetry() {
     setUnblocked(BlockReason::CACHE_FAILED);
 }
 
-bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type,
-                                    int func_unit_id,
-                                    PacketPtr pkt) {
+bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n",
-            __func__,
-            func_unit_names[func_unit_type],
-            func_unit_id,
-            pkt->print());
+    DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n", __func__, func_unit_names[func_unit_type], func_unit_id, pkt->print());
     if (blockReason != BlockReason::NOT_BLOCKED) {
-        DPRINTF(MAACachePort, "%s Send blocked because of %s...\n", __func__,
-                blockReason == BlockReason::MAX_XBAR_PACKETS ? "MAX_XBAR_PACKETS" : "CACHE_FAILED");
+        DPRINTF(MAACachePort, "%s Send blocked because of %s...\n", __func__, blockReason == BlockReason::MAX_XBAR_PACKETS ? "MAX_XBAR_PACKETS" : "CACHE_FAILED");
         funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
         return false;
     }
@@ -181,7 +174,9 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type,
         outstandingCacheSidePackets++;
     return true;
 }
-
+bool MAA::sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
+    return cacheSidePort.sendPacket(func_unit_type, func_unit_id, pkt);
+}
 void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     assert(blockReason == reason);
     blockReason = BlockReason::NOT_BLOCKED;
@@ -207,8 +202,7 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
             assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
             funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();
-            maa->indirectAccessUnits[i].scheduleSendWritePacketEvent();
+            maa->indirectAccessUnits[i].scheduleSendCachePacketEvent();
         }
     }
 }

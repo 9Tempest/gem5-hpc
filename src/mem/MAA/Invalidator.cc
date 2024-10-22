@@ -158,11 +158,7 @@ void Invalidator::executeInstruction() {
 }
 void Invalidator::createMyPacket() {
     /**** Packet generation ****/
-    RequestPtr real_req = std::make_shared<Request>(
-        my_last_block_addr,
-        block_size,
-        flags,
-        maa->requestorId);
+    RequestPtr real_req = std::make_shared<Request>(my_last_block_addr, block_size, flags, maa->requestorId);
     my_pkt = new Packet(real_req, MemCmd::ReadExReq);
     my_outstanding_pkt = true;
     my_pkt->allocate();
@@ -173,7 +169,7 @@ void Invalidator::createMyPacket() {
 }
 bool Invalidator::sendOutstandingPacket() {
     DPRINTF(MAAInvalidator, "%s: trying sending %s\n", __func__, my_pkt->print());
-    if (maa->cpuSidePort.sendSnoopPacket((uint8_t)FuncUnitType::INVALIDATOR, 0, my_pkt) == false) {
+    if (maa->sendSnoopPacketCpu((uint8_t)FuncUnitType::INVALIDATOR, 0, my_pkt) == false) {
         DPRINTF(MAAInvalidator, "%s: send failed, leaving send packet...\n", __func__);
         return false;
     }

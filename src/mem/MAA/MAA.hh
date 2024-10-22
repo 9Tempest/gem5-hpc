@@ -87,9 +87,7 @@ class MAA : public ClockedObject {
         void setUnblocked();
 
     public:
-        bool sendSnoopPacket(uint8_t func_unit_type,
-                             int func_unit_id,
-                             PacketPtr pkt);
+        bool sendSnoopPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
         void allocate(int _maxOutstandingCpuSidePackets);
 
     public:
@@ -176,11 +174,6 @@ class MAA : public ClockedObject {
      * access functions for functional, atomic and timing snoops.
      */
     class MemSidePort : public MAAMemRequestPort {
-        enum class BlockReason : uint8_t {
-            NOT_BLOCKED,
-            MEM_FAILED
-        };
-
     private:
         /** The maa-specific queue. */
         MAAReqPacketQueue _reqQueue;
@@ -202,14 +195,15 @@ class MAA : public ClockedObject {
         void recvReqRetry();
 
     protected:
-        BlockReason blockReason;
-        BlockReason *funcBlockReasons;
-        void setUnblocked(BlockReason reason);
+        bool isBlocked;
+        bool *isFuncBlocked;
+        int channel_id;
+        int num_indirect_access_units;
+        void setUnblocked();
 
     public:
-        bool sendPacket(int func_unit_id,
-                        PacketPtr pkt);
-        void allocate();
+        bool sendPacket(int func_unit_id, PacketPtr pkt);
+        void allocate(int _channel_id, int _num_indirect_access_units);
 
     public:
         MemSidePort(const std::string &_name, MAA *_maa,
@@ -255,9 +249,7 @@ class MAA : public ClockedObject {
         void setUnblocked(BlockReason reason);
 
     public:
-        bool sendPacket(uint8_t func_unit_type,
-                        int func_unit_id,
-                        PacketPtr pkt);
+        bool sendPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
         void allocate(int _maxOutstandingCacheSidePackets);
 
     public:
@@ -265,10 +257,12 @@ class MAA : public ClockedObject {
                       const std::string &_label);
     };
 
-public:
+protected:
     CpuSidePort cpuSidePort;
-    MemSidePort memSidePort;
+    std::vector<MemSidePort *> memSidePorts;
     CacheSidePort cacheSidePort;
+
+public:
     SPD *spd;
     RF *rf;
     IF *ifile;
@@ -288,8 +282,12 @@ public:
 
 public:
     std::vector<int> map_addr(Addr addr);
+    int channel_addr(Addr addr);
     Addr calc_Grow_addr(std::vector<int> addr_vec);
     void addRamulator(memory::Ramulator2 *_ramulator2);
+    bool sendPacketMem(int func_unit_id, PacketPtr pkt);
+    bool sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
+    bool sendSnoopPacketCpu(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
 
 protected:
     /**
@@ -394,6 +392,7 @@ public:
     unsigned int num_row_table_rows_per_bank;
     unsigned int num_row_table_entries_per_subbank_row;
     unsigned int num_row_table_config_cache_entries;
+    unsigned int num_memory_channels;
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;
     Instruction *current_instruction;

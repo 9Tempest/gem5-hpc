@@ -29,11 +29,7 @@ namespace gem5 {
 
 void MAA::recvMemTimingResp(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAAMemPort, "%s: received %s, cmd: %s, size: %d\n",
-            __func__,
-            pkt->print(),
-            pkt->cmdString(),
-            pkt->getSize());
+    DPRINTF(MAAMemPort, "%s: received %s, cmd: %s, size: %d\n", __func__, pkt->print(), pkt->cmdString(), pkt->getSize());
     for (int i = 0; i < pkt->getSize(); i++) {
         DPRINTF(MAAMemPort, "[%d] %02x %s\n", i, pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
     }
@@ -120,51 +116,58 @@ void MAA::MemSidePort::recvFunctionalSnoop(PacketPtr pkt) {
 void MAA::MemSidePort::recvReqRetry() {
     /// print the packet
     DPRINTF(MAAMemPort, "%s: called!\n", __func__);
-    setUnblocked(BlockReason::MEM_FAILED);
+    setUnblocked();
 }
 
-void MAA::MemSidePort::setUnblocked(BlockReason reason) {
-    assert(blockReason == reason);
-    blockReason = BlockReason::NOT_BLOCKED;
+void MAA::MemSidePort::setUnblocked() {
+    bool isAnyBlocked = false;
+    panic_if(isBlocked == false, "%s: is not blocked but retried\n", __func__);
+    isBlocked = false;
     for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        if (funcBlockReasons[i] != BlockReason::NOT_BLOCKED) {
-            assert(funcBlockReasons[i] == reason);
+        if (isFuncBlocked[i]) {
             assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
-            funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
-            DPRINTF(MAAMemPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa->indirectAccessUnits[i].scheduleSendReadPacketEvent();
-            maa->indirectAccessUnits[i].scheduleSendWritePacketEvent();
+            isFuncBlocked[i] = false;
+            DPRINTF(MAAMemPort, "%s: unblocked Unit[indirect][%d]...\n", __func__, i);
+            maa->indirectAccessUnits[i].unblockMemChannel(channel_id);
+            maa->indirectAccessUnits[i].scheduleSendMemReadPacketEvent();
+            maa->indirectAccessUnits[i].scheduleSendMemWritePacketEvent();
+            isAnyBlocked = true;
         }
     }
+    panic_if(!isAnyBlocked, "%s: No blocked units found\n", __func__);
 }
-bool MAA::MemSidePort::sendPacket(int func_unit_id,
-                                  PacketPtr pkt) {
+bool MAA::MemSidePort::sendPacket(int func_unit_id, PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAAMemPort, "%s: UNIT[INDIRECT][%d] %s\n",
-            __func__,
-            func_unit_id,
-            pkt->print());
-    if (blockReason != BlockReason::NOT_BLOCKED) {
-        DPRINTF(MAAMemPort, "%s Send blocked because of MEM_FAILED...\n", __func__);
-        funcBlockReasons[func_unit_id] = blockReason;
+    DPRINTF(MAAMemPort, "%s: UNIT[INDIRECT][%d] %s\n", __func__, func_unit_id, pkt->print());
+    int pkt_channel_id = maa->channel_addr(pkt->getAddr());
+    panic_if(pkt_channel_id != channel_id, "%s: packet is for channel %d\n", __func__, pkt_channel_id);
+    if (isBlocked) {
+        DPRINTF(MAAMemPort, "%s Send blocked because of previous accesses blocked...\n", __func__);
+        isFuncBlocked[func_unit_id] = true;
         return false;
     }
-    if (maa->memSidePort.sendTimingReq(pkt) == false) {
+    if (sendTimingReq(pkt) == false) {
         // Cache cannot receive a new request
-        DPRINTF(MAAMemPort, "%s Send failed because cache returned false...\n", __func__);
-        blockReason = BlockReason::MEM_FAILED;
-        funcBlockReasons[func_unit_id] = BlockReason::MEM_FAILED;
+        DPRINTF(MAAMemPort, "%s Send failed because mem returned false, blocking...\n", __func__);
+        isBlocked = true;
+        isFuncBlocked[func_unit_id] = true;
         return false;
     }
     DPRINTF(MAAMemPort, "%s Send is successfull...\n", __func__);
     return true;
 }
-void MAA::MemSidePort::allocate() {
-    funcBlockReasons = new BlockReason[maa->num_indirect_access_units];
-    for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        funcBlockReasons[i] = BlockReason::NOT_BLOCKED;
+bool MAA::sendPacketMem(int func_unit_id, PacketPtr pkt) {
+    int pkt_channel_id = channel_addr(pkt->getAddr());
+    return memSidePorts[pkt_channel_id]->sendPacket(func_unit_id, pkt);
+}
+void MAA::MemSidePort::allocate(int _channel_id, int _num_indirect_access_units) {
+    channel_id = _channel_id;
+    num_indirect_access_units = _num_indirect_access_units;
+    DPRINTF(MAAMemPort, "%s channel %d\n", __func__, channel_id);
+    isFuncBlocked = new bool[num_indirect_access_units];
+    for (int i = 0; i < num_indirect_access_units; i++) {
+        isFuncBlocked[i] = false;
     }
-    blockReason = BlockReason::NOT_BLOCKED;
 }
 
 void MAA::MAAReqPacketQueue::sendDeferredPacket() {
@@ -179,6 +182,5 @@ MAA::MemSidePort::MemSidePort(const std::string &_name,
     : MAAMemRequestPort(_name, _reqQueue, _snoopRespQueue),
       _reqQueue(*_maa, *this, _snoopRespQueue, _label),
       _snoopRespQueue(*_maa, *this, true, _label), maa(_maa) {
-    blockReason = BlockReason::NOT_BLOCKED;
 }
 } // namespace gem5

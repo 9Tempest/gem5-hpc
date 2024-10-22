@@ -31,10 +31,15 @@ class MAA(ClockedObject):
     cache_snoop_latency = Param.Cycles(1, "Cache snoop latency")
     max_outstanding_cache_side_packets = Param.Unsigned(512, "Maximum number of outstanding cache side packets")
     max_outstanding_cpu_side_packets = Param.Unsigned(512, "Maximum number of outstanding cpu side packets")
+    num_memory_channels = Param.Unsigned(2, "Number of memory channels")
+
 
     cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
-    mem_side = RequestPort("Downstream port closer to DRAM memory")
-    cache_side = RequestPort("Downstream port closer to DRAM memory")
+    mem_sides = VectorRequestPort("Vector port for connecting to DRAM memory")
+    master = DeprecatedParam(
+        mem_sides, "`master` is now called `mem_sides`"
+    )
+    cache_side = RequestPort("Downstream port connecting to LLC")
 
     addr_ranges = VectorParam.AddrRange(
         [AllMemory], "Address range for scratchpad data, scratchpad size, scratchpad ready, scalar registers, and instruction file"

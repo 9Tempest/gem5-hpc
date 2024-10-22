@@ -45,6 +45,8 @@ private:
 
     std::string config_path;
     int enlarge_buffer_factor;
+    int system_id;
+    int system_count;
     Ramulator::IFrontEnd *ramulator2_frontend;
     Ramulator::IMemorySystem *ramulator2_memorysystem;
 

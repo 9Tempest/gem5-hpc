@@ -20,6 +20,7 @@
 #include "sim/cur_tick.hh"
 #include <cassert>
 #include <cstdint>
+#include <string>
 
 #ifndef TRACING_ON
 #define TRACING_ON 1
@@ -36,7 +37,6 @@ MAA::MAAResponsePort::MAAResponsePort(const std::string &_name, MAA &_maa, const
 MAA::MAA(const MAAParams &p)
     : ClockedObject(p),
       cpuSidePort(p.name + ".cpu_side_port", *this, "CpuSidePort"),
-      memSidePort(p.name + ".mem_side_port", this, "MemSidePort"),
       cacheSidePort(p.name + ".cache_side_port", this, "CacheSidePort"),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       num_tiles(p.num_tiles),
@@ -50,6 +50,7 @@ MAA::MAA(const MAAParams &p)
       num_row_table_rows_per_bank(p.num_row_table_rows_per_bank),
       num_row_table_entries_per_subbank_row(p.num_row_table_entries_per_subbank_row),
       num_row_table_config_cache_entries(p.num_row_table_config_cache_entries),
+      num_memory_channels(p.num_memory_channels),
       rowtable_latency(p.rowtable_latency),
       cache_snoop_latency(p.cache_snoop_latency),
       system(p.system),
@@ -89,7 +90,6 @@ MAA::MAA(const MAAParams &p)
     }
     cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
     cpuSidePort.allocate(p.max_outstanding_cpu_side_packets);
-    memSidePort.allocate();
     invalidator = new Invalidator();
     invalidator->allocate(
         num_tiles,
@@ -110,6 +110,10 @@ MAA::MAA(const MAAParams &p)
     }
     current_instruction = new Instruction();
     invalidatorIdle = true;
+    for (int i = 0; i < p.port_mem_sides_connection_count; ++i) {
+        std::string portName = csprintf("%s.mem_side_port[%d]", p.name, i);
+        memSidePorts.push_back(new MemSidePort(portName, this, "MemSidePort"));
+    }
 }
 
 void MAA::init() {
@@ -119,11 +123,13 @@ void MAA::init() {
 }
 
 MAA::~MAA() {
+    for (auto port : memSidePorts)
+        delete port;
 }
 
 Port &MAA::getPort(const std::string &if_name, PortID idx) {
-    if (if_name == "mem_side") {
-        return memSidePort;
+    if (if_name == "mem_sides" && idx < memSidePorts.size()) {
+        return *memSidePorts[idx];
     } else if (if_name == "cpu_side") {
         return cpuSidePort;
     } else if (if_name == "cache_side") {
@@ -165,14 +171,16 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
             m_addr_bits[ADDR_CHANNEL_LEVEL],
             m_tx_offset);
     assert(m_num_levels == 6);
+    for (int i = 0; i < memSidePorts.size(); i++) {
+        memSidePorts[i]->allocate(i, num_indirect_access_units);
+    }
     for (int i = 0; i < num_indirect_access_units; i++) {
-        indirectAccessUnits[i].allocate(i,
-                                        num_tile_elements,
-                                        num_row_table_rows_per_bank,
+        indirectAccessUnits[i].allocate(i, num_tile_elements, num_row_table_rows_per_bank,
                                         num_row_table_entries_per_subbank_row,
                                         num_row_table_config_cache_entries,
                                         rowtable_latency,
                                         cache_snoop_latency,
+                                        m_org[ADDR_CHANNEL_LEVEL],
                                         this);
     }
 }
@@ -191,6 +199,10 @@ std::vector<int> MAA::map_addr(Addr addr) {
         addr_vec[i] = slice_lower_bits(addr, m_addr_bits[i]);
     }
     return addr_vec;
+}
+int MAA::channel_addr(Addr addr) {
+    addr = addr >> m_tx_offset;
+    return slice_lower_bits(addr, m_addr_bits[0]);
 }
 bool MAA::allFuncUnitsIdle() {
     if (invalidator->getState() != Invalidator::Status::Idle) {

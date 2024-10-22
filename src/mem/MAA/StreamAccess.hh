@@ -78,12 +78,29 @@ protected:
             return tick < rhs.tick;
         }
     };
+    class PageInfo {
+    public:
+        int min_itr, max_itr, bankgroup_addr, curr_itr, curr_idx;
+        PageInfo(int _min_itr, int _max_itr, int _bankgroup_addr, int _curr_itr, int _curr_idx)
+            : min_itr(_min_itr), max_itr(_max_itr), bankgroup_addr(_bankgroup_addr),
+              curr_itr(_curr_itr), curr_idx(_curr_idx) {}
+        PageInfo(const PageInfo &other) {
+            min_itr = other.min_itr;
+            max_itr = other.max_itr;
+            bankgroup_addr = other.bankgroup_addr;
+            curr_itr = other.curr_itr;
+            curr_idx = other.curr_idx;
+        }
+    };
     struct CompareByTick {
         bool operator()(const StreamPacket &lhs, const StreamPacket &rhs) const {
             return lhs.tick < rhs.tick;
         }
     };
     std::multiset<StreamPacket, CompareByTick> my_outstanding_read_pkts;
+    std::multiset<StreamPacket, CompareByTick> my_outstanding_evict_pkts;
+    std::vector<PageInfo> my_all_page_info;
+    std::vector<PageInfo> my_current_page_info;
     unsigned int num_tile_elements;
     Status state;
     RequestTable *request_table;

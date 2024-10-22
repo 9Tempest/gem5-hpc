@@ -222,6 +222,7 @@ bool BaseCache::inExclRange(Addr addr) const {
 }
 
 bool BaseCache::isUncacheablePkt(PacketPtr pkt) const {
+    panic_if(!pkt || !pkt->req, "Packet or req is nullptr\n");
     if (pkt->req->isUncacheable() || inExclRange(pkt->getAddr())) {
         DPRINTF(Cache, "Request for uncacheable address %s\n", pkt->print());
     }

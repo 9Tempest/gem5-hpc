@@ -25,3 +25,4 @@ class SharedMAA(MAA):
     cache_snoop_latency = 1
     max_outstanding_cache_side_packets = 512
     max_outstanding_cpu_side_packets = 512
+    num_memory_channels = 1

@@ -63,6 +63,8 @@ def _get_maa_opts(options):
     if hasattr(options, "maa_num_ALU_lanes"):
         opts["num_ALU_lanes"] = getattr(options, "maa_num_ALU_lanes")
     
+    opts["num_memory_channels"] = options.mem_channels
+    
     addr_ranges = []
     start = options.mem_size
 
@@ -159,7 +161,8 @@ def config_maa(options, system):
     
     system.maa.cache_side = system.tol3bus.cpu_side_ports
     # Memory side derives the cpu side of the memory bus
-    system.maa.mem_side = system.membusnc.cpu_side_ports
+    for _ in range(options.mem_channels):
+        system.membusnc.cpu_side_ports = system.maa.mem_sides
 
     if options.maa_l2_uncacheable:
         print("MAA L2 uncacheable")

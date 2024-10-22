@@ -385,15 +385,9 @@ AddrRangeList MAA::CpuSidePort::getAddrRanges() const {
     return maa.getAddrRanges();
 }
 
-bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type,
-                                       int func_unit_id,
-                                       PacketPtr pkt) {
+bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAACpuPort, "%s: UNIT[%s][%d] %s\n",
-            __func__,
-            func_unit_names[func_unit_type],
-            func_unit_id,
-            pkt->print());
+    DPRINTF(MAACpuPort, "%s: UNIT[%s][%d] %s\n", __func__, func_unit_names[func_unit_type], func_unit_id, pkt->print());
     panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
     panic_if(func_unit_type == (int)FuncUnitType::STREAM, "Stream does not have any snoop requests\n");
     if (blockReason != BlockReason::NOT_BLOCKED) {
@@ -415,6 +409,9 @@ bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type,
         outstandingCpuSidePackets++;
     return true;
 }
+bool MAA::sendSnoopPacketCpu(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
+    return cpuSidePort.sendSnoopPacket(func_unit_type, func_unit_id, pkt);
+}
 
 void MAA::CpuSidePort::setUnblocked() {
     blockReason = BlockReason::NOT_BLOCKED;
@@ -429,7 +426,7 @@ void MAA::CpuSidePort::setUnblocked() {
             assert(maa.indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
             funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACpuPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa.indirectAccessUnits[i].scheduleSendReadPacketEvent();
+            maa.indirectAccessUnits[i].scheduleSendCpuPacketEvent();
         }
     }
 }

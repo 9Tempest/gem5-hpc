@@ -350,8 +350,10 @@ std::vector<OffsetTableEntry> RowTable::get_entry_recv(Addr grow_addr, Addr addr
 ///////////////
 IndirectAccessUnit::IndirectAccessUnit()
     : executeInstructionEvent([this] { executeInstruction(); }, name()),
-      sendReadPacketEvent([this] { sendOutstandingReadPacket(); }, name()),
-      sendWritePacketEvent([this] { sendOutstandingWritePacket(); }, name()) {
+      sendCachePacketEvent([this] { sendOutstandingCachePacket(); }, name()),
+      sendCpuPacketEvent([this] { sendOutstandingCpuPacket(); }, name()),
+      sendMemReadPacketEvent([this] { sendOutstandingMemReadPacket(); }, name()),
+      sendMemWritePacketEvent([this] { sendOutstandingMemWritePacket(); }, name()) {
     RT_bank_org = nullptr;
     num_RT_banks = nullptr;
     num_RT_rows_total = nullptr;
@@ -414,6 +416,7 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
                                   int _num_row_table_config_cache_entries,
                                   Cycles _rowtable_latency,
                                   Cycles _cache_snoop_latency,
+                                  int _num_channels,
                                   MAA *_maa) {
     my_indirect_id = _my_indirect_id;
     maa = _maa;
@@ -423,10 +426,16 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
     num_RT_config_cache_entries = _num_row_table_config_cache_entries;
     rowtable_latency = _rowtable_latency;
     cache_snoop_latency = _cache_snoop_latency;
+    num_channels = _num_channels;
     my_translation_done = false;
     state = Status::Idle;
     my_instruction = nullptr;
     dst_tile_id = -1;
+
+    mem_channels_blocked = new bool[num_channels];
+    for (int i = 0; i < num_channels; i++) {
+        mem_channels_blocked[i] = false;
+    }
 
     offset_table = new OffsetTable();
     offset_table->allocate(my_indirect_id, num_tile_elements, this);
@@ -635,10 +644,16 @@ void IndirectAccessUnit::check_reset() {
         }
     }
     offset_table->check_reset();
-    panic_if(my_outstanding_write_pkts.size() != 0, "Outstanding write packets: %d!\n",
-             my_outstanding_write_pkts.size());
-    panic_if(my_outstanding_read_pkts.size() != 0, "Outstanding read packets: %d!\n",
-             my_outstanding_read_pkts.size());
+    panic_if(my_outstanding_cache_read_pkts.size() != 0, "Outstanding cache read packets: %d!\n",
+             my_outstanding_cache_read_pkts.size());
+    panic_if(my_outstanding_cache_evict_pkts.size() != 0, "Outstanding cache evict packets: %d!\n",
+             my_outstanding_cache_evict_pkts.size());
+    panic_if(my_outstanding_cpu_snoop_pkts.size() != 0, "Outstanding cache snoop packets: %d!\n",
+             my_outstanding_cpu_snoop_pkts.size());
+    panic_if(my_outstanding_mem_read_pkts.size() != 0, "Outstanding mem read packets: %d!\n",
+             my_outstanding_mem_read_pkts.size());
+    panic_if(my_outstanding_mem_write_pkts.size() != 0, "Outstanding mem write packets: %d!\n",
+             my_outstanding_mem_write_pkts.size());
     panic_if(my_decode_start_tick != 0, "Decode start tick is not 0: %lu!\n", my_decode_start_tick);
     panic_if(my_fill_start_tick != 0, "Fill start tick is not 0: %lu!\n", my_fill_start_tick);
     panic_if(my_build_start_tick != 0, "Build start tick is not 0: %lu!\n", my_build_start_tick);
@@ -691,24 +706,38 @@ bool IndirectAccessUnit::scheduleNextExecution(bool force) {
     }
     return false;
 }
-bool IndirectAccessUnit::scheduleNextSendRead() {
-    if (my_outstanding_read_pkts.size() > 0) {
+bool IndirectAccessUnit::scheduleNextSendCpu() {
+    if (my_outstanding_cpu_snoop_pkts.size() > 0) {
         Cycles latency = Cycles(0);
-        if (my_outstanding_read_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_read_pkts.begin()->tick - curTick());
+        if (my_outstanding_cpu_snoop_pkts.begin()->tick > curTick()) {
+            latency = maa->getTicksToCycles(my_outstanding_cpu_snoop_pkts.begin()->tick - curTick());
         }
-        scheduleSendReadPacketEvent(latency);
+        scheduleSendCpuPacketEvent(latency);
         return true;
     }
     return false;
 }
-bool IndirectAccessUnit::scheduleNextSendWrite() {
-    if (my_outstanding_write_pkts.size() > 0) {
+bool IndirectAccessUnit::scheduleNextSendCache() {
+    if (my_outstanding_cache_read_pkts.size() > 0 || my_outstanding_cache_evict_pkts.size() > 0) {
+        scheduleSendCachePacketEvent(Cycles(0));
+        return true;
+    }
+    return false;
+}
+bool IndirectAccessUnit::scheduleNextSendMemRead() {
+    if (my_outstanding_mem_read_pkts.size() > 0) {
+        scheduleSendMemReadPacketEvent(Cycles(0));
+        return true;
+    }
+    return false;
+}
+bool IndirectAccessUnit::scheduleNextSendMemWrite() {
+    if (my_outstanding_mem_write_pkts.size() > 0) {
         Cycles latency = Cycles(0);
-        if (my_outstanding_write_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_write_pkts.begin()->tick - curTick());
+        if (my_outstanding_mem_write_pkts.begin()->tick > curTick()) {
+            latency = maa->getTicksToCycles(my_outstanding_mem_write_pkts.begin()->tick - curTick());
         }
-        scheduleSendWritePacketEvent(latency);
+        scheduleSendMemWritePacketEvent(latency);
         return true;
     }
     return false;
@@ -758,8 +787,11 @@ void IndirectAccessUnit::executeInstruction() {
 
         // Initialization
         my_virtual_addr = 0;
-        assert(my_outstanding_read_pkts.size() == 0);
-        assert(my_outstanding_write_pkts.size() == 0);
+        assert(my_outstanding_cache_read_pkts.size() == 0);
+        assert(my_outstanding_cache_evict_pkts.size() == 0);
+        assert(my_outstanding_cpu_snoop_pkts.size() == 0);
+        assert(my_outstanding_mem_read_pkts.size() == 0);
+        assert(my_outstanding_mem_write_pkts.size() == 0);
         my_received_responses = my_expected_responses = 0;
         offset_table->reset();
         for (int i = 0; i < num_RT_banks[my_RT_config]; i++) {
@@ -968,11 +1000,10 @@ void IndirectAccessUnit::executeInstruction() {
                 DPRINTF(MAAIndirect, "I[%d] %s: Checking row table bank[%d]!\n", my_indirect_id, __func__, RT_idx);
                 if (my_RT_req_sent[my_RT_config][RT_idx] == false) {
                     if (RT[my_RT_config][RT_idx].get_entry_send(addr, my_drain)) {
-                        DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n",
-                                my_indirect_id, __func__, RT_idx, addr);
+                        DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n", my_indirect_id, __func__, RT_idx, addr);
                         my_expected_responses++;
                         num_rowtable_accesses++;
-                        createReadPacket(addr, num_rowtable_accesses * rowtable_latency, false, true);
+                        createCacheSnoopPacket(addr, getCeiling(num_rowtable_accesses, total_num_RT_subbanks) * rowtable_latency);
                     } else {
                         DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, RT_idx);
                         my_RT_req_sent[my_RT_config][RT_idx] = true;
@@ -988,7 +1019,7 @@ void IndirectAccessUnit::executeInstruction() {
         updateLatency(0, 0, 0, num_rowtable_accesses, total_num_RT_subbanks);
         state = Status::Request;
         scheduleNextExecution(true);
-        scheduleNextSendRead();
+        scheduleNextSendCpu();
         break;
     }
     case Status::Request: {
@@ -1007,10 +1038,11 @@ void IndirectAccessUnit::executeInstruction() {
             my_build_start_tick = 0;
         }
         if (my_received_responses == my_expected_responses) {
-            panic_if(my_outstanding_read_pkts.empty() == false, "I[%d] %s: %d outstanding read packets remaining!\n",
-                     my_outstanding_read_pkts.size(), my_indirect_id, __func__);
-            panic_if(my_outstanding_write_pkts.empty() == false, "I[%d] %s: %d outstanding write packets remaining!\n",
-                     my_outstanding_write_pkts.size(), my_indirect_id, __func__);
+            panic_if(my_outstanding_cache_read_pkts.empty() == false, "I[%d] %s: %d outstanding cache read packets remaining!\n", my_outstanding_cache_read_pkts.size(), my_indirect_id, __func__);
+            panic_if(my_outstanding_cache_evict_pkts.empty() == false, "I[%d] %s: %d outstanding cache evict packets remaining!\n", my_outstanding_cache_evict_pkts.size(), my_indirect_id, __func__);
+            panic_if(my_outstanding_cpu_snoop_pkts.empty() == false, "I[%d] %s: %d outstanding cache snoop packets remaining!\n", my_outstanding_cpu_snoop_pkts.size(), my_indirect_id, __func__);
+            panic_if(my_outstanding_mem_read_pkts.empty() == false, "I[%d] %s: %d outstanding mem read packets remaining!\n", my_outstanding_mem_read_pkts.size(), my_indirect_id, __func__);
+            panic_if(my_outstanding_mem_write_pkts.empty() == false, "I[%d] %s: %d outstanding mem write packets remaining!\n", my_outstanding_mem_write_pkts.size(), my_indirect_id, __func__);
             if (my_drain) {
                 state = Status::Response;
                 my_drain = false;
@@ -1030,8 +1062,10 @@ void IndirectAccessUnit::executeInstruction() {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: responding %s!\n", my_indirect_id, __func__, my_instruction->print());
         panic_if(scheduleNextExecution(), "I[%d] %s: Execution is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendRead(), "I[%d] %s: Sending reads is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendWrite(), "I[%d] %s: Sending writes is not completed!\n", my_indirect_id, __func__);
+        panic_if(scheduleNextSendCache(), "I[%d] %s: Sending cache reads/evicts is not completed!\n", my_indirect_id, __func__);
+        panic_if(scheduleNextSendCpu(), "I[%d] %s: Sending cpu snoop is not completed!\n", my_indirect_id, __func__);
+        panic_if(scheduleNextSendMemRead(), "I[%d] %s: Sending mem reads is not completed!\n", my_indirect_id, __func__);
+        panic_if(scheduleNextSendMemWrite(), "I[%d] %s: Sending mem writes is not completed!\n", my_indirect_id, __func__);
         panic_if(my_cond_tile_ready == false, "I[%d] %s: cond tile[%d] is not ready!\n", my_indirect_id, __func__, my_cond_tile);
         panic_if(my_idx_tile_ready == false, "I[%d] %s: idx tile[%d] is not ready!\n", my_indirect_id, __func__, my_idx_tile);
         panic_if(my_src_tile_ready == false, "I[%d] %s: src tile[%d] is not ready!\n", my_indirect_id, __func__, my_src_tile);
@@ -1083,7 +1117,7 @@ bool IndirectAccessUnit::checkAndResetAllRowTablesSent() {
     return true;
 }
 
-void IndirectAccessUnit::createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop) {
+void IndirectAccessUnit::createCacheReadPacket(Addr addr) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
     PacketPtr read_pkt;
@@ -1093,136 +1127,211 @@ void IndirectAccessUnit::createReadPacket(Addr addr, int latency, bool is_cached
         read_pkt = new Packet(real_req, MemCmd::ReadExReq);
     }
     read_pkt->allocate();
-    if (is_snoop) {
-        read_pkt->setExpressSnoop();
-        read_pkt->headerDelay = read_pkt->payloadDelay = 0;
-    }
-    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(read_pkt, is_cached, is_snoop, maa->getClockEdge(Cycles(latency)));
-    my_outstanding_read_pkts.insert(new_packet);
-    DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles at tick %u, is cached %s\n", my_indirect_id, __func__, read_pkt->print(), latency, new_packet.tick, is_cached ? "True" : "False");
+    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(read_pkt, maa->getClockEdge(Cycles(0)));
+    my_outstanding_cache_read_pkts.insert(new_packet);
+    DPRINTF(MAAIndirect, "I[%d] %s: created %s to send for cache\n", my_indirect_id, __func__, read_pkt->print(), new_packet.tick);
 }
-void IndirectAccessUnit::createReadPacketEvict(Addr addr) {
+void IndirectAccessUnit::createCacheSnoopPacket(Addr addr, int latency) {
+    /**** Packet generation ****/
+    RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
+    PacketPtr snoop_pkt;
+    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+        snoop_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
+    } else {
+        snoop_pkt = new Packet(real_req, MemCmd::ReadExReq);
+    }
+    snoop_pkt->allocate();
+    snoop_pkt->setExpressSnoop();
+    snoop_pkt->headerDelay = snoop_pkt->payloadDelay = 0;
+    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(snoop_pkt, maa->getClockEdge(Cycles(latency)));
+    my_outstanding_cpu_snoop_pkts.insert(new_packet);
+    DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles at tick %u, for cache\n", my_indirect_id, __func__, snoop_pkt->print(), latency, new_packet.tick);
+}
+void IndirectAccessUnit::createCacheEvictPacket(Addr addr) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
     PacketPtr my_pkt = new Packet(real_req, MemCmd::CleanEvict);
-    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(my_pkt, true, false, maa->getClockEdge(Cycles(0)));
-    my_outstanding_read_pkts.insert(new_packet);
+    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(my_pkt, maa->getClockEdge(Cycles(0)));
+    my_outstanding_cache_evict_pkts.insert(new_packet);
     DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles\n", my_indirect_id, __func__, my_pkt->print(), 0);
 }
-bool IndirectAccessUnit::sendOutstandingReadPacket() {
-    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding read packets...\n", my_indirect_id, __func__, my_outstanding_read_pkts.size());
-    bool packet_sent = false;
-    while (my_outstanding_read_pkts.empty() == false) {
-        IndirectAccessUnit::IndirectPacket read_pkt = *my_outstanding_read_pkts.begin();
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to %s as a %s at time %u from %d packets\n",
-                my_indirect_id, __func__, read_pkt.packet->print(),
-                read_pkt.is_snoop ? "cpuSide" : read_pkt.is_cached ? "cacheSide"
-                                                                   : "memSide",
-                read_pkt.is_snoop ? "snoop" : "request", read_pkt.tick, my_outstanding_read_pkts.size());
-        if (read_pkt.tick > curTick()) {
-            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles\n",
-                    my_indirect_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
-            scheduleNextSendRead();
-            return false;
+void IndirectAccessUnit::createMemReadPacket(Addr addr) {
+    /**** Packet generation ****/
+    RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
+    PacketPtr read_pkt;
+    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+        read_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
+    } else {
+        read_pkt = new Packet(real_req, MemCmd::ReadExReq);
+    }
+    read_pkt->allocate();
+    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(read_pkt, maa->getClockEdge(Cycles(0)));
+    my_outstanding_mem_read_pkts.insert(new_packet);
+    DPRINTF(MAAIndirect, "I[%d] %s: created %s for mem\n", my_indirect_id, __func__, read_pkt->print());
+}
+bool IndirectAccessUnit::sendOutstandingCpuPacket() {
+    bool mem_packet_pushed = false;
+    bool cache_packet_pushed = false;
+    bool snoop_packet_remained = false;
+
+    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cpu snoop packets...\n", my_indirect_id, __func__, my_outstanding_cpu_snoop_pkts.size());
+    while (my_outstanding_cpu_snoop_pkts.empty() == false) {
+        IndirectAccessUnit::IndirectPacket snoop_pkt = *my_outstanding_cpu_snoop_pkts.begin();
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide at time %u\n", my_indirect_id, __func__, snoop_pkt.packet->print(), snoop_pkt.tick);
+        if (snoop_pkt.tick > curTick()) {
+            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(snoop_pkt.tick - curTick()));
+            snoop_packet_remained = true;
+            break;
         }
-        if (read_pkt.is_snoop) {
-            DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide\n", my_indirect_id, __func__, read_pkt.packet->print());
-            if (maa->cpuSidePort.sendSnoopPacket((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
-                DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-                return false;
-            }
-            DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to cpuSide, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
-                    my_indirect_id, __func__, read_pkt.packet->cacheResponding(), read_pkt.packet->hasSharers(), read_pkt.packet->responderHadWritable(), read_pkt.packet->satisfied(), read_pkt.packet->isBlockCached());
-            packet_sent = true;
-            my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
-            if (read_pkt.packet->cacheResponding() == true) {
-                DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
-                (*maa->stats.IND_LoadsCacheHitResponding[my_indirect_id])++;
-                LoadsCacheHitRespondingTimeHistory[read_pkt.packet->getAddr()] = curTick();
-            } else if (read_pkt.packet->hasSharers() == true) {
-                DPRINTF(MAAIndirect, "I[%d] %s: There's a cache in the E/S state will respond, creating again and sending to cache\n", my_indirect_id, __func__);
-                panic_if(read_pkt.packet->needsWritable(), "I[%d] %s: packet needs writable!\n", my_indirect_id, __func__);
-                createReadPacket(read_pkt.packet->getAddr(), 0, true, false);
-                (*maa->stats.IND_LoadsCacheHitAccessing[my_indirect_id])++;
-            } else {
-                DPRINTF(MAAIndirect, "I[%d] %s: no cache responds (I), creating again and sending to memory\n", my_indirect_id, __func__);
-                createReadPacket(read_pkt.packet->getAddr(), 0, false, false);
-                (*maa->stats.IND_LoadsMemAccessing[my_indirect_id])++;
-            }
-            // We can continue sending the next packets anyway
-        } else if (read_pkt.is_cached) {
-            bool needs_response = read_pkt.packet->needsResponse();
-            DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide, needs response: %s\n", my_indirect_id, __func__, read_pkt.packet->print(), needs_response ? "True" : "False");
-            if (maa->cacheSidePort.sendPacket((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
-                DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-                // A send has failed, we cannot continue sending the next packets
-                return false;
-            } else {
-                packet_sent = true;
-                if (needs_response) {
-                    LoadsCacheHitAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
-                }
-                my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
-                // A packet is sent successfully, we can continue sending the next packets
-            }
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide\n", my_indirect_id, __func__, snoop_pkt.packet->print());
+        if (maa->sendSnoopPacketCpu((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, snoop_pkt.packet) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
+            break;
+        }
+        DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to cpuSide, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
+                my_indirect_id, __func__, snoop_pkt.packet->cacheResponding(), snoop_pkt.packet->hasSharers(), snoop_pkt.packet->responderHadWritable(), snoop_pkt.packet->satisfied(), snoop_pkt.packet->isBlockCached());
+        my_outstanding_cpu_snoop_pkts.erase(my_outstanding_cpu_snoop_pkts.begin());
+        if (snoop_pkt.packet->cacheResponding() == true) {
+            DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
+            (*maa->stats.IND_LoadsCacheHitResponding[my_indirect_id])++;
+            LoadsCacheHitRespondingTimeHistory[snoop_pkt.packet->getAddr()] = curTick();
+        } else if (snoop_pkt.packet->hasSharers() == true) {
+            DPRINTF(MAAIndirect, "I[%d] %s: There's a cache in the E/S state will respond, creating again and sending to cache\n", my_indirect_id, __func__);
+            panic_if(snoop_pkt.packet->needsWritable(), "I[%d] %s: packet needs writable!\n", my_indirect_id, __func__);
+            createCacheReadPacket(snoop_pkt.packet->getAddr());
+            cache_packet_pushed = true;
+            (*maa->stats.IND_LoadsCacheHitAccessing[my_indirect_id])++;
         } else {
-            DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memSide\n", my_indirect_id, __func__, read_pkt.packet->print());
-            if (maa->memSidePort.sendPacket(my_indirect_id, read_pkt.packet) == false) {
-                DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-                // A send has failed, we cannot continue sending the next packets
-                return false;
-            } else {
-                if (read_pkt.packet->needsResponse()) {
-                    LoadsMemAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
-                }
-                my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
-                // A packet is sent successfully, we can continue sending the next packets
-            }
+            DPRINTF(MAAIndirect, "I[%d] %s: no cache responds (I), creating again and sending to memory\n", my_indirect_id, __func__);
+            createMemReadPacket(snoop_pkt.packet->getAddr());
+            mem_packet_pushed = true;
+            (*maa->stats.IND_LoadsMemAccessing[my_indirect_id])++;
         }
     }
-    if (packet_sent && (my_received_responses == my_expected_responses)) {
-        DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n",
-                my_indirect_id, __func__, status_names[(int)state]);
-        scheduleNextExecution(true);
-    } else {
-        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, packet_sent);
+
+    if (snoop_packet_remained) {
+        scheduleNextSendCpu();
+    }
+    if (cache_packet_pushed) {
+        scheduleNextSendCache();
+    }
+    if (mem_packet_pushed) {
+        scheduleNextSendMemRead();
     }
     return true;
 }
-bool IndirectAccessUnit::sendOutstandingWritePacket() {
-    bool packet_sent = false;
-    while (my_outstanding_write_pkts.empty() == false) {
-        IndirectAccessUnit::IndirectPacket write_pkt = *my_outstanding_write_pkts.begin();
+bool IndirectAccessUnit::sendOutstandingCachePacket() {
+    bool read_packet_blocked = false;
+    bool evict_packet_sent = false;
+
+    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cache read packets...\n", my_indirect_id, __func__, my_outstanding_cache_read_pkts.size());
+    while (my_outstanding_cache_read_pkts.empty() == false) {
+        IndirectAccessUnit::IndirectPacket read_pkt = *my_outstanding_cache_read_pkts.begin();
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide\n", my_indirect_id, __func__, read_pkt.packet->print());
+        panic_if(read_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
+        panic_if(read_pkt.packet->needsResponse() == false, "I[%d] %s: packet does not need response!\n", my_indirect_id, __func__);
+        if (maa->sendPacketCache((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
+            read_packet_blocked = true;
+            break;
+        } else {
+            LoadsCacheHitAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
+            my_outstanding_cache_read_pkts.erase(my_outstanding_cache_read_pkts.begin());
+        }
+    }
+
+    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cache evict packets...\n", my_indirect_id, __func__, my_outstanding_cache_evict_pkts.size());
+    while (my_outstanding_cache_evict_pkts.empty() == false && read_packet_blocked == false) {
+        IndirectAccessUnit::IndirectPacket evict_pkt = *my_outstanding_cache_evict_pkts.begin();
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide\n", my_indirect_id, __func__, evict_pkt.packet->print());
+        panic_if(evict_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(evict_pkt.tick - curTick()));
+        panic_if(evict_pkt.packet->needsResponse(), "I[%d] %s: packet needs response!\n", my_indirect_id, __func__);
+        if (maa->sendPacketCache((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, evict_pkt.packet) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
+            break;
+        } else {
+            evict_packet_sent = true;
+            my_outstanding_cache_evict_pkts.erase(my_outstanding_cache_evict_pkts.begin());
+            // A packet is sent successfully, we can continue sending the next packets
+        }
+    }
+
+    if (evict_packet_sent) {
+        if (my_received_responses == my_expected_responses) {
+            DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n", my_indirect_id, __func__, status_names[(int)state]);
+            scheduleNextExecution(true);
+        } else {
+            DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses);
+        }
+    }
+    return true;
+}
+bool IndirectAccessUnit::sendOutstandingMemReadPacket() {
+    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding mem read packets...\n", my_indirect_id, __func__, my_outstanding_mem_read_pkts.size());
+    for (auto it = my_outstanding_mem_read_pkts.begin(); it != my_outstanding_mem_read_pkts.end();) {
+        IndirectAccessUnit::IndirectPacket read_pkt = *it;
+        int channel_addr = maa->channel_addr(read_pkt.packet->getAddr());
+        if (mem_channels_blocked[channel_addr]) {
+            ++it;
+            continue;
+        }
+        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memSide\n", my_indirect_id, __func__, read_pkt.packet->print());
+        panic_if(read_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
+        if (maa->sendPacketMem(my_indirect_id, read_pkt.packet) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed for channel %d...\n", my_indirect_id, __func__, channel_addr);
+            mem_channels_blocked[channel_addr] = true;
+            ++it;
+            continue;
+        } else {
+            if (read_pkt.packet->needsResponse()) {
+                LoadsMemAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
+            }
+            it = my_outstanding_mem_read_pkts.erase(it);
+            continue;
+        }
+    }
+    return true;
+}
+bool IndirectAccessUnit::sendOutstandingMemWritePacket() {
+    bool write_packet_sent = false;
+    for (auto it = my_outstanding_mem_write_pkts.begin(); it != my_outstanding_mem_write_pkts.end();) {
+        IndirectAccessUnit::IndirectPacket write_pkt = *it;
         if (write_pkt.tick > curTick()) {
-            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles to send %s to memory\n",
-                    my_indirect_id, __func__, maa->getTicksToCycles(write_pkt.tick - curTick()), write_pkt.packet->print());
-            scheduleNextSendWrite();
+            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles to send %s to memory\n", my_indirect_id, __func__, maa->getTicksToCycles(write_pkt.tick - curTick()), write_pkt.packet->print());
+            scheduleNextSendMemWrite();
             return false;
         }
-        panic_if(write_pkt.is_cached || write_pkt.is_snoop, "I[%d] %s: write packet is not for memory!\n", my_indirect_id, __func__);
+        int channel_addr = maa->channel_addr(write_pkt.packet->getAddr());
+        if (mem_channels_blocked[channel_addr]) {
+            ++it;
+            continue;
+        }
         DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memory\n", my_indirect_id, __func__, write_pkt.packet->print());
-        if (maa->memSidePort.sendPacket(my_indirect_id,
-                                        write_pkt.packet) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving execution...\n", my_indirect_id, __func__);
-            return false;
+        if (maa->sendPacketMem(my_indirect_id, write_pkt.packet) == false) {
+            DPRINTF(MAAIndirect, "I[%d] %s: send failed for channel %d\n", my_indirect_id, __func__, channel_addr);
+            mem_channels_blocked[channel_addr] = true;
+            ++it;
+            continue;
         } else {
-            my_outstanding_write_pkts.erase(my_outstanding_write_pkts.begin());
+            it = my_outstanding_mem_write_pkts.erase(my_outstanding_mem_write_pkts.begin());
             my_received_responses++;
-            packet_sent = true;
+            write_packet_sent = true;
+            continue;
         }
     }
-    if (packet_sent && (my_received_responses == my_expected_responses)) {
-        DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n",
-                my_indirect_id, __func__, status_names[(int)state]);
+    if (write_packet_sent && (my_received_responses == my_expected_responses)) {
+        DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n", my_indirect_id, __func__, status_names[(int)state]);
         scheduleNextExecution(true);
     } else {
-        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, packet_sent);
+        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, write_packet_sent);
     }
     return true;
 }
-bool IndirectAccessUnit::recvData(const Addr addr,
-                                  uint8_t *dataptr,
-                                  bool is_block_cached) {
+void IndirectAccessUnit::unblockMemChannel(int channel_addr) {
+    panic_if(mem_channels_blocked[channel_addr] == false, "I[%d] %s: channel %d is not blocked!\n", my_indirect_id, __func__, channel_addr);
+    mem_channels_blocked[channel_addr] = false;
+}
+bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_block_cached) {
     std::vector addr_vec = maa->map_addr(addr);
     int RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL],
                                 addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
@@ -1230,8 +1339,7 @@ bool IndirectAccessUnit::recvData(const Addr addr,
                                  addr_vec[ADDR_ROW_LEVEL]);
     std::vector<OffsetTableEntry> entries = RT[my_RT_config][RT_idx].get_entry_recv(grow_addr, addr);
     DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), grow(x%lx) from T[%d]!\n",
-            my_indirect_id, __func__, entries.size(),
-            addr, grow_addr, RT_idx);
+            my_indirect_id, __func__, entries.size(), addr, grow_addr, RT_idx);
     if (entries.size() == 0) {
         return false;
     }
@@ -1362,16 +1470,19 @@ bool IndirectAccessUnit::recvData(const Addr addr,
                         my_indirect_id, __func__, i, write_pkt->getPtr<double>()[i]);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles\n", my_indirect_id, __func__, write_pkt->print(), total_latency);
-        my_outstanding_write_pkts.insert(IndirectAccessUnit::IndirectPacket(write_pkt, false, false, maa->getClockEdge(total_latency)));
+        my_outstanding_mem_write_pkts.insert(IndirectAccessUnit::IndirectPacket(write_pkt, maa->getClockEdge(total_latency)));
         (*maa->stats.IND_StoresMemAccessing[my_indirect_id])++;
-        scheduleNextSendWrite();
+        scheduleNextSendMemWrite();
     } else {
         my_received_responses++;
         if (is_block_cached) {
-            createReadPacketEvict(addr);
+            createCacheEvictPacket(addr);
             (*maa->stats.IND_Evicts[my_indirect_id])++;
-            scheduleNextSendRead();
-        } else if (my_outstanding_read_pkts.size() == 0) {
+            scheduleNextSendCache();
+        } else if (my_outstanding_cache_read_pkts.size() == 0 &&
+                   my_outstanding_cpu_snoop_pkts.size() == 0 &&
+                   my_outstanding_cache_evict_pkts.size() == 0 &&
+                   my_outstanding_mem_read_pkts.size() == 0) {
             if (my_received_responses == my_expected_responses) {
                 DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again!\n", my_indirect_id, __func__);
                 scheduleNextExecution(true);
@@ -1421,33 +1532,63 @@ void IndirectAccessUnit::scheduleExecuteInstructionEvent(int latency) {
         }
     }
 }
-void IndirectAccessUnit::scheduleSendReadPacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
+void IndirectAccessUnit::scheduleSendCpuPacketEvent(int latency) {
+    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send cpu read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
     panic_if(latency < 0, "Negative latency of %d!\n", latency);
     Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendReadPacketEvent.scheduled()) {
-        maa->schedule(sendReadPacketEvent, new_when);
+    if (!sendCpuPacketEvent.scheduled()) {
+        maa->schedule(sendCpuPacketEvent, new_when);
     } else {
-        Tick old_when = sendReadPacketEvent.when();
-        DPRINTF(MAAIndirect, "I[%d] %s: send packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
+        Tick old_when = sendCpuPacketEvent.when();
+        DPRINTF(MAAIndirect, "I[%d] %s: send cpu packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
         if (new_when < old_when) {
             DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendReadPacketEvent, new_when);
+            maa->reschedule(sendCpuPacketEvent, new_when);
         }
     }
 }
-void IndirectAccessUnit::scheduleSendWritePacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send write packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
+void IndirectAccessUnit::scheduleSendCachePacketEvent(int latency) {
+    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send cache read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
     panic_if(latency < 0, "Negative latency of %d!\n", latency);
     Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendWritePacketEvent.scheduled()) {
-        maa->schedule(sendWritePacketEvent, new_when);
+    if (!sendCachePacketEvent.scheduled()) {
+        maa->schedule(sendCachePacketEvent, new_when);
     } else {
-        Tick old_when = sendWritePacketEvent.when();
+        Tick old_when = sendCachePacketEvent.when();
+        DPRINTF(MAAIndirect, "I[%d] %s: send cache packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
+        if (new_when < old_when) {
+            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
+            maa->reschedule(sendCachePacketEvent, new_when);
+        }
+    }
+}
+void IndirectAccessUnit::scheduleSendMemReadPacketEvent(int latency) {
+    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send mem read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
+    panic_if(latency < 0, "Negative latency of %d!\n", latency);
+    Tick new_when = maa->getClockEdge(Cycles(latency));
+    if (!sendMemReadPacketEvent.scheduled()) {
+        maa->schedule(sendMemReadPacketEvent, new_when);
+    } else {
+        Tick old_when = sendMemReadPacketEvent.when();
         DPRINTF(MAAIndirect, "I[%d] %s: send packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
         if (new_when < old_when) {
             DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendWritePacketEvent, new_when);
+            maa->reschedule(sendMemReadPacketEvent, new_when);
+        }
+    }
+}
+void IndirectAccessUnit::scheduleSendMemWritePacketEvent(int latency) {
+    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send mem write packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
+    panic_if(latency < 0, "Negative latency of %d!\n", latency);
+    Tick new_when = maa->getClockEdge(Cycles(latency));
+    if (!sendMemWritePacketEvent.scheduled()) {
+        maa->schedule(sendMemWritePacketEvent, new_when);
+    } else {
+        Tick old_when = sendMemWritePacketEvent.when();
+        DPRINTF(MAAIndirect, "I[%d] %s: send packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
+        if (new_when < old_when) {
+            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
+            maa->reschedule(sendMemWritePacketEvent, new_when);
         }
     }
 }

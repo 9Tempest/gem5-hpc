@@ -169,15 +169,11 @@ protected:
     class IndirectPacket {
     public:
         PacketPtr packet;
-        bool is_cached;
-        bool is_snoop;
         Tick tick;
-        IndirectPacket(PacketPtr _packet, bool _is_cached, bool _is_snoop, Tick _tick)
-            : packet(_packet), is_cached(_is_cached), is_snoop(_is_snoop), tick(_tick) {}
+        IndirectPacket(PacketPtr _packet, Tick _tick)
+            : packet(_packet), tick(_tick) {}
         IndirectPacket(const IndirectPacket &other) {
             packet = other.packet;
-            is_cached = other.is_cached;
-            is_snoop = other.is_snoop;
             tick = other.tick;
         }
         bool operator<(const IndirectPacket &rhs) const {
@@ -206,6 +202,8 @@ protected:
     int num_RT_rows_per_bank;
     int num_RT_entries_per_subbank_row;
     int num_RT_config_cache_entries;
+    int num_channels;
+    bool *mem_channels_blocked;
     Status state;
     RowTable **RT;
     OffsetTable *offset_table;
@@ -227,13 +225,17 @@ public:
                   int _num_row_table_config_cache_entries,
                   Cycles _rowtable_latency,
                   Cycles _cache_snoop_latency,
+                  int _num_channels,
                   MAA *_maa);
     Status getState() const { return state; }
     bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
-    void scheduleSendReadPacketEvent(int latency = 0);
-    void scheduleSendWritePacketEvent(int latency = 0);
+    void scheduleSendCachePacketEvent(int latency = 0);
+    void scheduleSendCpuPacketEvent(int latency = 0);
+    void scheduleSendMemReadPacketEvent(int latency = 0);
+    void scheduleSendMemWritePacketEvent(int latency = 0);
     void setInstruction(Instruction *_instruction);
+    void unblockMemChannel(int channel);
 
     bool recvData(const Addr addr,
                   uint8_t *dataptr,
@@ -246,8 +248,11 @@ public:
 
 protected:
     Instruction *my_instruction;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_write_pkts;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_read_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cpu_snoop_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_read_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_evict_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_write_pkts;
+    std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_read_pkts;
     Request::Flags flags = 0;
     const Addr block_size = 64;
     int my_word_size = -1;
@@ -286,11 +291,15 @@ protected:
     void setRowTableConfig(Addr addr, int num_CLs, int num_ROWs);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
-    EventFunctionWrapper sendReadPacketEvent;
-    EventFunctionWrapper sendWritePacketEvent;
+    EventFunctionWrapper sendCachePacketEvent;
+    EventFunctionWrapper sendCpuPacketEvent;
+    EventFunctionWrapper sendMemReadPacketEvent;
+    EventFunctionWrapper sendMemWritePacketEvent;
     void check_reset();
-    bool scheduleNextSendRead();
-    bool scheduleNextSendWrite();
+    bool scheduleNextSendCache();
+    bool scheduleNextSendCpu();
+    bool scheduleNextSendMemRead();
+    bool scheduleNextSendMemWrite();
     Cycles updateLatency(int num_spd_read_data_accesses,
                          int num_spd_read_condidx_accesses,
                          int num_spd_write_accesses,
@@ -298,10 +307,14 @@ protected:
                          int RT_access_parallelism);
 
 public:
-    void createReadPacket(Addr addr, int latency, bool is_cached, bool is_snoop);
-    void createReadPacketEvict(Addr addr);
-    bool sendOutstandingReadPacket();
-    bool sendOutstandingWritePacket();
+    void createCacheReadPacket(Addr addr);
+    void createCacheSnoopPacket(Addr addr, int latency);
+    void createCacheEvictPacket(Addr addr);
+    void createMemReadPacket(Addr addr);
+    bool sendOutstandingCachePacket();
+    bool sendOutstandingCpuPacket();
+    bool sendOutstandingMemReadPacket();
+    bool sendOutstandingMemWritePacket();
 };
 } // namespace gem5
 
