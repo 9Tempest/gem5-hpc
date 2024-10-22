@@ -50,6 +50,8 @@ MAA::MAA(const MAAParams &p)
       num_row_table_rows_per_bank(p.num_row_table_rows_per_bank),
       num_row_table_entries_per_subbank_row(p.num_row_table_entries_per_subbank_row),
       num_row_table_config_cache_entries(p.num_row_table_config_cache_entries),
+      num_request_table_addresses(p.num_request_table_addresses),
+      num_request_table_entries_per_address(p.num_request_table_entries_per_address),
       num_memory_channels(p.num_memory_channels),
       rowtable_latency(p.rowtable_latency),
       cache_snoop_latency(p.cache_snoop_latency),
@@ -80,7 +82,7 @@ MAA::MAA(const MAAParams &p)
     streamAccessUnits = new StreamAccessUnit[num_stream_access_units];
     streamAccessIdle = new bool[num_stream_access_units];
     for (int i = 0; i < num_stream_access_units; i++) {
-        streamAccessUnits[i].allocate(i, num_tile_elements, this);
+        streamAccessUnits[i].allocate(i, num_request_table_addresses, num_request_table_entries_per_address, num_tile_elements, this);
         streamAccessIdle[i] = true;
     }
     indirectAccessUnits = new IndirectAccessUnit[num_indirect_access_units];

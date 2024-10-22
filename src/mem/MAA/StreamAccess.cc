@@ -17,8 +17,10 @@ namespace gem5 {
 ///////////////
 // REQUEST TABLE
 ///////////////
-RequestTable::RequestTable(StreamAccessUnit *_stream_access, int _my_stream_id) {
+RequestTable::RequestTable(StreamAccessUnit *_stream_access, unsigned int _num_addresses, unsigned int _num_entries_per_address, int _my_stream_id) {
     stream_access = _stream_access;
+    num_addresses = _num_addresses;
+    num_entries_per_address = _num_entries_per_address;
     my_stream_id = _my_stream_id;
     entries = new RequestTableEntry *[num_addresses];
     entries_valid = new bool *[num_addresses];
@@ -134,13 +136,15 @@ StreamAccessUnit::StreamAccessUnit()
     request_table = nullptr;
     my_instruction = nullptr;
 }
-void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa) {
+void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_request_table_addresses, unsigned int _num_request_table_entries_per_address, unsigned int _num_tile_elements, MAA *_maa) {
     my_stream_id = _my_stream_id;
     num_tile_elements = _num_tile_elements;
+    num_request_table_addresses = _num_request_table_addresses;
+    num_request_table_entries_per_address = _num_request_table_entries_per_address;
     state = Status::Idle;
     maa = _maa;
     dst_tile_id = -1;
-    request_table = new RequestTable(this, my_stream_id);
+    request_table = new RequestTable(this, num_request_table_addresses, num_request_table_entries_per_address, my_stream_id);
     my_translation_done = false;
     my_instruction = nullptr;
 }
@@ -195,6 +199,42 @@ bool StreamAccessUnit::scheduleNextSend() {
     }
     return false;
 }
+int StreamAccessUnit::getGBGAddr(int channel, int rank, int bankgroup) {
+    return (channel * maa->m_org[ADDR_RANK_LEVEL] + rank) * maa->m_org[ADDR_BANKGROUP_LEVEL] + bankgroup;
+}
+StreamAccessUnit::PageInfo StreamAccessUnit::getPageInfo(int i, Addr base_addr, int word_size, int min, int stride) {
+    Addr word_vaddr = base_addr + word_size * i;
+    Addr block_vaddr = addrBlockAlign(word_vaddr, block_size);
+    Addr block_paddr = translatePacket(block_vaddr);
+    Addr word_paddr = block_paddr + (word_vaddr - block_vaddr);
+    Addr page_paddr = addrBlockAlign(block_paddr, page_size);
+    assert(word_paddr >= page_paddr);
+    Addr diff_word_page_paddr = word_paddr - page_paddr;
+    assert(diff_word_page_paddr % word_size == 0);
+    int diff_word_page_words = diff_word_page_paddr / word_size;
+    int min_itr = std::max(min, i - diff_word_page_words);
+    // we use ceiling here to find the minimum idx in the page
+    int min_idx = ((int)((min_itr - min - 1) / stride)) + 1;
+    // We find the minimum itr based on the minimum idx which is stride aligned
+    min_itr = min_idx * stride + min;
+    std::vector<int> addr_vec = maa->map_addr(page_paddr);
+    Addr gbg_addr = getGBGAddr(addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL]);
+    DPRINTF(MAAStream, "S[%d] %s: word[%d] wordPaddr[0x%lx] blockPaddr[0x%lx] pagePaddr[0x%lx] minItr[%d] minIdx[%d] GBG[%d]\n", my_stream_id, __func__, i, word_paddr, block_paddr, page_paddr, min_itr, min_idx, gbg_addr);
+    return StreamAccessUnit::PageInfo(min_itr, min_idx, gbg_addr);
+}
+void StreamAccessUnit::fillCurrentPageInfos() {
+    for (auto it = my_all_page_info.begin(); it != my_all_page_info.end();) {
+        if (std::find_if(my_current_page_info.begin(), my_current_page_info.end(), [it](const PageInfo &page) {
+                return page.bg_addr == it->bg_addr;
+            }) == my_current_page_info.end()) {
+            my_current_page_info.push_back(*it);
+            DPRINTF(MAAStream, "S[%d] %s: %s added to current page info!\n", my_stream_id, __func__, it->print());
+            it = my_all_page_info.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
 void StreamAccessUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
@@ -208,26 +248,38 @@ void StreamAccessUnit::executeInstruction() {
         DPRINTF(MAAStream, "S[%d] %s: decoding %s!\n", my_stream_id, __func__, my_instruction->print());
 
         // Decoding the instruction
+        my_base_addr = my_instruction->baseAddr;
         my_dst_tile = my_instruction->dst1SpdID;
         my_cond_tile = my_instruction->condSpdID;
         my_min = maa->rf->getData<int>(my_instruction->src1RegID);
         my_max = maa->rf->getData<int>(my_instruction->src2RegID);
         my_stride = maa->rf->getData<int>(my_instruction->src3RegID);
-        DPRINTF(MAAStream, "S[%d] %s: min: %d, max: %d, stride: %d!\n", my_stream_id, __func__, my_min, my_max, my_stride);
+        my_size = (my_max == my_min) ? 0 : std::min((int)(maa->num_tile_elements), ((int)((my_max - my_min - 1) / my_stride)) + 1);
+        DPRINTF(MAAStream, "S[%d] %s: min: %d, max: %d, stride: %d, size: %d!\n", my_stream_id, __func__, my_min, my_max, my_stride, my_size);
         my_word_size = my_instruction->getWordSize(my_dst_tile);
-        my_words_per_cl = 64 / my_word_size;
+        my_words_per_cl = block_size / my_word_size;
+        my_words_per_page = page_size / my_word_size;
         (*maa->stats.STR_NumInsts[my_stream_id])++;
         maa->stats.numInst_STRRD++;
         maa->stats.numInst++;
+        for (int i = my_min; i < my_max; i += my_words_per_page) {
+            StreamAccessUnit::PageInfo page_info = getPageInfo(i, my_base_addr, my_word_size, my_min, my_stride);
+            if (page_info.curr_idx >= maa->num_tile_elements) {
+                DPRINTF(MAAStream, "S[%d] %s: page %s is out of bounds, breaking...!\n", my_stream_id, __func__, page_info.print());
+                break;
+            } else {
+                my_all_page_info.push_back(page_info);
+            }
+        }
+        for (int i = 0; i < my_all_page_info.size() - 1; i++) {
+            my_all_page_info[i].max_itr = my_all_page_info[i + 1].curr_itr;
+        }
+        my_all_page_info[my_all_page_info.size() - 1].max_itr = my_max;
 
         // Initialization
-        my_i = my_min;
-        my_idx = 0;
-        my_base_addr = my_instruction->baseAddr;
         my_received_responses = 0;
         my_sent_requests = 0;
         request_table->reset();
-        my_last_block_vaddr = 0;
         my_SPD_read_finish_tick = curTick();
         my_SPD_write_finish_tick = curTick();
         my_RT_access_finish_tick = curTick();
@@ -239,7 +291,8 @@ void StreamAccessUnit::executeInstruction() {
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
         state = Status::Request;
-        [[fallthrough]];
+        scheduleExecuteInstructionEvent(Cycles(my_all_page_info.size() * 2));
+        break;
     }
     case Status::Request: {
         DPRINTF(MAAStream, "S[%d] %s: requesting %s!\n", my_stream_id, __func__, my_instruction->print());
@@ -249,83 +302,106 @@ void StreamAccessUnit::executeInstruction() {
         if (my_request_start_tick == 0) {
             my_request_start_tick = curTick();
         }
+        fillCurrentPageInfos();
         int num_spd_read_accesses = 0;
         int num_request_table_cacheline_accesses = 0;
-        for (; my_i < my_max && my_idx < maa->num_tile_elements; my_i += my_stride, my_idx++) {
-            if (my_cond_tile != -1) {
-                if (maa->spd->getElementFinished(my_cond_tile, my_idx, 4, (uint8_t)FuncUnitType::STREAM, my_stream_id) == false) {
-                    DPRINTF(MAAStream, "%s: cond tile[%d] element[%d] not ready, returning!\n", __func__, my_cond_tile, my_idx);
-                    updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
-                    scheduleNextSend();
-                    return;
-                }
-                num_spd_read_accesses++;
-            }
-            if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_idx) != 0) {
-                Addr vaddr = my_base_addr + my_word_size * my_i;
-                Addr block_vaddr = addrBlockAlign(vaddr, block_size);
-                if (block_vaddr != my_last_block_vaddr) {
-                    if (my_last_block_vaddr != 0) {
-                        my_sent_requests++;
-                        Addr paddr = translatePacket(my_last_block_vaddr);
-                        num_request_table_cacheline_accesses++;
-                        createReadPacket(paddr, num_request_table_cacheline_accesses);
+        bool broken = false;
+        bool *channel_sent = new bool[maa->m_org[ADDR_CHANNEL_LEVEL]];
+        while (my_current_page_info.empty() == false && request_table->is_full() == false) {
+            for (auto page_it = my_current_page_info.begin(); page_it != my_current_page_info.end() && request_table->is_full() == false;) {
+                DPRINTF(MAAStream, "S[%d] %s: operating on page %s!\n", my_stream_id, __func__, page_it->print());
+                std::fill(channel_sent, channel_sent + maa->m_org[ADDR_CHANNEL_LEVEL], false);
+                for (; page_it->curr_itr < page_it->max_itr && page_it->curr_idx < maa->num_tile_elements; page_it->curr_itr += my_stride, page_it->curr_idx++) {
+                    if (my_cond_tile != -1) {
+                        if (maa->spd->getElementFinished(my_cond_tile, page_it->curr_idx, 4, (uint8_t)FuncUnitType::STREAM, my_stream_id) == false) {
+                            DPRINTF(MAAStream, "%s: cond tile[%d] element[%d] not ready, moving page %s to all!\n", __func__, my_cond_tile, page_it->curr_idx, page_it->print());
+                            my_all_page_info.push_back(*page_it);
+                            page_it = my_current_page_info.erase(page_it);
+                            broken = true;
+                            break;
+                        }
+                        num_spd_read_accesses++;
                     }
-                    my_last_block_vaddr = block_vaddr;
+                    if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, page_it->curr_idx) != 0) {
+                        Addr vaddr = my_base_addr + my_word_size * page_it->curr_itr;
+                        Addr block_vaddr = addrBlockAlign(vaddr, block_size);
+                        if (block_vaddr != page_it->last_block_vaddr) {
+                            if (page_it->last_block_vaddr != 0) {
+                                Addr paddr = translatePacket(page_it->last_block_vaddr);
+                                std::vector<int> addr_vec = maa->map_addr(paddr);
+                                if (channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] == false) {
+                                    my_sent_requests++;
+                                    num_request_table_cacheline_accesses++;
+                                    createReadPacket(paddr, num_request_table_cacheline_accesses);
+                                    channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] = true;
+                                } else {
+                                    page_it++;
+                                    broken = true;
+                                    break;
+                                }
+                            }
+                            page_it->last_block_vaddr = block_vaddr;
+                        }
+                        Addr paddr = translatePacket(block_vaddr);
+                        uint16_t word_id = (vaddr - block_vaddr) / my_word_size;
+                        if (request_table->add_entry(page_it->curr_idx, paddr, word_id) == false) {
+                            DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n", my_stream_id, page_it->curr_idx, block_vaddr, paddr, word_id);
+                            updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
+                            (*maa->stats.STR_NumRTFull[my_stream_id])++;
+                            page_it++;
+                            broken = true;
+                            break;
+                        } else {
+                            DPRINTF(MAAStream, "S[%d] RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
+                                    my_stream_id, page_it->curr_idx, block_vaddr, paddr, word_id);
+                        }
+                    } else {
+                        DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_stream_id, __func__, my_dst_tile, page_it->curr_idx, 0);
+                        switch (my_instruction->datatype) {
+                        case Instruction::DataType::UINT32_TYPE: {
+                            maa->spd->setData<uint32_t>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        case Instruction::DataType::INT32_TYPE: {
+                            maa->spd->setData<int32_t>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        case Instruction::DataType::FLOAT32_TYPE: {
+                            maa->spd->setData<float>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        case Instruction::DataType::UINT64_TYPE: {
+                            maa->spd->setData<uint64_t>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        case Instruction::DataType::INT64_TYPE: {
+                            maa->spd->setData<int64_t>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        case Instruction::DataType::FLOAT64_TYPE: {
+                            maa->spd->setData<double>(my_dst_tile, page_it->curr_idx, 0);
+                            break;
+                        }
+                        default:
+                            assert(false);
+                        }
+                    }
                 }
-                Addr paddr = translatePacket(block_vaddr);
-                uint16_t word_id = (vaddr - block_vaddr) / my_word_size;
-                if (request_table->add_entry(my_idx, paddr, word_id) == false) {
-                    DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
-                            my_stream_id, my_idx, block_vaddr, paddr, word_id);
-                    updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
-                    scheduleNextExecution();
-                    scheduleNextSend();
-                    (*maa->stats.STR_NumRTFull[my_stream_id])++;
-                    return;
-                } else {
-                    DPRINTF(MAAStream, "S[%d] RequestTable: entry %d added! vaddr=0x%lx, paddr=0x%lx wid = %d\n",
-                            my_stream_id, my_idx, block_vaddr, paddr, word_id);
-                }
-            } else {
-                DPRINTF(MAAStream, "S[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_stream_id, __func__, my_dst_tile, my_idx, 0);
-                switch (my_instruction->datatype) {
-                case Instruction::DataType::UINT32_TYPE: {
-                    maa->spd->setData<uint32_t>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                case Instruction::DataType::INT32_TYPE: {
-                    maa->spd->setData<int32_t>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                case Instruction::DataType::FLOAT32_TYPE: {
-                    maa->spd->setData<float>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                case Instruction::DataType::UINT64_TYPE: {
-                    maa->spd->setData<uint64_t>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                case Instruction::DataType::INT64_TYPE: {
-                    maa->spd->setData<int64_t>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                case Instruction::DataType::FLOAT64_TYPE: {
-                    maa->spd->setData<double>(my_dst_tile, my_idx, 0);
-                    break;
-                }
-                default:
-                    assert(false);
+                if (broken == false && page_it->last_block_vaddr != 0) {
+                    my_sent_requests++;
+                    Addr paddr = translatePacket(page_it->last_block_vaddr);
+                    createReadPacket(paddr, num_request_table_cacheline_accesses);
+                    DPRINTF(MAAStream, "S[%d] %s: page %s done, removing!\n", my_stream_id, __func__, page_it->print());
+                    page_it = my_current_page_info.erase(page_it);
                 }
             }
         }
-        if (my_last_block_vaddr != 0) {
-            my_sent_requests++;
-            Addr paddr = translatePacket(my_last_block_vaddr);
-            createReadPacket(paddr, num_request_table_cacheline_accesses);
-            my_last_block_vaddr = 0;
-        }
+
+        delete[] channel_sent;
         updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
+        if (request_table->is_full()) {
+            scheduleNextExecution();
+        }
         scheduleNextSend();
         if (my_received_responses != my_sent_requests) {
             DPRINTF(MAAStream, "S[%d] %s: Waiting for responses, received (%d) != send (%d)...\n", my_stream_id, __func__, my_received_responses, my_sent_requests);
@@ -354,7 +430,7 @@ void StreamAccessUnit::executeInstruction() {
         maa->stats.cycles_STRRD += total_cycles;
         my_decode_start_tick = 0;
         state = Status::Idle;
-        maa->spd->setSize(my_dst_tile, my_idx);
+        maa->spd->setSize(my_dst_tile, my_size);
         maa->finishInstructionCompute(my_instruction);
         my_instruction = nullptr;
         request_table->check_reset();

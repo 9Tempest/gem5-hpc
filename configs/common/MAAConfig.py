@@ -41,6 +41,12 @@ def _get_maa_opts(options):
 
     if hasattr(options, "maa_num_row_table_config_cache_entries"):
         opts["num_row_table_config_cache_entries"] = getattr(options, "maa_num_row_table_config_cache_entries")
+    
+    if(hasattr(options, "maa_num_request_table_addresses")):
+        opts["num_request_table_addresses"] = getattr(options, "maa_num_request_table_addresses")
+    
+    if hasattr(options, "maa_num_request_table_entries_per_address"):
+        opts["num_request_table_entries_per_address"] = getattr(options, "maa_num_request_table_entries_per_address")
 
     if hasattr(options, "maa_spd_read_latency"):
         opts["spd_read_latency"] = getattr(options, "maa_spd_read_latency")

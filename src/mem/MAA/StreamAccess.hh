@@ -27,7 +27,7 @@ struct RequestTableEntry {
 
 class RequestTable {
 public:
-    RequestTable(StreamAccessUnit *_stream_access, int _my_stream_id);
+    RequestTable(StreamAccessUnit *_stream_access, unsigned int _num_addresses, unsigned int _num_entries_per_address, int _my_stream_id);
     ~RequestTable();
 
     bool add_entry(int itr, Addr base_addr, uint16_t wid);
@@ -37,8 +37,8 @@ public:
     void reset();
 
 protected:
-    const int num_addresses = 32;
-    const int num_entries_per_address = 16;
+    unsigned int num_addresses;
+    unsigned int num_entries_per_address;
     RequestTableEntry **entries;
     bool **entries_valid;
     Addr *addresses;
@@ -80,16 +80,24 @@ protected:
     };
     class PageInfo {
     public:
-        int min_itr, max_itr, bankgroup_addr, curr_itr, curr_idx;
-        PageInfo(int _min_itr, int _max_itr, int _bankgroup_addr, int _curr_itr, int _curr_idx)
-            : min_itr(_min_itr), max_itr(_max_itr), bankgroup_addr(_bankgroup_addr),
-              curr_itr(_curr_itr), curr_idx(_curr_idx) {}
+        int max_itr, bg_addr, curr_itr, curr_idx;
+        Addr last_block_vaddr;
+        PageInfo(int _min_itr, int _min_idx, int _bg_addr)
+            : max_itr(-1), bg_addr(_bg_addr),
+              curr_itr(_min_itr), curr_idx(_min_idx), last_block_vaddr(0) {}
         PageInfo(const PageInfo &other) {
-            min_itr = other.min_itr;
             max_itr = other.max_itr;
-            bankgroup_addr = other.bankgroup_addr;
+            bg_addr = other.bg_addr;
             curr_itr = other.curr_itr;
             curr_idx = other.curr_idx;
+            last_block_vaddr = other.last_block_vaddr;
+        }
+        std::string print() const {
+            return "Page(max_itr[" + std::to_string(max_itr) +
+                   "], bg_addr: [" + std::to_string(bg_addr) +
+                   "], curr_itr: [" + std::to_string(curr_itr) +
+                   "], curr_idx: [" + std::to_string(curr_idx) +
+                   "])";
         }
     };
     struct CompareByTick {
@@ -102,6 +110,8 @@ protected:
     std::vector<PageInfo> my_all_page_info;
     std::vector<PageInfo> my_current_page_info;
     unsigned int num_tile_elements;
+    unsigned int num_request_table_addresses;
+    unsigned int num_request_table_entries_per_address;
     Status state;
     RequestTable *request_table;
     int dst_tile_id;
@@ -113,7 +123,7 @@ public:
             delete request_table;
         }
     }
-    void allocate(int _my_stream_id, unsigned int _num_tile_elements, MAA *_maa);
+    void allocate(int _my_stream_id, unsigned int _num_request_table_addresses, unsigned int _num_request_table_entries_per_address, unsigned int _num_tile_elements, MAA *_maa);
 
     Status getState() const { return state; }
 
@@ -138,9 +148,8 @@ protected:
     Instruction *my_instruction;
     Request::Flags flags = 0;
     const Addr block_size = 64;
-    int my_i;
-    int my_idx;
-    Addr my_base_addr, my_last_block_vaddr;
+    const Addr page_size = 4096;
+    Addr my_base_addr;
     int my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
     int my_received_responses, my_sent_requests;
     int my_stream_id;
@@ -148,9 +157,10 @@ protected:
     Tick my_SPD_write_finish_tick;
     Tick my_RT_access_finish_tick;
     int my_word_size;
-    int my_words_per_cl;
+    int my_words_per_cl, my_words_per_page;
     Tick my_decode_start_tick;
     Tick my_request_start_tick;
+    int my_size;
 
     Addr my_translated_addr;
     bool my_translation_done;
@@ -163,6 +173,9 @@ protected:
     EventFunctionWrapper executeInstructionEvent;
     EventFunctionWrapper sendPacketEvent;
     bool scheduleNextSend();
+    int getGBGAddr(int channel, int rank, int bankgroup);
+    PageInfo getPageInfo(int i, Addr base_addr, int word_size, int min, int stride);
+    void fillCurrentPageInfos();
 };
 } // namespace gem5
 

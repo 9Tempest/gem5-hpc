@@ -20,6 +20,14 @@
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
 
+#define ADDR_CHANNEL_LEVEL   0
+#define ADDR_RANK_LEVEL      1
+#define ADDR_BANKGROUP_LEVEL 2
+#define ADDR_BANK_LEVEL      3
+#define ADDR_ROW_LEVEL       4
+#define ADDR_COLUMN_LEVEL    5
+#define ADDR_MAX_LEVEL       6
+
 namespace gem5 {
 
 struct MAAParams;
@@ -392,6 +400,8 @@ public:
     unsigned int num_row_table_rows_per_bank;
     unsigned int num_row_table_entries_per_subbank_row;
     unsigned int num_row_table_config_cache_entries;
+    unsigned int num_request_table_addresses;
+    unsigned int num_request_table_entries_per_address;
     unsigned int num_memory_channels;
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;

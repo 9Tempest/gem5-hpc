@@ -168,6 +168,7 @@ void MAA::MemSidePort::allocate(int _channel_id, int _num_indirect_access_units)
     for (int i = 0; i < num_indirect_access_units; i++) {
         isFuncBlocked[i] = false;
     }
+    isBlocked = false;
 }
 
 void MAA::MAAReqPacketQueue::sendDeferredPacket() {

@@ -15,14 +15,6 @@
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
 
-#define ADDR_CHANNEL_LEVEL   0
-#define ADDR_RANK_LEVEL      1
-#define ADDR_BANKGROUP_LEVEL 2
-#define ADDR_BANK_LEVEL      3
-#define ADDR_ROW_LEVEL       4
-#define ADDR_COLUMN_LEVEL    5
-#define ADDR_MAX_LEVEL       6
-
 namespace gem5 {
 
 class MAA;
