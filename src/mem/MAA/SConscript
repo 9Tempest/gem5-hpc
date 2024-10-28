@@ -15,6 +15,7 @@ Source('MemSidePort.cc')
 Source('MAA.cc')
 
 DebugFlag('MAA')
+DebugFlag('MAATrace')
 DebugFlag('SPD')
 DebugFlag('MAACpuPort')
 DebugFlag('MAACachePort')

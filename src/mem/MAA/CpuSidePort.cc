@@ -49,7 +49,7 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
             // It's a data
             for (int i = 0; i < num_indirect_access_units; i++) {
                 if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
-                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), false)) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true)) {
                         panic_if(received, "Received multiple responses for the same request\n");
                     }
                 }
@@ -78,9 +78,6 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
             pkt->getSize(),
             pkt->isBlockCached() ? "True" : "False",
             pkt->satisfied());
-    for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
-    }
     // assert(false);
     // Express snoop responses from requestor to responder, e.g., from L1 to L2
     maa.recvTimingSnoopResp(pkt);
@@ -108,40 +105,36 @@ void MAA::recvTimingReq(PacketPtr pkt) {
     AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
     DPRINTF(MAACpuPort, "%s: address range type: %s\n", __func__, address_range.print());
     for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAACpuPort, "%02x %s\n", pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+        panic_if(pkt->req->getByteEnable()[i] == false, "Byte enable [%d] is not set for the request\n", i);
     }
     switch (pkt->cmd.toInt()) {
+    case MemCmd::WritebackDirty: {
+        assert(pkt->isMaskedWrite() == false);
+        switch (address_range.getType()) {
+        case AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE: {
+            Addr offset = address_range.getOffset();
+            int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+            panic_if(pkt->getSize() != 64, "Invalid size for SPD data: %d\n", pkt->getSize());
+            int element_id = (offset % (num_tile_elements * sizeof(uint32_t))) / sizeof(uint32_t);
+            for (int i = 0; i < 64 / sizeof(uint32_t); i++) {
+                uint32_t data = pkt->getPtr<uint32_t>()[i];
+                DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %u\n", __func__, tile_id, element_id + i, data);
+                spd->setData<uint32_t>(tile_id, element_id + i, data);
+            }
+            assert(pkt->needsResponse() == false);
+            break;
+        }
+        default:
+            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
+                    __func__, address_range.print(), pkt->cmdString());
+            assert(false);
+        }
+        break;
+    }
     case MemCmd::WriteReq: {
         bool respond_immediately = true;
         assert(pkt->isMaskedWrite() == false);
         switch (address_range.getType()) {
-            // case AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE: {
-            //     Addr offset = address_range.getOffset();
-            //     int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
-            //     panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
-            //     int element_id = offset % (num_tile_elements * sizeof(uint32_t));
-            //     if (pkt->getSize() == 4) {
-            //         assert(element_id % sizeof(uint32_t) == 0);
-            //         element_id /= sizeof(uint32_t);
-            //         uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
-            //         int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
-            //         float data_FLOAT = pkt->getPtr<float>()[0];
-            //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %u/%d/%f\n", __func__, tile_id, element_id, data_UINT32, data_INT32, data_FLOAT);
-            //         spd->setData<uint32_t>(tile_id, element_id, data_UINT32);
-            //     } else {
-            //         assert(element_id % sizeof(uint64_t) == 0);
-            //         element_id /= sizeof(uint64_t);
-            //         uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
-            //         int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
-            //         double data_DOUBLE = pkt->getPtr<double>()[0];
-            //         DPRINTF(MAACpuPort, "%s: TILE[%d][%d] = %lu/%ld/%lf\n", __func__, tile_id, element_id, data_UINT64, data_INT64, data_DOUBLE);
-            //         spd->setData<uint64_t>(tile_id, element_id, data_UINT64);
-            //     }
-            //     assert(pkt->needsResponse());
-            //     pkt->makeTimingResponse();
-        //     cpuSidePort.schedTimingResp(pkt, getClockEdge(spd->setDataLatency(1)));
-        //     break;
-        // }
         case AddressRangeType::Type::SCALAR_RANGE: {
             Addr offset = address_range.getOffset();
             int element_id = offset % (num_regs * sizeof(uint32_t));
@@ -176,9 +169,28 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             element_id /= sizeof(uint64_t);
             uint64_t data = pkt->getPtr<uint64_t>()[0];
             DPRINTF(MAACpuPort, "%s: IF[%d] = %ld\n", __func__, element_id, data);
+            InstructionPtr current_instruction;
+            int instruction_id = -1;
+            for (int i = 0; i < my_instruction_RIDs.size(); i++) {
+                if (my_instruction_RIDs[i] == pkt->requestorId()) {
+                    panic_if(instruction_id != -1, "Received multiple instructions from the same requestor\n");
+                    panic_if(my_instruction_recvs[i], "Received new instruction after unissued instruction!\n");
+                    current_instruction = my_instructions[i];
+                    instruction_id = i;
+                    my_instruction_pkts[i] = pkt;
+                }
+            }
+            if (instruction_id == -1) {
+                current_instruction = new Instruction();
+                my_instruction_pkts.push_back(pkt);
+                my_instruction_RIDs.push_back(pkt->requestorId());
+                my_instruction_recvs.push_back(false);
+                my_instructions.push_back(current_instruction);
+            }
 #define NA_UINT8 0xFF
             switch (element_id) {
             case 0: {
+                panic_if(instruction_id != -1, "Received new instruction[0] after incomplete instruction!\n");
                 current_instruction->dst2SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
                 current_instruction->dst1SpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
@@ -193,6 +205,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 break;
             }
             case 1: {
+                panic_if(instruction_id == -1, "Received new instruction[1] before insturction[0]!\n");
                 current_instruction->condSpdID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
                 data = data >> 8;
                 current_instruction->src3RegID = (data & NA_UINT8) == NA_UINT8 ? -1 : (data & NA_UINT8);
@@ -212,15 +225,14 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 break;
             }
             case 2: {
+                panic_if(instruction_id == -1, "Received new instruction[2] before insturction[0]!\n");
                 current_instruction->baseAddr = data;
                 current_instruction->state = Instruction::Status::Idle;
                 current_instruction->CID = pkt->req->contextId();
                 current_instruction->PC = pkt->req->getPC();
+                my_instruction_recvs[instruction_id] = true;
                 DPRINTF(MAAController, "%s: %s received!\n", __func__, current_instruction->print());
                 respond_immediately = false;
-                panic_if(my_outstanding_instruction_pkt, "Received multiple instruction packets\n");
-                my_outstanding_instruction_pkt = true;
-                my_instruction_pkt = pkt;
                 scheduleDispatchInstructionEvent();
                 break;
             }
@@ -271,20 +283,20 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             assert(pkt->getSize() == sizeof(uint16_t));
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
-            my_ready_tile_id = offset / sizeof(uint16_t);
+            int ready_tile_id = offset / sizeof(uint16_t);
             const uint16_t one = 1;
             pkt->setData((const uint8_t *)&one);
             assert(pkt->needsResponse());
-            if (spd->getTileReady(my_ready_tile_id)) {
+            if (spd->getTileReady(ready_tile_id)) {
                 pkt->makeTimingResponse();
                 // Here we reset the timing of the packet.
                 Tick old_header_delay = pkt->headerDelay;
                 pkt->headerDelay = pkt->payloadDelay = 0;
                 cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             } else {
-                panic_if(my_outstanding_ready_pkt, "Received multiple ready read packets\n");
-                my_outstanding_ready_pkt = true;
-                my_ready_pkt = pkt;
+                // We need to respond to this packet later
+                my_ready_pkts.push_back(pkt);
+                my_ready_tile_ids.push_back(ready_tile_id);
             }
             break;
         }

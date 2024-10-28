@@ -53,11 +53,16 @@ public:
         DIV_OP = 3,
         MIN_OP = 4,
         MAX_OP = 5,
-        GT_OP = 6,
-        GTE_OP = 7,
-        LT_OP = 8,
-        LTE_OP = 9,
-        EQ_OP = 10,
+        AND_OP = 6,
+        OR_OP = 7,
+        XOR_OP = 8,
+        SHL_OP = 9,
+        SHR_OP = 10,
+        GT_OP = 11,
+        GTE_OP = 12,
+        LT_OP = 13,
+        LTE_OP = 14,
+        EQ_OP = 15,
         MAX
     };
     std::string optype_names[11] = {

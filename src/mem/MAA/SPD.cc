@@ -119,23 +119,23 @@ bool SPD::getTileDirty(int tile_id) {
 }
 void SPD::setTileReady(int tile_id, int word_size) {
     check_tile_id<uint32_t>(tile_id);
-    tiles_ready[tile_id] = true;
+    tiles_ready[tile_id]++;
     wakeup_waiting_units(tile_id);
     if (word_size == 8) {
-        tiles_ready[tile_id + 1] = true;
+        tiles_ready[tile_id + 1]++;
         wakeup_waiting_units(tile_id + 1);
     }
 }
 void SPD::setTileNotReady(int tile_id, int word_size) {
     check_tile_id<uint32_t>(tile_id);
-    tiles_ready[tile_id] = false;
+    tiles_ready[tile_id]--;
     if (word_size == 8) {
-        tiles_ready[tile_id + 1] = false;
+        tiles_ready[tile_id + 1]--;
     }
 }
 bool SPD::getTileReady(int tile_id) {
     check_tile_id<uint32_t>(tile_id);
-    return tiles_ready[tile_id];
+    return tiles_ready[tile_id] == 0;
 }
 bool SPD::getElementFinished(int tile_id, int element_id, int word_size, uint8_t func, int id) {
     check_tile_id<uint32_t>(tile_id);
@@ -213,13 +213,13 @@ SPD::SPD(MAA *_maa,
     tiles_data = new uint8_t[num_tiles * num_tile_elements * sizeof(uint32_t)];
     tiles_status = new SPD::TileStatus[num_tiles];
     tiles_dirty = new bool[num_tiles];
-    tiles_ready = new bool[num_tiles];
+    tiles_ready = new uint8_t[num_tiles];
     tiles_size = new uint16_t[num_tiles];
     for (int i = 0; i < num_tiles; i++) {
         tiles_status[i] = SPD::TileStatus::Finished;
         tiles_size[i] = 0;
         tiles_dirty[i] = false;
-        tiles_ready[i] = true;
+        tiles_ready[i] = 0;
     }
     element_finished = new bool[num_tiles * num_tile_elements];
     for (int i = 0; i < num_tiles * num_tile_elements; i++) {

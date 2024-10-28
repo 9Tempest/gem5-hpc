@@ -195,6 +195,8 @@ protected:
     int num_RT_entries_per_subbank_row;
     int num_RT_config_cache_entries;
     int num_channels;
+    bool reconfigure_RT;
+    int num_initial_RT_banks;
     bool *mem_channels_blocked;
     Status state;
     RowTable **RT;
@@ -215,6 +217,8 @@ public:
                   int _num_row_table_rows_per_bank,
                   int _num_row_table_entries_per_subbank_row,
                   int _num_row_table_config_cache_entries,
+                  bool _reconfigure_row_table,
+                  int _num_initial_row_table_banks,
                   Cycles _rowtable_latency,
                   Cycles _cache_snoop_latency,
                   int _num_channels,

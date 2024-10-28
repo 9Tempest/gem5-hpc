@@ -50,6 +50,8 @@ MAA::MAA(const MAAParams &p)
       num_row_table_rows_per_bank(p.num_row_table_rows_per_bank),
       num_row_table_entries_per_subbank_row(p.num_row_table_entries_per_subbank_row),
       num_row_table_config_cache_entries(p.num_row_table_config_cache_entries),
+      reconfigure_row_table(p.reconfigure_row_table),
+      num_initial_row_table_banks(p.num_initial_row_table_banks),
       num_request_table_addresses(p.num_request_table_addresses),
       num_request_table_entries_per_address(p.num_request_table_entries_per_address),
       num_memory_channels(p.num_memory_channels),
@@ -57,10 +59,6 @@ MAA::MAA(const MAAParams &p)
       cache_snoop_latency(p.cache_snoop_latency),
       system(p.system),
       mmu(p.mmu),
-      my_instruction_pkt(nullptr),
-      my_ready_pkt(nullptr),
-      my_outstanding_instruction_pkt(false),
-      my_outstanding_ready_pkt(false),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
       stats(this,
@@ -110,7 +108,6 @@ MAA::MAA(const MAAParams &p)
         rangeUnits[i].allocate(num_tile_elements, this, i);
         rangeUnitsIdle[i] = true;
     }
-    current_instruction = new Instruction();
     invalidatorIdle = true;
     for (int i = 0; i < p.port_mem_sides_connection_count; ++i) {
         std::string portName = csprintf("%s.mem_side_port[%d]", p.name, i);
@@ -180,6 +177,8 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
         indirectAccessUnits[i].allocate(i, num_tile_elements, num_row_table_rows_per_bank,
                                         num_row_table_entries_per_subbank_row,
                                         num_row_table_config_cache_entries,
+                                        reconfigure_row_table,
+                                        num_initial_row_table_banks,
                                         rowtable_latency,
                                         cache_snoop_latency,
                                         m_org[ADDR_CHANNEL_LEVEL],
@@ -335,13 +334,13 @@ void MAA::issueInstruction() {
         stats.cycles_IDLE += getTicksToCycles(curTick() - my_last_idle_tick);
     }
 }
-uint8_t MAA::getTileStatus(int tile_id, bool is_dst) {
+uint8_t MAA::getTileStatus(InstructionPtr instruction, int tile_id, bool is_dst) {
     if (tile_id == -1)
         return (uint8_t)(Instruction::TileStatus::Finished);
 
     bool is_dirty = spd->getTileDirty(tile_id);
     SPD::TileStatus status = spd->getTileStatus(tile_id);
-    if (current_instruction->getWordSize(tile_id) == 8) {
+    if (instruction->getWordSize(tile_id) == 8) {
         if (spd->getTileDirty(tile_id + 1) == true) {
             is_dirty = true;
         }
@@ -370,41 +369,64 @@ uint8_t MAA::getTileStatus(int tile_id, bool is_dst) {
 }
 void MAA::dispatchInstruction() {
     DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
-    if (my_outstanding_instruction_pkt) {
-        assert(my_instruction_pkt != nullptr);
-        current_instruction->src1Status = (Instruction::TileStatus)getTileStatus(current_instruction->src1SpdID, false);
-        current_instruction->src2Status = (Instruction::TileStatus)getTileStatus(current_instruction->src2SpdID, false);
-        current_instruction->condStatus = (Instruction::TileStatus)getTileStatus(current_instruction->condSpdID, false);
-        // assume that we can read from any tile, so invalidate all destinations
-        // Instructions with DST1: stream and indirect load, range loop, ALU
-        current_instruction->dst1Status = (Instruction::TileStatus)getTileStatus(current_instruction->dst1SpdID, true);
-        // Instructions with DST2: range loop
-        current_instruction->dst2Status = (Instruction::TileStatus)getTileStatus(current_instruction->dst2SpdID, true);
-        if (ifile->pushInstruction(*current_instruction)) {
-            DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, current_instruction->print());
-            if (current_instruction->dst1SpdID != -1) {
-                assert(current_instruction->dst1SpdID != current_instruction->src1SpdID);
-                assert(current_instruction->dst1SpdID != current_instruction->src2SpdID);
-                spd->setTileIdle(current_instruction->dst1SpdID, current_instruction->getWordSize(current_instruction->dst1SpdID));
-                spd->setTileNotReady(current_instruction->dst1SpdID, current_instruction->getWordSize(current_instruction->dst1SpdID));
+    assert(my_instruction_pkts.size() == my_instructions.size());
+    assert(my_instruction_recvs.size() == my_instructions.size());
+    assert(my_instruction_RIDs.size() == my_instructions.size());
+    auto pkt_it = my_instruction_pkts.begin();
+    auto recv_it = my_instruction_recvs.begin();
+    auto rid_it = my_instruction_RIDs.begin();
+    auto instruction_it = my_instructions.begin();
+    while (pkt_it != my_instruction_pkts.end() && instruction_it != my_instructions.end() &&
+           recv_it != my_instruction_recvs.end() && rid_it != my_instruction_RIDs.end()) {
+        if (*recv_it == true) {
+            InstructionPtr instruction = *instruction_it;
+            PacketPtr pkt = *pkt_it;
+            instruction->src1Status = (Instruction::TileStatus)getTileStatus(instruction, instruction->src1SpdID, false);
+            instruction->src2Status = (Instruction::TileStatus)getTileStatus(instruction, instruction->src2SpdID, false);
+            instruction->condStatus = (Instruction::TileStatus)getTileStatus(instruction, instruction->condSpdID, false);
+            // assume that we can read from any tile, so invalidate all destinations
+            // Instructions with DST1: stream and indirect load, range loop, ALU
+            instruction->dst1Status = (Instruction::TileStatus)getTileStatus(instruction, instruction->dst1SpdID, true);
+            // Instructions with DST2: range loop
+            instruction->dst2Status = (Instruction::TileStatus)getTileStatus(instruction, instruction->dst2SpdID, true);
+            if (ifile->pushInstruction(*instruction)) {
+                DPRINTF(MAAController, "%s: %s dispatched!\n", __func__, instruction->print());
+                if (instruction->dst1SpdID != -1) {
+                    assert(instruction->dst1SpdID != instruction->src1SpdID);
+                    assert(instruction->dst1SpdID != instruction->src2SpdID);
+                    spd->setTileIdle(instruction->dst1SpdID, instruction->getWordSize(instruction->dst1SpdID));
+                    spd->setTileNotReady(instruction->dst1SpdID, instruction->getWordSize(instruction->dst1SpdID));
+                }
+                if (instruction->dst2SpdID != -1) {
+                    assert(instruction->dst2SpdID != instruction->src1SpdID);
+                    assert(instruction->dst2SpdID != instruction->src2SpdID);
+                    spd->setTileIdle(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
+                    spd->setTileNotReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
+                }
+                if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
+                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+                    spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
+                }
+                pkt->makeTimingResponse();
+                pkt->headerDelay = pkt->payloadDelay = 0;
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                scheduleIssueInstructionEvent(1);
+                pkt_it = my_instruction_pkts.erase(pkt_it);
+                recv_it = my_instruction_recvs.erase(recv_it);
+                rid_it = my_instruction_RIDs.erase(rid_it);
+                instruction_it = my_instructions.erase(instruction_it);
+            } else {
+                DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, instruction->print());
+                pkt_it++;
+                recv_it++;
+                rid_it++;
+                instruction_it++;
             }
-            if (current_instruction->dst2SpdID != -1) {
-                assert(current_instruction->dst2SpdID != current_instruction->src1SpdID);
-                assert(current_instruction->dst2SpdID != current_instruction->src2SpdID);
-                spd->setTileIdle(current_instruction->dst2SpdID, current_instruction->getWordSize(current_instruction->dst2SpdID));
-                spd->setTileNotReady(current_instruction->dst2SpdID, current_instruction->getWordSize(current_instruction->dst2SpdID));
-            }
-            if (current_instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-                current_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
-                spd->setTileNotReady(current_instruction->src2SpdID, current_instruction->getWordSize(current_instruction->src2SpdID));
-            }
-            my_instruction_pkt->makeTimingResponse();
-            my_instruction_pkt->headerDelay = my_instruction_pkt->payloadDelay = 0;
-            cpuSidePort.schedTimingResp(my_instruction_pkt, getClockEdge(Cycles(1)));
-            scheduleIssueInstructionEvent(1);
-            my_outstanding_instruction_pkt = false;
         } else {
-            DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, current_instruction->print());
+            pkt_it++;
+            recv_it++;
+            rid_it++;
+            instruction_it++;
         }
     }
 }
@@ -452,18 +474,30 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
 }
 void MAA::setTileReady(int tileID, int wordSize) {
     DPRINTF(MAAController, "%s: tile[%d] is ready!\n", __func__, tileID);
-    bool is_received = (my_ready_tile_id == tileID);
-    if (wordSize == 8) {
-        is_received = is_received || (my_ready_tile_id == tileID + 1);
-    }
-    if (my_outstanding_ready_pkt && is_received) {
-        DPRINTF(MAAController, "%s: responding to outstanding ready packet!\n", __func__);
-        my_ready_pkt->makeTimingResponse();
-        my_instruction_pkt->headerDelay = my_instruction_pkt->payloadDelay = 0;
-        cpuSidePort.schedTimingResp(my_ready_pkt, getClockEdge(Cycles(1)));
-        my_outstanding_ready_pkt = false;
-    }
     spd->setTileReady(tileID, wordSize);
+    if (spd->getTileReady(tileID)) {
+        assert(my_ready_pkts.size() == my_ready_tile_ids.size());
+        auto pkt_it = my_ready_pkts.begin();
+        auto tile_id_it = my_ready_tile_ids.begin();
+        while (pkt_it != my_ready_pkts.end() && tile_id_it != my_ready_tile_ids.end()) {
+            bool is_ready = (*tile_id_it == tileID);
+            if (wordSize == 8) {
+                is_ready = is_ready || (*tile_id_it == tileID + 1);
+            }
+            if (is_ready) {
+                PacketPtr pkt = *pkt_it;
+                DPRINTF(MAAController, "%s: responding to outstanding ready packet %s!\n", __func__, pkt->print());
+                pkt->makeTimingResponse();
+                pkt->headerDelay = pkt->payloadDelay = 0;
+                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                pkt_it = my_ready_pkts.erase(pkt_it);
+                tile_id_it = my_ready_tile_ids.erase(tile_id_it);
+            } else {
+                pkt_it++;
+                tile_id_it++;
+            }
+        }
+    }
 }
 void MAA::finishInstructionInvalidate(Instruction *instruction, int tileID) {
     invalidatorIdle = true;
@@ -507,7 +541,9 @@ Tick MAA::getCyclesToTicks(Cycles c) const {
 }
 void MAA::resetStats() {
     my_last_idle_tick = curTick();
+    printf("Resetting MAA stats\n");
     ClockedObject::resetStats();
+    printf("NumInst after reset: %lf\n", stats.numInst.value());
 }
 
 #define MAKE_INDIRECT_STAT_NAME(name) \

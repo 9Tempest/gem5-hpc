@@ -6,6 +6,7 @@
 #include "base/trace.hh"
 #include "base/types.hh"
 #include "debug/MAAIndirect.hh"
+#include "debug/MAATrace.hh"
 #include "mem/packet.hh"
 #include "sim/cur_tick.hh"
 #include <cassert>
@@ -414,6 +415,8 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
                                   int _num_row_table_rows_per_bank,
                                   int _num_row_table_entries_per_subbank_row,
                                   int _num_row_table_config_cache_entries,
+                                  bool _reconfigure_row_table,
+                                  int _num_initial_row_table_banks,
                                   Cycles _rowtable_latency,
                                   Cycles _cache_snoop_latency,
                                   int _num_channels,
@@ -424,6 +427,8 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
     num_RT_rows_per_bank = _num_row_table_rows_per_bank;
     num_RT_entries_per_subbank_row = _num_row_table_entries_per_subbank_row;
     num_RT_config_cache_entries = _num_row_table_config_cache_entries;
+    reconfigure_RT = _reconfigure_row_table;
+    num_initial_RT_banks = _num_initial_row_table_banks;
     rowtable_latency = _rowtable_latency;
     cache_snoop_latency = _cache_snoop_latency;
     num_channels = _num_channels;
@@ -480,10 +485,7 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
         num_RT_subbanks[i] = current_num_RT_subbanks;
         num_RT_bank_columns[i] = current_num_RT_entries_per_row;
         num_RT_possible_grows[i] = current_num_RT_possible_grows;
-        // if (current_num_RT_entries_per_row == 4) {
-        //     initial_RT_config = i;
-        // }
-        if (current_num_RT_banks == 16) {
+        if (reconfigure_RT == false && current_num_RT_banks == num_initial_RT_banks) {
             initial_RT_config = i;
         }
         panic_if(current_num_RT_entries_per_row <= 0, "I[%d] TC[%d] %s: current_num_RT_entries_per_row is %d!\n",
@@ -539,7 +541,8 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
         current_num_RT_entries_per_row /= 2;
         current_num_RT_possible_grows /= 2;
     }
-    // initial_RT_config = num_RT_configs - 1;
+    if (reconfigure_RT)
+        initial_RT_config = num_RT_configs - 1;
     DPRINTF(MAAIndirect, "I[%d] %s: initial_RT_config(%d)!\n", my_indirect_id, __func__, initial_RT_config);
 }
 int IndirectAccessUnit::getRowTableIdx(int RT_config, int channel, int rank, int bankgroup, int bank) {
@@ -570,7 +573,8 @@ Addr IndirectAccessUnit::getGrowAddr(int RT_config, int bankgroup, int bank, int
     return grow_addr;
 }
 int IndirectAccessUnit::getRowTableConfig(Addr addr) {
-    return initial_RT_config;
+    if (reconfigure_RT == false)
+        return initial_RT_config;
 
     int oldest_entry = -1;
     Tick oldest_tick = 0;
@@ -591,7 +595,10 @@ int IndirectAccessUnit::getRowTableConfig(Addr addr) {
     return initial_RT_config;
 }
 void IndirectAccessUnit::setRowTableConfig(Addr addr, int num_CLs, int num_ROWs) {
-    return;
+    if (reconfigure_RT == false)
+        return;
+
+    // This approach selects the configuration with as many ROWs as needed
     int new_config = -1;
     if (num_ROWs >= num_RT_rows_total[num_RT_configs - 1]) {
         new_config = num_RT_configs - 1;
@@ -627,7 +634,7 @@ void IndirectAccessUnit::setRowTableConfig(Addr addr, int num_CLs, int num_ROWs)
     for (int i = 0; i < num_RT_config_cache_entries; i++) {
         if (RT_config_addr[i] == addr) {
             RT_config_cache[i] = new_config;
-            DPRINTF(MAAIndirect, "I[%d] %s: addr(0x%lx) set to config(%d) with (%d/%d) CLs, (%d/%d) ROWs, (%d/%d) CLs/ROW!\n",
+            DPRINTF(MAATrace, "I[%d] %s: addr(0x%lx) set to config(%d) with (%d/%d) CLs, (%d/%d) ROWs, (%d/%d) CLs/ROW!\n",
                     my_indirect_id, __func__, addr, new_config,
                     num_CLs, num_RT_bank_columns[new_config] * num_RT_banks[new_config] * num_RT_rows_per_bank,
                     num_ROWs, num_RT_rows_total[new_config],
@@ -732,21 +739,29 @@ bool IndirectAccessUnit::scheduleNextSendMemRead() {
     return false;
 }
 bool IndirectAccessUnit::scheduleNextSendMemWrite() {
-    if (my_outstanding_mem_write_pkts.size() > 0) {
+    bool return_val = false;
+    for (auto it = my_outstanding_mem_write_pkts.begin(); it != my_outstanding_mem_write_pkts.end();) {
+        if (mem_channels_blocked[maa->channel_addr(it->packet->getAddr())]) {
+            return_val = true;
+            ++it;
+            continue;
+        }
         Cycles latency = Cycles(0);
-        if (my_outstanding_mem_write_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_mem_write_pkts.begin()->tick - curTick());
+        if (it->tick > curTick()) {
+            latency = maa->getTicksToCycles(it->tick - curTick());
         }
         scheduleSendMemWritePacketEvent(latency);
-        return true;
+        return_val = true;
+        break;
     }
-    return false;
+    return return_val;
 }
 void IndirectAccessUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: idling %s!\n", my_indirect_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "I[%d] Start [%s]\n", my_indirect_id, my_instruction->print());
         state = Status::Decode;
         [[fallthrough]];
     }
@@ -887,8 +902,8 @@ void IndirectAccessUnit::executeInstruction() {
                 DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile, my_i);
             }
             if (cond_ready == false || idx_ready == false || src_ready == false) {
-                // Row table parallelism = #banks. Each bank can be inserted once at a cycle
-                updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
+                // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
+                updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
                 return;
             }
             if (my_cond_tile != -1) {
@@ -916,8 +931,8 @@ void IndirectAccessUnit::executeInstruction() {
                 bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid);
                 num_rowtable_accesses++;
                 if (inserted == false) {
-                    // Row table parallelism = #banks. Each bank can be inserted once at a cycle
-                    updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
+                    // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
+                    updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
                     scheduleNextExecution(true);
                     state = Status::Build;
                     (*maa->stats.IND_NumRTFull[my_indirect_id])++;
@@ -967,8 +982,8 @@ void IndirectAccessUnit::executeInstruction() {
         DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n",
                 my_indirect_id, __func__, my_instruction->print());
 
-        // Row table parallelism = #banks. Each bank can be inserted once at a cycle
-        updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, num_RT_banks[my_RT_config]);
+        // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
+        updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
         scheduleNextExecution(true);
         state = Status::Build;
         my_drain = true;
@@ -1061,6 +1076,7 @@ void IndirectAccessUnit::executeInstruction() {
     case Status::Response: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAIndirect, "I[%d] %s: responding %s!\n", my_indirect_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "I[%d] End [%s]\n", my_indirect_id, my_instruction->print());
         panic_if(scheduleNextExecution(), "I[%d] %s: Execution is not completed!\n", my_indirect_id, __func__);
         panic_if(scheduleNextSendCache(), "I[%d] %s: Sending cache reads/evicts is not completed!\n", my_indirect_id, __func__);
         panic_if(scheduleNextSendCpu(), "I[%d] %s: Sending cpu snoop is not completed!\n", my_indirect_id, __func__);
@@ -1313,7 +1329,7 @@ bool IndirectAccessUnit::sendOutstandingMemWritePacket() {
             ++it;
             continue;
         } else {
-            it = my_outstanding_mem_write_pkts.erase(my_outstanding_mem_write_pkts.begin());
+            it = my_outstanding_mem_write_pkts.erase(it);
             my_received_responses++;
             write_packet_sent = true;
             continue;
@@ -1343,6 +1359,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
     if (entries.size() == 0) {
         return false;
     }
+    bool cache_response = false;
     if (is_block_cached) {
         if (LoadsCacheHitRespondingTimeHistory.find(addr) != LoadsCacheHitRespondingTimeHistory.end()) {
             (*maa->stats.IND_LoadsCacheHitRespondingLatency[my_indirect_id]) += maa->getTicksToCycles(curTick() - LoadsCacheHitRespondingTimeHistory[addr]);
@@ -1350,6 +1367,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
         } else if (LoadsCacheHitAccessingTimeHistory.find(addr) != LoadsCacheHitAccessingTimeHistory.end()) {
             (*maa->stats.IND_LoadsCacheHitAccessingLatency[my_indirect_id]) += maa->getTicksToCycles(curTick() - LoadsCacheHitAccessingTimeHistory[addr]);
             LoadsCacheHitAccessingTimeHistory.erase(addr);
+            cache_response = true;
         } else {
             panic("I[%d] %s: addr(0x%lx) is not in the cache hit history!\n", my_indirect_id, __func__, addr);
         }
@@ -1475,7 +1493,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
         scheduleNextSendMemWrite();
     } else {
         my_received_responses++;
-        if (is_block_cached) {
+        if (cache_response) {
             createCacheEvictPacket(addr);
             (*maa->stats.IND_Evicts[my_indirect_id])++;
             scheduleNextSendCache();

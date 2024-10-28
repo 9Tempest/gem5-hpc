@@ -4,6 +4,7 @@
 #include "mem/MAA/SPD.hh"
 #include "base/trace.hh"
 #include "debug/MAAALU.hh"
+#include "debug/MAATrace.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -75,6 +76,7 @@ void ALUUnit::executeInstruction() {
     case Status::Idle: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAALU, "A[%d] %s: idling %s!\n", my_alu_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "A[%d] Start [%s]\n", my_alu_id, my_instruction->print());
         state = Status::Decode;
         [[fallthrough]];
     }
@@ -106,7 +108,12 @@ void ALUUnit::executeInstruction() {
             my_instruction->optype == Instruction::OPType::MUL_OP ||
             my_instruction->optype == Instruction::OPType::DIV_OP ||
             my_instruction->optype == Instruction::OPType::MIN_OP ||
-            my_instruction->optype == Instruction::OPType::MAX_OP) {
+            my_instruction->optype == Instruction::OPType::MAX_OP ||
+            my_instruction->optype == Instruction::OPType::AND_OP ||
+            my_instruction->optype == Instruction::OPType::OR_OP ||
+            my_instruction->optype == Instruction::OPType::XOR_OP ||
+            my_instruction->optype == Instruction::OPType::SHL_OP ||
+            my_instruction->optype == Instruction::OPType::SHR_OP) {
             (*maa->stats.ALU_NumInstsCompute[my_alu_id])++;
         } else {
             (*maa->stats.ALU_NumInstsCompare[my_alu_id])++;
@@ -237,6 +244,21 @@ void ALUUnit::executeInstruction() {
                     case Instruction::OPType::MAX_OP:
                         result_UINT32_compute = std::max(src1, src2);
                         break;
+                    case Instruction::OPType::AND_OP:
+                        result_UINT32_compute = src1 & src2;
+                        break;
+                    case Instruction::OPType::OR_OP:
+                        result_UINT32_compute = src1 | src2;
+                        break;
+                    case Instruction::OPType::XOR_OP:
+                        result_UINT32_compute = src1 ^ src2;
+                        break;
+                    case Instruction::OPType::SHL_OP:
+                        result_UINT32_compute = src1 << src2;
+                        break;
+                    case Instruction::OPType::SHR_OP:
+                        result_UINT32_compute = src1 >> src2;
+                        break;
                     case Instruction::OPType::GT_OP:
                         result_UINT32_compare = src1 > src2 ? 1 : 0;
                         break;
@@ -301,6 +323,21 @@ void ALUUnit::executeInstruction() {
                         break;
                     case Instruction::OPType::MAX_OP:
                         result_INT32 = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::AND_OP:
+                        result_INT32 = src1 & src2;
+                        break;
+                    case Instruction::OPType::OR_OP:
+                        result_INT32 = src1 | src2;
+                        break;
+                    case Instruction::OPType::XOR_OP:
+                        result_INT32 = src1 ^ src2;
+                        break;
+                    case Instruction::OPType::SHL_OP:
+                        result_INT32 = src1 << src2;
+                        break;
+                    case Instruction::OPType::SHR_OP:
+                        result_INT32 = src1 >> src2;
                         break;
                     case Instruction::OPType::GT_OP:
                         result_UINT32 = src1 > src2 ? 1 : 0;
@@ -432,6 +469,21 @@ void ALUUnit::executeInstruction() {
                     case Instruction::OPType::MAX_OP:
                         result_UINT64 = std::max(src1, src2);
                         break;
+                    case Instruction::OPType::AND_OP:
+                        result_UINT64 = src1 & src2;
+                        break;
+                    case Instruction::OPType::OR_OP:
+                        result_UINT64 = src1 | src2;
+                        break;
+                    case Instruction::OPType::XOR_OP:
+                        result_UINT64 = src1 ^ src2;
+                        break;
+                    case Instruction::OPType::SHL_OP:
+                        result_UINT64 = src1 << src2;
+                        break;
+                    case Instruction::OPType::SHR_OP:
+                        result_UINT64 = src1 >> src2;
+                        break;
                     case Instruction::OPType::GT_OP:
                         result_UINT32 = src1 > src2 ? 1 : 0;
                         break;
@@ -496,6 +548,21 @@ void ALUUnit::executeInstruction() {
                         break;
                     case Instruction::OPType::MAX_OP:
                         result_INT64 = std::max(src1, src2);
+                        break;
+                    case Instruction::OPType::AND_OP:
+                        result_INT64 = src1 & src2;
+                        break;
+                    case Instruction::OPType::OR_OP:
+                        result_INT64 = src1 | src2;
+                        break;
+                    case Instruction::OPType::XOR_OP:
+                        result_INT64 = src1 ^ src2;
+                        break;
+                    case Instruction::OPType::SHL_OP:
+                        result_INT64 = src1 << src2;
+                        break;
+                    case Instruction::OPType::SHR_OP:
+                        result_INT64 = src1 >> src2;
                         break;
                     case Instruction::OPType::GT_OP:
                         result_UINT32 = src1 > src2 ? 1 : 0;
@@ -648,6 +715,7 @@ void ALUUnit::executeInstruction() {
     }
     case Status::Finish: {
         DPRINTF(MAAALU, "A[%d] %s: finishing %s!\n", my_alu_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "A[%d] End [%s]\n", my_alu_id, my_instruction->print());
         my_instruction->state = Instruction::Status::Finish;
         state = Status::Idle;
         panic_if(my_max != -1 && my_i != my_max, "A[%d] %s: my_i (%d) != my_max (%d)!\n", my_alu_id, __func__, my_i, my_max);

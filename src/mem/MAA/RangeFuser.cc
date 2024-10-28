@@ -5,6 +5,7 @@
 #include "mem/MAA/SPD.hh"
 #include "base/trace.hh"
 #include "debug/MAARangeFuser.hh"
+#include "debug/MAATrace.hh"
 #include <cassert>
 
 #ifndef TRACING_ON
@@ -71,6 +72,7 @@ void RangeFuserUnit::executeInstruction() {
     case Status::Idle: {
         assert(my_instruction != nullptr);
         DPRINTF(MAARangeFuser, "R[%d] %s: idling %s!\n", my_range_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "R[%d] Start [%s]\n", my_range_id, my_instruction->print());
         state = Status::Decode;
         [[fallthrough]];
     }
@@ -224,6 +226,7 @@ void RangeFuserUnit::executeInstruction() {
     }
     case Status::Finish: {
         DPRINTF(MAARangeFuser, "R[%d] %s: finishing %s!\n", my_range_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "R[%d] End [%s]\n", my_range_id, my_instruction->print());
         panic_if(my_cond_tile_ready == false, "R[%d] %s: cond tile[%d] not ready!\n", my_range_id, __func__, my_cond_tile);
         panic_if(my_min_tile_ready == false, "R[%d] %s: min tile[%d] not ready!\n", my_range_id, __func__, my_min_tile);
         panic_if(my_max_tile_ready == false, "R[%d] %s: max tile[%d] not ready!\n", my_range_id, __func__, my_max_tile);

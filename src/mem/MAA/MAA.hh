@@ -40,6 +40,7 @@ class Invalidator;
 class ALUUnit;
 class RangeFuserUnit;
 class Instruction;
+typedef Instruction *InstructionPtr;
 
 /**
  * A basic cache interface. Implements some common functions for speed.
@@ -400,12 +401,13 @@ public:
     unsigned int num_row_table_rows_per_bank;
     unsigned int num_row_table_entries_per_subbank_row;
     unsigned int num_row_table_config_cache_entries;
+    bool reconfigure_row_table;
+    unsigned int num_initial_row_table_banks;
     unsigned int num_request_table_addresses;
     unsigned int num_request_table_entries_per_address;
     unsigned int num_memory_channels;
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;
-    Instruction *current_instruction;
     RequestorID requestorId;
 
 public:
@@ -426,8 +428,8 @@ public:
 
     const AddrRangeList &getAddrRanges() const { return addrRanges; }
     void setTileReady(int tileID, int wordSize);
-    void finishInstructionCompute(Instruction *instruction);
-    void finishInstructionInvalidate(Instruction *instruction, int tileID);
+    void finishInstructionCompute(InstructionPtr instruction);
+    void finishInstructionInvalidate(InstructionPtr instruction, int tileID);
     bool sentMemSidePacket(PacketPtr pkt);
     Tick getClockEdge(Cycles cycles = Cycles(0)) const;
     Cycles getTicksToCycles(Tick t) const;
@@ -435,13 +437,14 @@ public:
     void resetStats() override;
 
 protected:
-    PacketPtr my_instruction_pkt;
-    PacketPtr my_ready_pkt;
-    bool my_outstanding_instruction_pkt;
-    bool my_outstanding_ready_pkt;
+    std::vector<RequestorID> my_instruction_RIDs;
+    std::vector<PacketPtr> my_instruction_pkts;
+    std::vector<bool> my_instruction_recvs;
+    std::vector<PacketPtr> my_ready_pkts;
     Tick my_last_idle_tick;
-    int my_ready_tile_id;
-    uint8_t getTileStatus(int tile_id, bool is_dst);
+    std::vector<int> my_ready_tile_ids;
+    std::vector<InstructionPtr> my_instructions;
+    uint8_t getTileStatus(InstructionPtr instruction, int tile_id, bool is_dst);
     void issueInstruction();
     void dispatchInstruction();
     EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;

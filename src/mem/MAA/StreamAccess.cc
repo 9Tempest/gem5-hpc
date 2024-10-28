@@ -5,6 +5,7 @@
 #include "mem/MAA/SPD.hh"
 #include "base/trace.hh"
 #include "debug/MAAStream.hh"
+#include "debug/MAATrace.hh"
 #include "sim/cur_tick.hh"
 #include <cassert>
 
@@ -240,6 +241,7 @@ void StreamAccessUnit::executeInstruction() {
     case Status::Idle: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAStream, "S[%d] %s: idling %s!\n", my_stream_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "S[%d] Start [%s]\n", my_stream_id, my_instruction->print());
         state = Status::Decode;
         [[fallthrough]];
     }
@@ -305,12 +307,13 @@ void StreamAccessUnit::executeInstruction() {
         fillCurrentPageInfos();
         int num_spd_read_accesses = 0;
         int num_request_table_cacheline_accesses = 0;
-        bool broken = false;
+        bool broken;
         bool *channel_sent = new bool[maa->m_org[ADDR_CHANNEL_LEVEL]];
         while (my_current_page_info.empty() == false && request_table->is_full() == false) {
             for (auto page_it = my_current_page_info.begin(); page_it != my_current_page_info.end() && request_table->is_full() == false;) {
                 DPRINTF(MAAStream, "S[%d] %s: operating on page %s!\n", my_stream_id, __func__, page_it->print());
                 std::fill(channel_sent, channel_sent + maa->m_org[ADDR_CHANNEL_LEVEL], false);
+                broken = false;
                 for (; page_it->curr_itr < page_it->max_itr && page_it->curr_idx < maa->num_tile_elements; page_it->curr_itr += my_stride, page_it->curr_idx++) {
                     if (my_cond_tile != -1) {
                         if (maa->spd->getElementFinished(my_cond_tile, page_it->curr_idx, 4, (uint8_t)FuncUnitType::STREAM, my_stream_id) == false) {
@@ -387,10 +390,12 @@ void StreamAccessUnit::executeInstruction() {
                         }
                     }
                 }
-                if (broken == false && page_it->last_block_vaddr != 0) {
-                    my_sent_requests++;
-                    Addr paddr = translatePacket(page_it->last_block_vaddr);
-                    createReadPacket(paddr, num_request_table_cacheline_accesses);
+                if (broken == false) {
+                    if (page_it->last_block_vaddr != 0) {
+                        my_sent_requests++;
+                        Addr paddr = translatePacket(page_it->last_block_vaddr);
+                        createReadPacket(paddr, num_request_table_cacheline_accesses);
+                    }
                     DPRINTF(MAAStream, "S[%d] %s: page %s done, removing!\n", my_stream_id, __func__, page_it->print());
                     page_it = my_current_page_info.erase(page_it);
                 }
@@ -415,6 +420,7 @@ void StreamAccessUnit::executeInstruction() {
     case Status::Response: {
         assert(my_instruction != nullptr);
         DPRINTF(MAAStream, "S[%d] %s: responding %s!\n", my_stream_id, __func__, my_instruction->print());
+        DPRINTF(MAATrace, "S[%d] End [%s]\n", my_stream_id, my_instruction->print());
         panic_if(scheduleNextExecution(), "S[%d] %s: Execution is not completed!\n", my_stream_id, __func__);
         panic_if(scheduleNextSend(), "S[%d] %s: Sending is not completed!\n", my_stream_id, __func__);
         panic_if(my_received_responses != my_sent_requests, "S[%d] %s: received_responses(%d) != sent_requests(%d)!\n",

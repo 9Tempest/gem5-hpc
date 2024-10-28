@@ -23,6 +23,8 @@ class MAA(ClockedObject):
     num_row_table_config_cache_entries = Param.Unsigned(16, "Number of row table entry history in the configuration cache")
     num_request_table_addresses = Param.Unsigned(64, "Number of addresses in the request table")
     num_request_table_entries_per_address = Param.Unsigned(16, "Number of entries in the request table per address")
+    reconfigure_row_table = Param.Bool(False, "Reconfigure row table")
+    num_initial_row_table_banks = Param.Unsigned(4, "Number of initial row table banks if row table is not reconfigurable")
     spd_read_latency = Param.Cycles(1, "SPD read latency")
     spd_write_latency = Param.Cycles(1, "SPD write latency")
     num_spd_read_ports = Param.Unsigned(1, "Number of SPD read ports")

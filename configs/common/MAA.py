@@ -15,6 +15,8 @@ class SharedMAA(MAA):
     num_row_table_rows_per_bank = 64
     num_row_table_entries_per_subbank_row = 8
     num_row_table_config_cache_entries = 16
+    reconfigure_row_table = False
+    num_initial_row_table_banks = 4
     num_request_table_addresses = 64
     num_request_table_entries_per_address = 16
     spd_read_latency = 1
