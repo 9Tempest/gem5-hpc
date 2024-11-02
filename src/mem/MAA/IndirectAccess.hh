@@ -276,7 +276,7 @@ protected:
     bool **my_RT_req_sent;
     std::vector<int> *my_RT_bank_order;
     int my_i, my_RT_idx;
-    bool my_drain;
+    bool my_fill_finished;
 
     bool my_translation_done;
     Addr my_translated_addr;
@@ -298,6 +298,10 @@ protected:
     Addr getGrowAddr(int RT_config, int bankgroup, int bank, int row);
     int getRowTableConfig(Addr addr);
     void setRowTableConfig(Addr addr, int num_CLs, int num_ROWs);
+    void checkTileReady();
+    bool checkElementReady();
+    bool checkReadyForFinish();
+    void fillRowTable(bool &finished, bool &waitForFinish, bool &waitForElement, bool &needDrain, int &num_spd_read_condidx_accesses, int &num_rowtable_accesses);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
     EventFunctionWrapper sendCachePacketEvent;

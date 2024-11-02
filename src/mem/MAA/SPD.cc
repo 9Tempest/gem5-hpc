@@ -47,7 +47,7 @@ Cycles SPD::getDataLatency(int num_accesses) {
     return maa->getTicksToCycles(read_port_busy_until[min_busy_port] - curTick());
 }
 Cycles SPD::setDataLatency(int tile_id, int num_accesses) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     if (num_accesses == 0) {
         return Cycles(0);
     }
@@ -72,11 +72,11 @@ Cycles SPD::setDataLatency(int tile_id, int num_accesses) {
     return maa->getTicksToCycles(write_port_busy_until[min_busy_port] - curTick());
 }
 SPD::TileStatus SPD::getTileStatus(int tile_id) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     return tiles_status[tile_id];
 }
 void SPD::setTileIdle(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_status[tile_id] = SPD::TileStatus::Idle;
     if (word_size == 8) {
         tiles_status[tile_id + 1] = SPD::TileStatus::Idle;
@@ -86,39 +86,39 @@ void SPD::setTileIdle(int tile_id, int word_size) {
     }
 }
 void SPD::setTileFinished(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_status[tile_id] = SPD::TileStatus::Finished;
     if (word_size == 8) {
         tiles_status[tile_id + 1] = SPD::TileStatus::Finished;
     }
 }
 void SPD::setTileService(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_status[tile_id] = SPD::TileStatus::Service;
     if (word_size == 8) {
         tiles_status[tile_id + 1] = SPD::TileStatus::Service;
     }
 }
 void SPD::setTileDirty(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_dirty[tile_id] = true;
     if (word_size == 8) {
         tiles_dirty[tile_id + 1] = true;
     }
 }
 void SPD::setTileClean(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_dirty[tile_id] = false;
     if (word_size == 8) {
         tiles_dirty[tile_id + 1] = false;
     }
 }
 bool SPD::getTileDirty(int tile_id) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     return tiles_dirty[tile_id];
 }
 void SPD::setTileReady(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_ready[tile_id]++;
     wakeup_waiting_units(tile_id);
     if (word_size == 8) {
@@ -127,18 +127,18 @@ void SPD::setTileReady(int tile_id, int word_size) {
     }
 }
 void SPD::setTileNotReady(int tile_id, int word_size) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     tiles_ready[tile_id]--;
     if (word_size == 8) {
         tiles_ready[tile_id + 1]--;
     }
 }
 bool SPD::getTileReady(int tile_id) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     return tiles_ready[tile_id] == 0;
 }
 bool SPD::getElementFinished(int tile_id, int element_id, int word_size, uint8_t func, int id) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     bool is_element_finished;
     if (element_id >= num_tile_elements) {
         is_element_finished = false;
@@ -185,7 +185,7 @@ void SPD::wakeup_waiting_units(int tile_id) {
     waiting_units_ids[tile_id].clear();
 }
 uint16_t SPD::getSize(int tile_id) {
-    check_tile_id<uint32_t>(tile_id);
+    check_tile_id(tile_id, sizeof(uint32_t));
     panic_if(getTileStatus(tile_id) != SPD::TileStatus::Finished,
              "Trying to get size of an uninitialized tile[%d]!\n",
              tile_id);

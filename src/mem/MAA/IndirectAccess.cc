@@ -790,6 +790,129 @@ bool IndirectAccessUnit::scheduleNextSendMemWrite() {
     }
     return return_val;
 }
+void IndirectAccessUnit::checkTileReady() {
+    // Check if any of the source tiles are ready
+    // Set my_max to the size of the ready tile
+    if (my_cond_tile != -1) {
+        if (maa->spd->getTileStatus(my_cond_tile) == SPD::TileStatus::Finished) {
+            my_cond_tile_ready = true;
+            if (my_max == -1) {
+                my_max = maa->spd->getSize(my_cond_tile);
+                DPRINTF(MAAIndirect, "I[%d] %s: my_max = cond size (%d)!\n", my_indirect_id, __func__, my_max);
+            }
+            panic_if(maa->spd->getSize(my_cond_tile) != my_max, "I[%d] %s: cond size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_cond_tile), my_max);
+        }
+    }
+    if (maa->spd->getTileStatus(my_idx_tile) == SPD::TileStatus::Finished) {
+        my_idx_tile_ready = true;
+        if (my_max == -1) {
+            my_max = maa->spd->getSize(my_idx_tile);
+            DPRINTF(MAAIndirect, "I[%d] %s: my_max = idx size (%d)!\n", my_indirect_id, __func__, my_max);
+        }
+        panic_if(maa->spd->getSize(my_idx_tile) != my_max, "I[%d] %s: idx size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_idx_tile), my_max);
+    }
+    if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
+        my_src_tile_ready = true;
+    }
+}
+bool IndirectAccessUnit::checkElementReady() {
+    bool cond_ready = my_cond_tile == -1 || maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
+    bool idx_ready = cond_ready && maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
+    bool src_ready = idx_ready && (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD || maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id));
+    if (cond_ready == false) {
+        DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile, my_i);
+    } else if (idx_ready == false) {
+        DPRINTF(MAAIndirect, "I[%d] %s: idx tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_idx_tile, my_i);
+    } else if (src_ready == false) {
+        // TODO: this is too early to check src_ready, check it in other stages
+        DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile, my_i);
+    }
+    if (cond_ready == false || idx_ready == false || src_ready == false) {
+        return false;
+    }
+    return true;
+}
+bool IndirectAccessUnit::checkReadyForFinish() {
+    if (my_cond_tile_ready == false) {
+        DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile);
+        // Just a fake access to callback INDIRECT when the condition is ready
+        maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
+        return false;
+    } else if (my_idx_tile_ready == false) {
+        DPRINTF(MAAIndirect, "I[%d] %s: idx tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_idx_tile);
+        // Just a fake access to callback INDIRECT when the idx is ready
+        maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
+        return false;
+    } else if (my_src_tile_ready == false) {
+        DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile);
+        // Just a fake access to callback INDIRECT when the src is ready
+        maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
+        return false;
+    }
+    return true;
+}
+void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool &waitForElement, bool &needDrain, int &num_spd_read_condidx_accesses, int &num_rowtable_accesses) {
+    finished = false;
+    waitForFinish = false;
+    waitForElement = false;
+    needDrain = false;
+    num_spd_read_condidx_accesses = 0;
+    num_rowtable_accesses = 0;
+    checkTileReady();
+    while (true) {
+        if (my_max != -1 && my_i >= my_max) {
+            if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+                panic_if(my_max != -1 && my_i != my_max, "I[%d] %s: my_i(%d) != my_max(%d)!\n", my_indirect_id, __func__, my_i, my_max);
+                maa->spd->setSize(my_dst_tile, my_i);
+            }
+            if (checkReadyForFinish()) {
+                finished = true;
+                break;
+            } else {
+                waitForFinish = true;
+                break;
+            }
+        }
+        if (checkElementReady() == false) {
+            // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
+            // updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
+            waitForElement = true;
+            break;
+        }
+        if (my_cond_tile != -1) {
+            num_spd_read_condidx_accesses++;
+        }
+        if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_i) != 0) {
+            uint32_t idx = maa->spd->getData<uint32_t>(my_idx_tile, my_i);
+            num_spd_read_condidx_accesses++;
+            Addr vaddr = my_base_addr + my_word_size * idx;
+            Addr block_vaddr = addrBlockAlign(vaddr, block_size);
+            Addr paddr = translatePacket(block_vaddr);
+            Addr block_paddr = addrBlockAlign(paddr, block_size);
+            DPRINTF(MAAIndirect, "I[%d] %s: idx = %u, addr = 0x%lx!\n", my_indirect_id, __func__, idx, block_paddr);
+            uint16_t wid = (vaddr - block_vaddr) / my_word_size;
+            std::vector<int> addr_vec = maa->map_addr(block_paddr);
+            my_RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
+            Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_ROW_LEVEL]);
+            DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n", my_indirect_id, __func__, block_vaddr, block_paddr, addr_vec[ADDR_ROW_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_COLUMN_LEVEL], addr_vec[ADDR_CHANNEL_LEVEL], grow_addr, my_i, idx, wid, my_RT_idx);
+            bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid);
+            num_rowtable_accesses++;
+            if (inserted == false) {
+                needDrain = true;
+                (*maa->stats.IND_NumRTFull[my_indirect_id])++;
+                break;
+            } else {
+                my_unique_WORD_addrs.insert(vaddr);
+                my_unique_CL_addrs.insert(block_paddr);
+                my_unique_ROW_addrs.insert(grow_addr + my_RT_idx * num_RT_possible_grows[my_RT_config]);
+            }
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+            DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_indirect_id, __func__, my_dst_tile, my_i, 0);
+            maa->spd->setFakeData(my_dst_tile, my_i, my_word_size);
+        }
+        my_i++;
+    }
+}
 void IndirectAccessUnit::executeInstruction() {
     switch (state) {
     case Status::Idle: {
@@ -856,7 +979,7 @@ void IndirectAccessUnit::executeInstruction() {
         my_fill_start_tick = 0;
         my_build_start_tick = 0;
         my_request_start_tick = 0;
-        my_drain = false;
+        my_fill_finished = false;
 
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
@@ -866,34 +989,9 @@ void IndirectAccessUnit::executeInstruction() {
     }
     case Status::Fill: {
         // Reordering the indices
-        int num_spd_read_condidx_accesses = 0;
-        int num_rowtable_accesses = 0;
         DPRINTF(MAAIndirect, "I[%d] %s: filling %s!\n", my_indirect_id, __func__, my_instruction->print());
         if (scheduleNextExecution()) {
             break;
-        }
-        // Check if any of the source tiles are ready
-        // Set my_max to the size of the ready tile
-        if (my_cond_tile != -1) {
-            if (maa->spd->getTileStatus(my_cond_tile) == SPD::TileStatus::Finished) {
-                my_cond_tile_ready = true;
-                if (my_max == -1) {
-                    my_max = maa->spd->getSize(my_cond_tile);
-                    DPRINTF(MAAIndirect, "I[%d] %s: my_max = cond size (%d)!\n", my_indirect_id, __func__, my_max);
-                }
-                panic_if(maa->spd->getSize(my_cond_tile) != my_max, "I[%d] %s: cond size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_cond_tile), my_max);
-            }
-        }
-        if (maa->spd->getTileStatus(my_idx_tile) == SPD::TileStatus::Finished) {
-            my_idx_tile_ready = true;
-            if (my_max == -1) {
-                my_max = maa->spd->getSize(my_idx_tile);
-                DPRINTF(MAAIndirect, "I[%d] %s: my_max = idx size (%d)!\n", my_indirect_id, __func__, my_max);
-            }
-            panic_if(maa->spd->getSize(my_idx_tile) != my_max, "I[%d] %s: idx size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_idx_tile), my_max);
-        }
-        if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
-            my_src_tile_ready = true;
         }
         if (my_fill_start_tick == 0) {
             my_fill_start_tick = curTick();
@@ -902,131 +1000,38 @@ void IndirectAccessUnit::executeInstruction() {
             (*maa->stats.IND_CyclesRequest[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_request_start_tick);
             my_request_start_tick = 0;
         }
-        while (true) {
-            if (my_max != -1 && my_i >= my_max) {
-                if (my_cond_tile_ready == false) {
-                    DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile);
-                    // Just a fake access to callback INDIRECT when the condition is ready
-                    maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-                    return;
-                } else if (my_idx_tile_ready == false) {
-                    DPRINTF(MAAIndirect, "I[%d] %s: idx tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_idx_tile);
-                    // Just a fake access to callback INDIRECT when the idx is ready
-                    maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-                    return;
-                } else if (my_src_tile_ready == false) {
-                    DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile);
-                    // Just a fake access to callback INDIRECT when the src is ready
-                    maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-                    return;
-                }
-                DPRINTF(MAAIndirect, "I[%d] %s: my_i (%d) >= my_max (%d), finished!\n", my_indirect_id, __func__, my_i, my_max);
-                break;
-            }
-            bool cond_ready = my_cond_tile == -1 || maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-            bool idx_ready = cond_ready && maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-            bool src_ready = idx_ready && (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD ||
-                                           maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id));
-            if (cond_ready == false) {
-                DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile, my_i);
-            } else if (idx_ready == false) {
-                DPRINTF(MAAIndirect, "I[%d] %s: idx tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_idx_tile, my_i);
-            } else if (src_ready == false) {
-                // TODO: this is too early to check src_ready, check it in other stages
-                DPRINTF(MAAIndirect, "I[%d] %s: src tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_src_tile, my_i);
-            }
-            if (cond_ready == false || idx_ready == false || src_ready == false) {
-                // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
-                updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
-                return;
-            }
-            if (my_cond_tile != -1) {
-                num_spd_read_condidx_accesses++;
-            }
-            if (my_cond_tile == -1 || maa->spd->getData<uint32_t>(my_cond_tile, my_i) != 0) {
-                uint32_t idx = maa->spd->getData<uint32_t>(my_idx_tile, my_i);
-                num_spd_read_condidx_accesses++;
-                Addr vaddr = my_base_addr + my_word_size * idx;
-                Addr block_vaddr = addrBlockAlign(vaddr, block_size);
-                Addr paddr = translatePacket(block_vaddr);
-                Addr block_paddr = addrBlockAlign(paddr, block_size);
-                DPRINTF(MAAIndirect, "I[%d] %s: idx = %u, addr = 0x%lx!\n",
-                        my_indirect_id, __func__, idx, block_paddr);
-                uint16_t wid = (vaddr - block_vaddr) / my_word_size;
-                std::vector<int> addr_vec = maa->map_addr(block_paddr);
-                my_RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL],
-                                           addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
-                Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL],
-                                             addr_vec[ADDR_ROW_LEVEL]);
-                DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n",
-                        my_indirect_id, __func__, block_vaddr, block_paddr,
-                        addr_vec[ADDR_ROW_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_COLUMN_LEVEL], addr_vec[ADDR_CHANNEL_LEVEL],
-                        grow_addr, my_i, idx, wid, my_RT_idx);
-                bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid);
-                num_rowtable_accesses++;
-                if (inserted == false) {
-                    // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
-                    updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
-                    scheduleNextExecution(true);
-                    state = Status::Build;
-                    (*maa->stats.IND_NumRTFull[my_indirect_id])++;
-                    return;
-                } else {
-                    my_unique_WORD_addrs.insert(vaddr);
-                    my_unique_CL_addrs.insert(block_paddr);
-                    my_unique_ROW_addrs.insert(grow_addr + my_RT_idx * num_RT_possible_grows[my_RT_config]);
-                }
-            } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
-                DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_indirect_id, __func__, my_dst_tile, my_i, 0);
-                switch (my_instruction->datatype) {
-                case Instruction::DataType::UINT32_TYPE: {
-                    maa->spd->setData<uint32_t>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                case Instruction::DataType::INT32_TYPE: {
-                    maa->spd->setData<int32_t>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                case Instruction::DataType::FLOAT32_TYPE: {
-                    maa->spd->setData<float>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                case Instruction::DataType::UINT64_TYPE: {
-                    maa->spd->setData<uint64_t>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                case Instruction::DataType::INT64_TYPE: {
-                    maa->spd->setData<int64_t>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                case Instruction::DataType::FLOAT64_TYPE: {
-                    maa->spd->setData<double>(my_dst_tile, my_i, 0);
-                    break;
-                }
-                default:
-                    assert(false);
-                }
-            }
-            my_i++;
+        bool finished, waitForFinish, waitForElement, needDrain;
+        int num_spd_read_condidx_accesses, num_rowtable_accesses;
+        fillRowTable(finished, waitForFinish, waitForElement, needDrain, num_spd_read_condidx_accesses, num_rowtable_accesses);
+        bool buildReady = false;
+        if (waitForFinish) {
+            DPRINTF(MAAIndirect, "I[%d] %s: waiting for fill finish %s!\n", my_indirect_id, __func__, my_instruction->print());
+        } else if (finished) {
+            DPRINTF(MAAIndirect, "I[%d] %s: fill finished %s!\n", my_indirect_id, __func__, my_instruction->print());
+            my_fill_finished = true;
+            buildReady = true;
+        } else if (waitForElement) {
+            DPRINTF(MAAIndirect, "I[%d] %s: waiting for fill element %s!\n", my_indirect_id, __func__, my_instruction->print());
+        } else if (needDrain) {
+            DPRINTF(MAAIndirect, "I[%d] %s: fill needs to drain %s!\n", my_indirect_id, __func__, my_instruction->print());
+            my_fill_finished = false;
+            buildReady = true;
+        } else {
+            panic_if(false, "I[%d] %s: unknown state!\n", my_indirect_id, __func__);
         }
-        if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
-            panic_if(my_max != -1 && my_i != my_max, "I[%d] %s: my_i(%d) != my_max(%d)!\n", my_indirect_id, __func__, my_i, my_max);
-            maa->spd->setSize(my_dst_tile, my_i);
-        }
-        DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n",
-                my_indirect_id, __func__, my_instruction->print());
-
         // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
         updateLatency(0, num_spd_read_condidx_accesses, 0, num_rowtable_accesses, total_num_RT_subbanks);
-        scheduleNextExecution(true);
-        state = Status::Build;
-        my_drain = true;
+        if (buildReady) {
+            DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n", my_indirect_id, __func__, my_instruction->print());
+            scheduleNextExecution(true);
+            state = Status::Build;
+        }
         return;
     }
     case Status::Build: {
         assert(my_instruction != nullptr);
-        DPRINTF(MAAIndirect, "I[%d] %s: Building %s requests, draining mode: %s!\n",
-                my_indirect_id, __func__, my_instruction->print(), my_drain ? "true" : "false");
+        DPRINTF(MAAIndirect, "I[%d] %s: Building %s requests, fill finished: %s!\n",
+                my_indirect_id, __func__, my_instruction->print(), my_fill_finished ? "true" : "false");
         if (scheduleNextExecution()) {
             break;
         }
@@ -1048,7 +1053,7 @@ void IndirectAccessUnit::executeInstruction() {
                 assert(RT_idx < num_RT_banks[my_RT_config]);
                 DPRINTF(MAAIndirect, "I[%d] %s: Checking row table bank[%d]!\n", my_indirect_id, __func__, RT_idx);
                 if (my_RT_req_sent[my_RT_config][RT_idx] == false) {
-                    if (RT[my_RT_config][RT_idx].get_entry_send(addr, my_drain)) {
+                    if (RT[my_RT_config][RT_idx].get_entry_send(addr, my_fill_finished)) {
                         DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n", my_indirect_id, __func__, RT_idx, addr);
                         my_expected_responses++;
                         num_rowtable_accesses++;
@@ -1086,9 +1091,9 @@ void IndirectAccessUnit::executeInstruction() {
             break;
         }
         if (allPacketsSent() && my_received_responses == my_expected_responses) {
-            if (my_drain) {
+            if (my_fill_finished) {
                 state = Status::Response;
-                my_drain = false;
+                my_fill_finished = false;
             } else {
                 state = Status::Fill;
             }
@@ -1191,14 +1196,6 @@ void IndirectAccessUnit::createCacheSnoopPacket(Addr addr, int latency) {
     my_outstanding_cpu_snoop_pkts.insert(new_packet);
     DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles at tick %u, for cache\n", my_indirect_id, __func__, snoop_pkt->print(), latency, new_packet.tick);
 }
-// void IndirectAccessUnit::createCacheEvictPacket(Addr addr, int core_id) {
-//     /**** Packet generation ****/
-//     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
-//     PacketPtr my_pkt = new Packet(real_req, MemCmd::CleanEvict);
-//     IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(my_pkt, maa->getClockEdge(Cycles(0)), core_id);
-//     my_outstanding_cache_evict_pkts.insert(new_packet);
-//     DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles\n", my_indirect_id, __func__, my_pkt->print(), 0);
-// }
 void IndirectAccessUnit::createMemReadPacket(Addr addr) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
@@ -1265,9 +1262,6 @@ bool IndirectAccessUnit::sendOutstandingCpuPacket() {
     return true;
 }
 bool IndirectAccessUnit::sendOutstandingCachePacket() {
-    // bool read_packet_blocked = false;
-    // bool evict_packet_sent = false;
-
     DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cache read packets...\n", my_indirect_id, __func__, my_outstanding_cache_read_pkts.size());
     while (my_outstanding_cache_read_pkts.empty() == false) {
         IndirectAccessUnit::IndirectPacket read_pkt = *my_outstanding_cache_read_pkts.begin();
@@ -1283,22 +1277,6 @@ bool IndirectAccessUnit::sendOutstandingCachePacket() {
             my_outstanding_cache_read_pkts.erase(my_outstanding_cache_read_pkts.begin());
         }
     }
-
-    // DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cache evict packets...\n", my_indirect_id, __func__, my_outstanding_cache_evict_pkts.size());
-    // while (my_outstanding_cache_evict_pkts.empty() == false && read_packet_blocked == false) {
-    //     IndirectAccessUnit::IndirectPacket evict_pkt = *my_outstanding_cache_evict_pkts.begin();
-    //     DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide\n", my_indirect_id, __func__, evict_pkt.packet->print());
-    //     panic_if(evict_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(evict_pkt.tick - curTick()));
-    //     panic_if(evict_pkt.packet->needsResponse(), "I[%d] %s: packet needs response!\n", my_indirect_id, __func__);
-    //     if (maa->sendPacketCache((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, evict_pkt.packet, evict_pkt.core_id) == false) {
-    //         DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-    //         break;
-    //     } else {
-    //         evict_packet_sent = true;
-    //         my_outstanding_cache_evict_pkts.erase(my_outstanding_cache_evict_pkts.begin());
-    //         // A packet is sent successfully, we can continue sending the next packets
-    //     }
-    // }
 
     if (allPacketsSent() && (my_received_responses == my_expected_responses)) { // evict_packet_sent &&
         DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n", my_indirect_id, __func__, status_names[(int)state]);
@@ -1382,13 +1360,10 @@ void IndirectAccessUnit::unblockMemChannel(int channel_addr) {
 }
 bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_block_cached, int core_id) {
     std::vector addr_vec = maa->map_addr(addr);
-    int RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL],
-                                addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
-    Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL],
-                                 addr_vec[ADDR_ROW_LEVEL]);
+    int RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
+    Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_ROW_LEVEL]);
     std::vector<OffsetTableEntry> entries = RT[my_RT_config][RT_idx].get_entry_recv(grow_addr, addr);
-    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), grow(x%lx) from T[%d]!\n",
-            my_indirect_id, __func__, entries.size(), addr, grow_addr, RT_idx);
+    DPRINTF(MAAIndirect, "I[%d] %s: %d entries received for addr(0x%lx), grow(x%lx) from T[%d]!\n", my_indirect_id, __func__, entries.size(), addr, grow_addr, RT_idx);
     if (entries.size() == 0) {
         return false;
     }
