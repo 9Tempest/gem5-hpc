@@ -94,7 +94,7 @@ bool MAA::CpuSidePort::tryTiming(PacketPtr pkt) {
     return true;
 }
 
-void MAA::recvTimingReq(PacketPtr pkt) {
+void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s, cmd: %s, isMaskedWrite: %d, size: %d\n",
             __func__,
@@ -136,6 +136,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         assert(pkt->isMaskedWrite() == false);
         switch (address_range.getType()) {
         case AddressRangeType::Type::SCALAR_RANGE: {
+            panic_if(core_id != 0, "Scalar range is only for the core 0\n");
             Addr offset = address_range.getOffset();
             int element_id = offset % (num_regs * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
@@ -159,10 +160,11 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             // Here we reset the timing of the packet.
             Tick old_header_delay = pkt->headerDelay;
             pkt->headerDelay = pkt->payloadDelay = 0;
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         case AddressRangeType::Type::INSTRUCTION_RANGE: {
+            panic_if(core_id != 0, "Instruction range is only for the core 0\n");
             Addr offset = address_range.getOffset();
             int element_id = offset % (num_instructions * sizeof(uint64_t));
             assert(element_id % sizeof(uint64_t) == 0);
@@ -245,7 +247,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 // Here we reset the timing of the packet.
                 Tick old_header_delay = pkt->headerDelay;
                 pkt->headerDelay = pkt->payloadDelay = 0;
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+                cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             }
             break;
         }
@@ -264,6 +266,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
         assert(pkt->hasRespData());
         switch (address_range.getType()) {
         case AddressRangeType::Type::SPD_SIZE_RANGE: {
+            panic_if(core_id != 0, "Size range is only for the core 0\n");
             assert(pkt->getSize() == sizeof(uint16_t));
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
@@ -276,10 +279,11 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             // Here we reset the timing of the packet.
             Tick old_header_delay = pkt->headerDelay;
             pkt->headerDelay = pkt->payloadDelay = 0;
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         case AddressRangeType::Type::SPD_READY_RANGE: {
+            panic_if(core_id != 0, "Ready range is only for the core 0\n");
             assert(pkt->getSize() == sizeof(uint16_t));
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
@@ -292,7 +296,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
                 // Here we reset the timing of the packet.
                 Tick old_header_delay = pkt->headerDelay;
                 pkt->headerDelay = pkt->payloadDelay = 0;
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+                cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             } else {
                 // We need to respond to this packet later
                 my_ready_pkts.push_back(pkt);
@@ -301,6 +305,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             break;
         }
         case AddressRangeType::Type::SCALAR_RANGE: {
+            panic_if(core_id != 0, "Scalar range is only for the core 0\n");
             panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
             Addr offset = address_range.getOffset();
             int element_id = offset % (num_regs * sizeof(uint32_t));
@@ -313,7 +318,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             // Here we reset the timing of the packet.
             Tick old_header_delay = pkt->headerDelay;
             pkt->headerDelay = pkt->payloadDelay = 0;
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         default: {
@@ -350,7 +355,7 @@ void MAA::recvTimingReq(PacketPtr pkt) {
             // Here we reset the timing of the packet.
             Tick old_header_delay = pkt->headerDelay;
             pkt->headerDelay = pkt->payloadDelay = 0;
-            cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
             break;
         }
         default:
@@ -368,9 +373,10 @@ bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     assert(pkt->isRequest());
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
+    panic_if(core_id != 0, "Only core 0 is allowed to recv requests\n");
 
     if (tryTiming(pkt)) {
-        maa.recvTimingReq(pkt);
+        maa.recvTimingReq(pkt, core_id);
         return true;
     }
     return false;
@@ -394,7 +400,7 @@ Tick MAA::CpuSidePort::recvAtomic(PacketPtr pkt) {
 }
 
 AddrRangeList MAA::CpuSidePort::getAddrRanges() const {
-    return maa.getAddrRanges();
+    return maa.getAddrRanges(core_id);
 }
 
 bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
@@ -402,6 +408,8 @@ bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id,
     DPRINTF(MAACpuPort, "%s: UNIT[%s][%d] %s\n", __func__, func_unit_names[func_unit_type], func_unit_id, pkt->print());
     panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
     panic_if(func_unit_type == (int)FuncUnitType::STREAM, "Stream does not have any snoop requests\n");
+    int pkt_core_id = maa.core_addr(pkt->getAddr());
+    panic_if(pkt_core_id != core_id, "%s: packet is for core %d\n", __func__, pkt_core_id);
     if (blockReason != BlockReason::NOT_BLOCKED) {
         DPRINTF(MAACpuPort, "%s Send snoop blocked because of MAX_XBAR_PACKETS...\n", __func__);
         funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
@@ -422,7 +430,8 @@ bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id,
     return true;
 }
 bool MAA::sendSnoopPacketCpu(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
-    return cpuSidePort.sendSnoopPacket(func_unit_type, func_unit_id, pkt);
+    int pkt_core_id = core_addr(pkt->getAddr());
+    return cpuSidePorts[pkt_core_id]->sendSnoopPacket(func_unit_type, func_unit_id, pkt);
 }
 
 void MAA::CpuSidePort::setUnblocked() {
@@ -443,8 +452,9 @@ void MAA::CpuSidePort::setUnblocked() {
     }
 }
 
-void MAA::CpuSidePort::allocate(int _maxOutstandingCpuSidePackets) {
+void MAA::CpuSidePort::allocate(int _core_id, int _maxOutstandingCpuSidePackets) {
     outstandingCpuSidePackets = 0;
+    core_id = _core_id;
     maxOutstandingCpuSidePackets = _maxOutstandingCpuSidePackets - 16;
     funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa.num_indirect_access_units];
     for (int i = 0; i < maa.num_indirect_access_units; i++) {

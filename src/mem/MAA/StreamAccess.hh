@@ -68,11 +68,13 @@ protected:
     public:
         PacketPtr packet;
         Tick tick;
-        StreamPacket(PacketPtr _packet, Tick _tick)
-            : packet(_packet), tick(_tick) {}
+        int core_id;
+        StreamPacket(PacketPtr _packet, Tick _tick, int _core_id = -1)
+            : packet(_packet), tick(_tick), core_id(_core_id) {}
         StreamPacket(const StreamPacket &other) {
             packet = other.packet;
             tick = other.tick;
+            core_id = other.core_id;
         }
         bool operator<(const StreamPacket &rhs) const {
             return tick < rhs.tick;
@@ -135,8 +137,7 @@ public:
     bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
     void scheduleSendPacketEvent(int latency = 0);
-    bool recvData(const Addr addr,
-                  uint8_t *dataptr);
+    bool recvData(const Addr addr, uint8_t *dataptr, int core_id = -1);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
@@ -166,7 +167,7 @@ protected:
     bool my_translation_done;
 
     void createReadPacket(Addr addr, int latency);
-    void createReadPacketEvict(Addr addr);
+    void createReadPacketEvict(Addr addr, int core_id);
     bool sendOutstandingReadPacket();
     Addr translatePacket(Addr vaddr);
     void executeInstruction();
@@ -175,7 +176,8 @@ protected:
     bool scheduleNextSend();
     int getGBGAddr(int channel, int rank, int bankgroup);
     PageInfo getPageInfo(int i, Addr base_addr, int word_size, int min, int stride);
-    void fillCurrentPageInfos();
+    bool fillCurrentPageInfos();
+    bool allPacketsSent();
 };
 } // namespace gem5
 

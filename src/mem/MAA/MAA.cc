@@ -26,6 +26,17 @@
 #define TRACING_ON 1
 #endif
 
+template <typename Integral_t>
+Integral_t calc_log2(Integral_t val) {
+    static_assert(std::is_integral_v<Integral_t>, "Only integral types are allowed for bitwise operations!");
+
+    Integral_t n = 0;
+    while ((val >>= 1)) {
+        n++;
+    }
+    return n;
+};
+
 namespace gem5 {
 
 MAA::MAAResponsePort::MAAResponsePort(const std::string &_name, MAA &_maa, const std::string &_label)
@@ -36,8 +47,6 @@ MAA::MAAResponsePort::MAAResponsePort(const std::string &_name, MAA &_maa, const
 
 MAA::MAA(const MAAParams &p)
     : ClockedObject(p),
-      cpuSidePort(p.name + ".cpu_side_port", *this, "CpuSidePort"),
-      cacheSidePort(p.name + ".cache_side_port", this, "CacheSidePort"),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       num_tiles(p.num_tiles),
       num_tile_elements(p.num_tile_elements),
@@ -55,26 +64,18 @@ MAA::MAA(const MAAParams &p)
       num_request_table_addresses(p.num_request_table_addresses),
       num_request_table_entries_per_address(p.num_request_table_entries_per_address),
       num_memory_channels(p.num_memory_channels),
+      num_cores(p.num_cores),
       rowtable_latency(p.rowtable_latency),
       cache_snoop_latency(p.cache_snoop_latency),
       system(p.system),
       mmu(p.mmu),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
-      stats(this,
-            p.num_indirect_access_units,
-            p.num_stream_access_units,
-            p.num_range_units,
-            p.num_alu_units) {
+      stats(this, p.num_indirect_access_units, p.num_stream_access_units, p.num_range_units, p.num_alu_units) {
 
+    m_core_addr_bits = calc_log2(num_cores);
     requestorId = p.system->getRequestorId(this);
-    spd = new SPD(this,
-                  num_tiles,
-                  num_tile_elements,
-                  p.spd_read_latency,
-                  p.spd_write_latency,
-                  p.num_spd_read_ports,
-                  p.num_spd_write_ports);
+    spd = new SPD(this, num_tiles, num_tile_elements, p.spd_read_latency, p.spd_write_latency, p.num_spd_read_ports, p.num_spd_write_ports);
     rf = new RF(num_regs);
     ifile = new IF(num_instructions);
     streamAccessUnits = new StreamAccessUnit[num_stream_access_units];
@@ -88,14 +89,8 @@ MAA::MAA(const MAAParams &p)
     for (int i = 0; i < num_indirect_access_units; i++) {
         indirectAccessIdle[i] = true;
     }
-    cacheSidePort.allocate(p.max_outstanding_cache_side_packets);
-    cpuSidePort.allocate(p.max_outstanding_cpu_side_packets);
     invalidator = new Invalidator();
-    invalidator->allocate(
-        num_tiles,
-        num_tile_elements,
-        addrRanges.front().start(),
-        this);
+    invalidator->allocate(num_tiles, num_tile_elements, addrRanges.front().start(), this);
     aluUnits = new ALUUnit[num_alu_units];
     aluUnitsIdle = new bool[num_alu_units];
     for (int i = 0; i < num_alu_units; i++) {
@@ -113,26 +108,69 @@ MAA::MAA(const MAAParams &p)
         std::string portName = csprintf("%s.mem_side_port[%d]", p.name, i);
         memSidePorts.push_back(new MemSidePort(portName, this, "MemSidePort"));
     }
+    for (int i = 0; i < p.port_cache_sides_connection_count; ++i) {
+        std::string portName = csprintf("%s.cache_side_port[%d]", p.name, i);
+        cacheSidePorts.push_back(new CacheSidePort(portName, this, "CacheSidePort"));
+        cacheSidePorts[i]->allocate(i, p.max_outstanding_cache_side_packets);
+    }
+    panic_if(p.port_cpu_sides_connection_count != num_cores, "Number of CPU ports must be equal to the number of cores");
+    for (int i = 0; i < num_cores; ++i) {
+        cpuPortAddrRanges.push_back(AddrRangeList());
+    }
+    int range_id = 0;
+    for (AddrRange range : addrRanges) {
+        switch (range_id) {
+        case (uint8_t)AddressRangeType::Type::SPD_DATA_NONCACHEABLE_RANGE:
+        case (uint8_t)AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE: {
+            Addr start = range.start();
+            Addr size_per_port = range.size() / num_cores;
+            for (int i = 0; i < num_cores; ++i) {
+                DPRINTF(MAA, "Range[%s] for CPU port[%d]: %lx-%lx\n", AddressRangeType::address_range_names[range_id], i, start, start + size_per_port);
+                cpuPortAddrRanges[i].push_back(AddrRange(start, start + size_per_port));
+                start += size_per_port;
+            }
+            break;
+        }
+        default: {
+            DPRINTF(MAA, "Range[%s] for CPU port[0]: %lx-%lx\n", AddressRangeType::address_range_names[range_id], range.start(), range.end());
+            cpuPortAddrRanges[0].push_back(AddrRange(range.start(), range.end()));
+            break;
+        }
+        }
+        range_id++;
+    }
+    for (int i = 0; i < p.port_cpu_sides_connection_count; ++i) {
+        std::string portName = csprintf("%s.cpu_side_port[%d]", p.name, i);
+        cpuSidePorts.push_back(new CpuSidePort(portName, *this, "CpuSidePort"));
+        cpuSidePorts[i]->allocate(i, p.max_outstanding_cpu_side_packets);
+    }
+    lastCacheSidePortSend = 0;
 }
 
 void MAA::init() {
-    if (!cpuSidePort.isConnected())
-        fatal("Cache ports on %s are not connected\n", name());
-    cpuSidePort.sendRangeChange();
+    for (auto port : cpuSidePorts) {
+        if (!port->isConnected())
+            fatal("Cache ports on %s are not connected\n", name());
+        port->sendRangeChange();
+    }
 }
 
 MAA::~MAA() {
     for (auto port : memSidePorts)
+        delete port;
+    for (auto port : cacheSidePorts)
+        delete port;
+    for (auto port : cpuSidePorts)
         delete port;
 }
 
 Port &MAA::getPort(const std::string &if_name, PortID idx) {
     if (if_name == "mem_sides" && idx < memSidePorts.size()) {
         return *memSidePorts[idx];
-    } else if (if_name == "cpu_side") {
-        return cpuSidePort;
-    } else if (if_name == "cache_side") {
-        return cacheSidePort;
+    } else if (if_name == "cpu_sides" && idx < cpuSidePorts.size()) {
+        return *cpuSidePorts[idx];
+    } else if (if_name == "cache_sides" && idx < cacheSidePorts.size()) {
+        return *cacheSidePorts[idx];
     } else {
         return ClockedObject::getPort(if_name, idx);
     }
@@ -182,6 +220,7 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
                                         rowtable_latency,
                                         cache_snoop_latency,
                                         m_org[ADDR_CHANNEL_LEVEL],
+                                        num_cores,
                                         this);
     }
 }
@@ -204,6 +243,10 @@ std::vector<int> MAA::map_addr(Addr addr) {
 int MAA::channel_addr(Addr addr) {
     addr = addr >> m_tx_offset;
     return slice_lower_bits(addr, m_addr_bits[0]);
+}
+int MAA::core_addr(Addr addr) {
+    addr = addr >> m_tx_offset;
+    return slice_lower_bits(addr, m_core_addr_bits);
 }
 bool MAA::allFuncUnitsIdle() {
     if (invalidator->getState() != Invalidator::Status::Idle) {
@@ -404,12 +447,13 @@ void MAA::dispatchInstruction() {
                     spd->setTileNotReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                 }
                 if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW ||
+                    instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
                     spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
                 }
                 pkt->makeTimingResponse();
                 pkt->headerDelay = pkt->payloadDelay = 0;
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                cpuSidePorts[0]->schedTimingResp(pkt, getClockEdge(Cycles(1)));
                 scheduleIssueInstructionEvent(1);
                 pkt_it = my_instruction_pkts.erase(pkt_it);
                 recv_it = my_instruction_recvs.erase(recv_it);
@@ -441,7 +485,8 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
         setTileReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
     }
     if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-        instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+        instruction->opcode == Instruction::OpcodeType::INDIR_RMW ||
+        instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
         setTileReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
     }
     ifile->finishInstructionCompute(instruction);
@@ -489,7 +534,7 @@ void MAA::setTileReady(int tileID, int wordSize) {
                 DPRINTF(MAAController, "%s: responding to outstanding ready packet %s!\n", __func__, pkt->print());
                 pkt->makeTimingResponse();
                 pkt->headerDelay = pkt->payloadDelay = 0;
-                cpuSidePort.schedTimingResp(pkt, getClockEdge(Cycles(1)));
+                cpuSidePorts[0]->schedTimingResp(pkt, getClockEdge(Cycles(1)));
                 pkt_it = my_ready_pkts.erase(pkt_it);
                 tile_id_it = my_ready_tile_ids.erase(tile_id_it);
             } else {
@@ -571,18 +616,22 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
       ADD_STAT(numInst_INDWR, statistics::units::Count::get(), "number of indirect write instructions"),
       ADD_STAT(numInst_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instructions"),
       ADD_STAT(numInst_STRRD, statistics::units::Count::get(), "number of stream read instructions"),
+      ADD_STAT(numInst_STRWR, statistics::units::Count::get(), "number of stream write instructions"),
       ADD_STAT(numInst_RANGE, statistics::units::Count::get(), "number of range loop instructions"),
       ADD_STAT(numInst_ALUS, statistics::units::Count::get(), "number of ALU Scalar instructions"),
       ADD_STAT(numInst_ALUV, statistics::units::Count::get(), "number of ALU Vector instructions"),
+      ADD_STAT(numInst_ALUR, statistics::units::Count::get(), "number of ALU Reduction instructions"),
       ADD_STAT(numInst_INV, statistics::units::Count::get(), "number of Invalidation for instructions"),
       ADD_STAT(numInst, statistics::units::Count::get(), "total number of instructions"),
       ADD_STAT(cycles_INDRD, statistics::units::Count::get(), "number of indirect read instruction cycles"),
       ADD_STAT(cycles_INDWR, statistics::units::Count::get(), "number of indirect write instruction cycles"),
       ADD_STAT(cycles_INDRMW, statistics::units::Count::get(), "number of indirect read-modify-write instruction cycles"),
       ADD_STAT(cycles_STRRD, statistics::units::Count::get(), "number of stream read instruction cycles"),
+      ADD_STAT(cycles_STRWR, statistics::units::Count::get(), "number of stream write instruction cycles"),
       ADD_STAT(cycles_RANGE, statistics::units::Count::get(), "number of range loop instruction cycles"),
       ADD_STAT(cycles_ALUS, statistics::units::Count::get(), "number of ALU Scalar instruction cycles"),
       ADD_STAT(cycles_ALUV, statistics::units::Count::get(), "number of ALU Vector instruction cycles"),
+      ADD_STAT(cycles_ALUR, statistics::units::Count::get(), "number of ALU Reduction instruction cycles"),
       ADD_STAT(cycles_INV, statistics::units::Count::get(), "number of Invalidation for instruction cycles"),
       ADD_STAT(cycles_IDLE, statistics::units::Count::get(), "number of idle cycles"),
       ADD_STAT(cycles, statistics::units::Count::get(), "total number of instruction cycles"),
@@ -590,9 +639,11 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
       ADD_STAT(avgCPI_INDWR, statistics::units::Count::get(), "average CPI for indirect write instructions"),
       ADD_STAT(avgCPI_INDRMW, statistics::units::Count::get(), "average CPI for indirect read-modify-write instructions"),
       ADD_STAT(avgCPI_STRRD, statistics::units::Count::get(), "average CPI for stream read instructions"),
+      ADD_STAT(avgCPI_STRWR, statistics::units::Count::get(), "average CPI for stream write instructions"),
       ADD_STAT(avgCPI_RANGE, statistics::units::Count::get(), "average CPI for range loop instructions"),
       ADD_STAT(avgCPI_ALUS, statistics::units::Count::get(), "average CPI for ALU Scalar instructions"),
       ADD_STAT(avgCPI_ALUV, statistics::units::Count::get(), "average CPI for ALU Vector instructions"),
+      ADD_STAT(avgCPI_ALUR, statistics::units::Count::get(), "average CPI for ALU Reduction instructions"),
       ADD_STAT(avgCPI_INV, statistics::units::Count::get(), "average CPI for Invalidation for instructions"),
       ADD_STAT(avgCPI, statistics::units::Count::get(), "average CPI for all instructions") {
 
@@ -600,18 +651,22 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
     numInst_INDWR.flags(statistics::nozero);
     numInst_INDRMW.flags(statistics::nozero);
     numInst_STRRD.flags(statistics::nozero);
+    numInst_STRWR.flags(statistics::nozero);
     numInst_RANGE.flags(statistics::nozero);
     numInst_ALUS.flags(statistics::nozero);
     numInst_ALUV.flags(statistics::nozero);
+    numInst_ALUR.flags(statistics::nozero);
     numInst_INV.flags(statistics::nozero);
     numInst.flags(statistics::nozero);
     cycles_INDRD.flags(statistics::nozero);
     cycles_INDWR.flags(statistics::nozero);
     cycles_INDRMW.flags(statistics::nozero);
     cycles_STRRD.flags(statistics::nozero);
+    cycles_STRWR.flags(statistics::nozero);
     cycles_RANGE.flags(statistics::nozero);
     cycles_ALUS.flags(statistics::nozero);
     cycles_ALUV.flags(statistics::nozero);
+    cycles_ALUR.flags(statistics::nozero);
     cycles_INV.flags(statistics::nozero);
     cycles_IDLE.flags(statistics::nozero);
     cycles.flags(statistics::nozero);
@@ -620,9 +675,11 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
     avgCPI_INDWR = cycles_INDWR / numInst_INDWR;
     avgCPI_INDRMW = cycles_INDRMW / numInst_INDRMW;
     avgCPI_STRRD = cycles_STRRD / numInst_STRRD;
+    avgCPI_STRWR = cycles_STRWR / numInst_STRWR;
     avgCPI_RANGE = cycles_RANGE / numInst_RANGE;
     avgCPI_ALUS = cycles_ALUS / numInst_ALUS;
     avgCPI_ALUV = cycles_ALUV / numInst_ALUV;
+    avgCPI_ALUR = cycles_ALUR / numInst_ALUR;
     avgCPI_INV = cycles_INV / numInst_INV;
     avgCPI = cycles / numInst;
 
@@ -630,9 +687,11 @@ MAA::MAAStats::MAAStats(statistics::Group *parent,
     avgCPI_INDWR.flags(statistics::nonan | statistics::nozero);
     avgCPI_INDRMW.flags(statistics::nonan | statistics::nozero);
     avgCPI_STRRD.flags(statistics::nonan | statistics::nozero);
+    avgCPI_STRWR.flags(statistics::nonan | statistics::nozero);
     avgCPI_RANGE.flags(statistics::nonan | statistics::nozero);
     avgCPI_ALUS.flags(statistics::nonan | statistics::nozero);
     avgCPI_ALUV.flags(statistics::nonan | statistics::nozero);
+    avgCPI_ALUR.flags(statistics::nonan | statistics::nozero);
     avgCPI_INV.flags(statistics::nonan | statistics::nozero);
     avgCPI.flags(statistics::nonan | statistics::nozero);
 

@@ -30,22 +30,26 @@ class Instruction {
 public:
     enum class OpcodeType : uint8_t {
         STREAM_LD = 0,
-        INDIR_LD = 1,
-        INDIR_ST = 2,
-        INDIR_RMW = 3,
-        RANGE_LOOP = 4,
-        ALU_SCALAR = 5,
-        ALU_VECTOR = 6,
+        STREAM_ST = 1,
+        INDIR_LD = 2,
+        INDIR_ST = 3,
+        INDIR_RMW = 4,
+        RANGE_LOOP = 5,
+        ALU_SCALAR = 6,
+        ALU_VECTOR = 7,
+        ALU_REDUCE = 8,
         MAX
     };
-    std::string opcode_names[7] = {
+    std::string opcode_names[9] = {
         "STREAM_LD",
+        "STREAM_ST",
         "INDIR_LD",
         "INDIR_ST",
         "INDIR_RMW",
         "RANGE_LOOP",
         "ALU_SCALAR",
-        "ALU_VECTOR"};
+        "ALU_VECTOR",
+        "ALU_REDUCE"};
     enum class OPType : uint8_t {
         ADD_OP = 0,
         SUB_OP = 1,
@@ -180,15 +184,6 @@ public:
 
 class AddressRangeType {
 protected:
-    char const *address_range_names[7] = {
-        "SPD_DATA_CACHEABLE_RANGE",
-        "SPD_DATA_NONCACHEABLE_RANGE",
-        "SPD_SIZE_RANGE",
-        "SPD_READY_RANGE",
-        "SCALAR_RANGE",
-        "INSTRUCTION_RANGE",
-        "MAX"};
-
     Addr addr;
     Addr base;
     Addr offset;
@@ -196,6 +191,7 @@ protected:
     bool valid;
 
 public:
+    static const char *const address_range_names[7];
     enum class Type : uint8_t {
         SPD_DATA_CACHEABLE_RANGE = 0,
         SPD_DATA_NONCACHEABLE_RANGE = 1,
@@ -203,7 +199,7 @@ public:
         SPD_READY_RANGE = 3,
         SCALAR_RANGE = 4,
         INSTRUCTION_RANGE = 5,
-        MAX
+        MAX = 6
     };
     AddressRangeType(Addr _addr, AddrRangeList addrRanges);
     std::string print() const;

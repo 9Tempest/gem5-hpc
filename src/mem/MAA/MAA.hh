@@ -94,10 +94,11 @@ class MAA : public ClockedObject {
         BlockReason blockReason;
         BlockReason *funcBlockReasons[3];
         void setUnblocked();
+        int core_id;
 
     public:
         bool sendSnoopPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
-        void allocate(int _maxOutstandingCpuSidePackets);
+        void allocate(int _core_id, int _maxOutstandingCpuSidePackets);
 
     public:
         CpuSidePort(const std::string &_name, MAA &_maa,
@@ -147,9 +148,9 @@ class MAA : public ClockedObject {
         /**
          * Memory-side port always snoops.
          *
-         * @return always true
+         * @return always false
          */
-        bool isSnooping() const { return true; }
+        bool isSnooping() const { return false; }
     };
 
     /**
@@ -256,10 +257,11 @@ class MAA : public ClockedObject {
         BlockReason blockReason;
         BlockReason *funcBlockReasons[3];
         void setUnblocked(BlockReason reason);
+        int core_id;
 
     public:
         bool sendPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
-        void allocate(int _maxOutstandingCacheSidePackets);
+        void allocate(int _core_id, int _maxOutstandingCacheSidePackets);
 
     public:
         CacheSidePort(const std::string &_name, MAA *_maa,
@@ -267,9 +269,9 @@ class MAA : public ClockedObject {
     };
 
 protected:
-    CpuSidePort cpuSidePort;
+    std::vector<CpuSidePort *> cpuSidePorts;
     std::vector<MemSidePort *> memSidePorts;
-    CacheSidePort cacheSidePort;
+    std::vector<CacheSidePort *> cacheSidePorts;
 
 public:
     SPD *spd;
@@ -292,10 +294,11 @@ public:
 public:
     std::vector<int> map_addr(Addr addr);
     int channel_addr(Addr addr);
+    int core_addr(Addr addr);
     Addr calc_Grow_addr(std::vector<int> addr_vec);
     void addRamulator(memory::Ramulator2 *_ramulator2);
     bool sendPacketMem(int func_unit_id, PacketPtr pkt);
-    bool sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
+    bool sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt, int core_id = -1);
     bool sendSnoopPacketCpu(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt);
 
 protected:
@@ -303,7 +306,7 @@ protected:
      * Performs the access specified by the request.
      * @param pkt The request to perform.
      */
-    void recvTimingReq(PacketPtr pkt);
+    void recvTimingReq(PacketPtr pkt, int core_id);
 
     /**
      * Handles a response (cache line fill/write ack) from the bus.
@@ -315,7 +318,7 @@ protected:
      * Handles a response (cache line fill/write ack) from the bus.
      * @param pkt The response packet
      */
-    void recvCacheTimingResp(PacketPtr pkt);
+    void recvCacheTimingResp(PacketPtr pkt, int core_id);
 
     /**
      * Handle a snoop response.
@@ -388,6 +391,7 @@ protected:
      * The address range to which the cache responds on the CPU side.
      * Normally this is all possible memory addresses. */
     const AddrRangeList addrRanges;
+    std::vector<AddrRangeList> cpuPortAddrRanges;
 
 public:
     unsigned int num_tiles;
@@ -406,6 +410,9 @@ public:
     unsigned int num_request_table_addresses;
     unsigned int num_request_table_entries_per_address;
     unsigned int num_memory_channels;
+    unsigned int num_cores;
+    unsigned int m_core_addr_bits;
+
     Cycles rowtable_latency;
     Cycles cache_snoop_latency;
     RequestorID requestorId;
@@ -426,7 +433,7 @@ public:
     Port &getPort(const std::string &if_name,
                   PortID idx = InvalidPortID) override;
 
-    const AddrRangeList &getAddrRanges() const { return addrRanges; }
+    const AddrRangeList &getAddrRanges(int core_id) const { return cpuPortAddrRanges[core_id]; }
     void setTileReady(int tileID, int wordSize);
     void finishInstructionCompute(InstructionPtr instruction);
     void finishInstructionInvalidate(InstructionPtr instruction, int tileID);
@@ -456,6 +463,7 @@ protected:
     bool *aluUnitsIdle;
     bool *rangeUnitsIdle;
     bool invalidatorIdle;
+    int lastCacheSidePortSend;
 
 public:
     struct MAAStats : public statistics::Group {
@@ -470,9 +478,11 @@ public:
         statistics::Scalar numInst_INDWR;
         statistics::Scalar numInst_INDRMW;
         statistics::Scalar numInst_STRRD;
+        statistics::Scalar numInst_STRWR;
         statistics::Scalar numInst_RANGE;
         statistics::Scalar numInst_ALUS;
         statistics::Scalar numInst_ALUV;
+        statistics::Scalar numInst_ALUR;
         statistics::Scalar numInst_INV;
         statistics::Scalar numInst;
 
@@ -481,9 +491,11 @@ public:
         statistics::Scalar cycles_INDWR;
         statistics::Scalar cycles_INDRMW;
         statistics::Scalar cycles_STRRD;
+        statistics::Scalar cycles_STRWR;
         statistics::Scalar cycles_RANGE;
         statistics::Scalar cycles_ALUS;
         statistics::Scalar cycles_ALUV;
+        statistics::Scalar cycles_ALUR;
         statistics::Scalar cycles_INV;
         statistics::Scalar cycles_IDLE;
         statistics::Scalar cycles;
@@ -493,9 +505,11 @@ public:
         statistics::Formula avgCPI_INDWR;
         statistics::Formula avgCPI_INDRMW;
         statistics::Formula avgCPI_STRRD;
+        statistics::Formula avgCPI_STRWR;
         statistics::Formula avgCPI_RANGE;
         statistics::Formula avgCPI_ALUS;
         statistics::Formula avgCPI_ALUV;
+        statistics::Formula avgCPI_ALUR;
         statistics::Formula avgCPI_INV;
         statistics::Formula avgCPI;
 

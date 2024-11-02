@@ -98,15 +98,18 @@ public:
     RowTable() {
         entries = nullptr;
         entries_valid = nullptr;
-        entries_full = nullptr;
+        entries_sent = nullptr;
+        // entries_full = nullptr;
     }
     ~RowTable() {
         if (entries != nullptr) {
             delete[] entries;
             assert(entries_valid != nullptr);
             delete[] entries_valid;
-            assert(entries_full != nullptr);
-            delete[] entries_full;
+            assert(entries_sent != nullptr);
+            delete[] entries_sent;
+            // assert(entries_full != nullptr);
+            // delete[] entries_full;
         }
     }
     void allocate(int _my_indirect_id,
@@ -120,8 +123,11 @@ public:
                 int itr,
                 int wid);
     bool get_entry_send(Addr &addr, bool drain);
-    std::vector<OffsetTableEntry> get_entry_recv(Addr grow_addr,
-                                                 Addr addr);
+    bool find_next_grow_addr();
+    void get_send_grow_rowid();
+    std::vector<OffsetTableEntry>
+    get_entry_recv(Addr grow_addr,
+                   Addr addr);
 
     void reset();
     void check_reset();
@@ -129,10 +135,14 @@ public:
     OffsetTable *offset_table;
     RowTableEntry *entries;
     bool *entries_valid;
-    bool *entries_full;
+    bool *entries_sent;
+    // bool *entries_full;
     int num_RT_rows_per_bank;
     int num_RT_entries_per_row;
-    int last_sent_row_id;
+    // int last_sent_row_id;
+    Addr last_sent_grow_addr;
+    int last_sent_rowid;
+    int last_sent_grow_rowid;
     IndirectAccessUnit *indir_access;
     int my_indirect_id, my_table_id;
 };
@@ -162,11 +172,13 @@ protected:
     public:
         PacketPtr packet;
         Tick tick;
-        IndirectPacket(PacketPtr _packet, Tick _tick)
-            : packet(_packet), tick(_tick) {}
+        int core_id;
+        IndirectPacket(PacketPtr _packet, Tick _tick, int _core_id = -1)
+            : packet(_packet), tick(_tick), core_id(_core_id) {}
         IndirectPacket(const IndirectPacket &other) {
             packet = other.packet;
             tick = other.tick;
+            core_id = other.core_id;
         }
         bool operator<(const IndirectPacket &rhs) const {
             return tick < rhs.tick;
@@ -195,9 +207,11 @@ protected:
     int num_RT_entries_per_subbank_row;
     int num_RT_config_cache_entries;
     int num_channels;
+    int num_cores;
     bool reconfigure_RT;
     int num_initial_RT_banks;
     bool *mem_channels_blocked;
+    // bool *core_blocked;
     Status state;
     RowTable **RT;
     OffsetTable *offset_table;
@@ -222,6 +236,7 @@ public:
                   Cycles _rowtable_latency,
                   Cycles _cache_snoop_latency,
                   int _num_channels,
+                  int _num_cores,
                   MAA *_maa);
     Status getState() const { return state; }
     bool scheduleNextExecution(bool force = false);
@@ -233,9 +248,7 @@ public:
     void setInstruction(Instruction *_instruction);
     void unblockMemChannel(int channel);
 
-    bool recvData(const Addr addr,
-                  uint8_t *dataptr,
-                  bool is_block_cached);
+    bool recvData(const Addr addr, uint8_t *dataptr, bool is_block_cached, int core_id = -1);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
@@ -246,7 +259,7 @@ protected:
     Instruction *my_instruction;
     std::multiset<IndirectPacket, CompareByTick> my_outstanding_cpu_snoop_pkts;
     std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_read_pkts;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_evict_pkts;
+    // std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_evict_pkts;
     std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_write_pkts;
     std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_read_pkts;
     Request::Flags flags = 0;
@@ -296,6 +309,7 @@ protected:
     bool scheduleNextSendCpu();
     bool scheduleNextSendMemRead();
     bool scheduleNextSendMemWrite();
+    bool allPacketsSent();
     Cycles updateLatency(int num_spd_read_data_accesses,
                          int num_spd_read_condidx_accesses,
                          int num_spd_write_accesses,
@@ -305,7 +319,7 @@ protected:
 public:
     void createCacheReadPacket(Addr addr);
     void createCacheSnoopPacket(Addr addr, int latency);
-    void createCacheEvictPacket(Addr addr);
+    // void createCacheEvictPacket(Addr addr, int core_id);
     void createMemReadPacket(Addr addr);
     bool sendOutstandingCachePacket();
     bool sendOutstandingCpuPacket();

@@ -59,7 +59,9 @@ int Instruction::getWordSize(int tile_id) {
     } else if (tile_id == src1SpdID) {
         switch (opcode) {
         case OpcodeType::ALU_SCALAR:
-        case OpcodeType::ALU_VECTOR: {
+        case OpcodeType::ALU_VECTOR:
+        case OpcodeType::ALU_REDUCE:
+        case OpcodeType::STREAM_ST: {
             return WordSize();
         }
         case OpcodeType::INDIR_LD:
@@ -95,7 +97,8 @@ int Instruction::getWordSize(int tile_id) {
             }
         }
         case OpcodeType::STREAM_LD:
-        case OpcodeType::INDIR_LD: {
+        case OpcodeType::INDIR_LD:
+        case OpcodeType::INDIR_RMW: {
             return WordSize();
         }
         case OpcodeType::RANGE_LOOP: {
@@ -132,7 +135,8 @@ int Instruction::WordSize() {
 }
 bool IF::pushInstruction(Instruction _instruction) {
     switch (_instruction.opcode) {
-    case Instruction::OpcodeType::STREAM_LD: {
+    case Instruction::OpcodeType::STREAM_LD:
+    case Instruction::OpcodeType::STREAM_ST: {
         _instruction.funcUniType = FuncUnitType::STREAM;
         break;
     }
@@ -147,7 +151,8 @@ bool IF::pushInstruction(Instruction _instruction) {
         break;
     }
     case Instruction::OpcodeType::ALU_SCALAR:
-    case Instruction::OpcodeType::ALU_VECTOR: {
+    case Instruction::OpcodeType::ALU_VECTOR:
+    case Instruction::OpcodeType::ALU_REDUCE: {
         _instruction.funcUniType = FuncUnitType::ALU;
         break;
     }
@@ -389,4 +394,12 @@ std::string AddressRangeType::print() const {
     ccprintf(str, "%s: 0x%lx + 0x%lx", address_range_names[rangeID], base, offset);
     return str.str();
 }
+const char *const AddressRangeType::address_range_names[7] = {
+    "SPD_DATA_CACHEABLE_RANGE",
+    "SPD_DATA_NONCACHEABLE_RANGE",
+    "SPD_SIZE_RANGE",
+    "SPD_READY_RANGE",
+    "SCALAR_RANGE",
+    "INSTRUCTION_RANGE",
+    "MAX"};
 } // namespace gem5

@@ -27,7 +27,7 @@
 
 namespace gem5 {
 
-void MAA::recvCacheTimingResp(PacketPtr pkt) {
+void MAA::recvCacheTimingResp(PacketPtr pkt, int core_id) {
     /// print the packet
     DPRINTF(MAACachePort, "%s: received %s, cmd: %s, size: %d\n",
             __func__,
@@ -53,7 +53,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         if (pkt->cmd == MemCmd::ReadResp) {
             for (int i = 0; i < num_stream_access_units; i++) {
                 if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
-                    if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>())) {
+                    if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), core_id)) {
                         panic_if(received, "Received multiple responses for the same request\n");
                         received = true;
                     }
@@ -63,7 +63,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
         if (received == false) {
             for (int i = 0; i < num_indirect_access_units; i++) {
                 if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
-                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true)) {
+                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true, core_id)) {
                         panic_if(received, "Received multiple responses for the same request\n");
                     }
                 }
@@ -91,7 +91,7 @@ void MAA::recvCacheTimingResp(PacketPtr pkt) {
 bool MAA::CacheSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACachePort, "%s: received %s\n", __func__, pkt->print());
-    maa->recvCacheTimingResp(pkt);
+    maa->recvCacheTimingResp(pkt, core_id);
     outstandingCacheSidePackets--;
     if (blockReason == BlockReason::MAX_XBAR_PACKETS) {
         setUnblocked(BlockReason::MAX_XBAR_PACKETS);
@@ -174,8 +174,15 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type, int func_unit_id, Pa
         outstandingCacheSidePackets++;
     return true;
 }
-bool MAA::sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
-    return cacheSidePort.sendPacket(func_unit_type, func_unit_id, pkt);
+bool MAA::sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt, int core_id) {
+    if (core_id != -1) {
+        return cacheSidePorts[core_id]->sendPacket(func_unit_type, func_unit_id, pkt);
+    } else {
+        bool success = cacheSidePorts[lastCacheSidePortSend]->sendPacket(func_unit_type, func_unit_id, pkt);
+        if (success)
+            lastCacheSidePortSend = (lastCacheSidePortSend + 1) % num_cores;
+        return success;
+    }
 }
 void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     assert(blockReason == reason);
@@ -207,7 +214,9 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     }
 }
 
-void MAA::CacheSidePort::allocate(int _maxOutstandingCacheSidePackets) {
+void MAA::CacheSidePort::allocate(int _core_id, int _maxOutstandingCacheSidePackets) {
+    core_id = _core_id;
+    DPRINTF(MAACachePort, "%s: core_id: %d\n", __func__, core_id);
     maxOutstandingCacheSidePackets = _maxOutstandingCacheSidePackets;
     // 16384 is maximum transmitList of PacketQueue (CPU side port of LLC)
     // Taken from gem5-hpc/src/mem/packet_queue.cc (changed from 1024 to 16384)

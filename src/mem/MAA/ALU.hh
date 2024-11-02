@@ -47,7 +47,7 @@ public:
 protected:
     Instruction *my_instruction;
     int my_alu_id;
-    int my_dst_tile, my_cond_tile, my_src1_tile, my_src2_tile;
+    int my_dst_tile, my_dst_reg, my_cond_tile, my_src1_tile, my_src2_tile;
     bool my_cond_tile_ready, my_src1_tile_ready, my_src2_tile_ready;
     int my_i, my_max;
     int my_input_word_size;
@@ -61,6 +61,12 @@ protected:
     Tick my_ALU_finish_tick;
     Tick my_decode_start_tick;
     int num_tile_elements;
+    int32_t my_red_i32;
+    uint32_t my_red_u32;
+    int64_t my_red_i64;
+    uint64_t my_red_u64;
+    float my_red_f32;
+    double my_red_f64;
 
     void executeInstruction();
     void updateLatency(int num_spd_read_data_accesses,

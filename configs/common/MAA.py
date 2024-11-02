@@ -17,7 +17,7 @@ class SharedMAA(MAA):
     num_row_table_config_cache_entries = 16
     reconfigure_row_table = False
     num_initial_row_table_banks = 4
-    num_request_table_addresses = 64
+    num_request_table_addresses = 128
     num_request_table_entries_per_address = 16
     spd_read_latency = 1
     spd_write_latency = 1
@@ -30,3 +30,4 @@ class SharedMAA(MAA):
     max_outstanding_cache_side_packets = 512
     max_outstanding_cpu_side_packets = 512
     num_memory_channels = 1
+    num_cores = 4

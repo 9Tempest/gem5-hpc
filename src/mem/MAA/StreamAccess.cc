@@ -149,9 +149,7 @@ void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_request_tab
     my_translation_done = false;
     my_instruction = nullptr;
 }
-Cycles StreamAccessUnit::updateLatency(int num_spd_read_accesses,
-                                       int num_spd_write_accesses,
-                                       int num_requesttable_accesses) {
+Cycles StreamAccessUnit::updateLatency(int num_spd_read_accesses, int num_spd_write_accesses, int num_requesttable_accesses) {
     if (num_spd_read_accesses != 0) {
         // 4Byte conditions -- 16 bytes per SPD access
         Cycles get_data_latency = maa->spd->getDataLatency(getCeiling(num_spd_read_accesses, 16));
@@ -176,7 +174,10 @@ Cycles StreamAccessUnit::updateLatency(int num_spd_read_accesses,
     return maa->getTicksToCycles(finish_tick - curTick());
 }
 bool StreamAccessUnit::scheduleNextExecution(bool force) {
-    Tick finish_tick = std::max(std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick), my_RT_access_finish_tick);
+    Tick finish_tick = my_RT_access_finish_tick;
+    if (state == Status::Response) {
+        finish_tick = std::max(std::max(my_SPD_read_finish_tick, my_SPD_write_finish_tick), finish_tick);
+    }
     if (curTick() < finish_tick) {
         scheduleExecuteInstructionEvent(maa->getTicksToCycles(finish_tick - curTick()));
         return true;
@@ -223,7 +224,8 @@ StreamAccessUnit::PageInfo StreamAccessUnit::getPageInfo(int i, Addr base_addr, 
     DPRINTF(MAAStream, "S[%d] %s: word[%d] wordPaddr[0x%lx] blockPaddr[0x%lx] pagePaddr[0x%lx] minItr[%d] minIdx[%d] GBG[%d]\n", my_stream_id, __func__, i, word_paddr, block_paddr, page_paddr, min_itr, min_idx, gbg_addr);
     return StreamAccessUnit::PageInfo(min_itr, min_idx, gbg_addr);
 }
-void StreamAccessUnit::fillCurrentPageInfos() {
+bool StreamAccessUnit::fillCurrentPageInfos() {
+    bool inserted = false;
     for (auto it = my_all_page_info.begin(); it != my_all_page_info.end();) {
         if (std::find_if(my_current_page_info.begin(), my_current_page_info.end(), [it](const PageInfo &page) {
                 return page.bg_addr == it->bg_addr;
@@ -231,10 +233,12 @@ void StreamAccessUnit::fillCurrentPageInfos() {
             my_current_page_info.push_back(*it);
             DPRINTF(MAAStream, "S[%d] %s: %s added to current page info!\n", my_stream_id, __func__, it->print());
             it = my_all_page_info.erase(it);
+            inserted = true;
         } else {
             ++it;
         }
     }
+    return inserted;
 }
 void StreamAccessUnit::executeInstruction() {
     switch (state) {
@@ -332,24 +336,33 @@ void StreamAccessUnit::executeInstruction() {
                             if (page_it->last_block_vaddr != 0) {
                                 Addr paddr = translatePacket(page_it->last_block_vaddr);
                                 std::vector<int> addr_vec = maa->map_addr(paddr);
-                                if (channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] == false) {
-                                    my_sent_requests++;
-                                    num_request_table_cacheline_accesses++;
-                                    createReadPacket(paddr, num_request_table_cacheline_accesses);
-                                    channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] = true;
-                                } else {
-                                    page_it++;
-                                    broken = true;
-                                    break;
-                                }
+                                panic_if(channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]], "S[%d] %s: channel %d already sent for page %s!\n", my_stream_id, __func__, addr_vec[ADDR_CHANNEL_LEVEL], page_it->print());
+                                // if (channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] == false) {
+                                my_sent_requests++;
+                                num_request_table_cacheline_accesses++;
+                                createReadPacket(paddr, num_request_table_cacheline_accesses);
+                                channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]] = true;
+                                // } else {
+                                //     page_it++;
+                                //     broken = true;
+                                //     break;
+                                // }
                             }
                             page_it->last_block_vaddr = block_vaddr;
                         }
                         Addr paddr = translatePacket(block_vaddr);
+                        std::vector<int> addr_vec = maa->map_addr(paddr);
+                        if (channel_sent[addr_vec[ADDR_CHANNEL_LEVEL]]) {
+                            DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added because channel already pushed! paddr=0x%lx\n", my_stream_id, page_it->curr_idx, paddr);
+                            page_it++;
+                            broken = true;
+                            break;
+                        }
                         uint16_t word_id = (vaddr - block_vaddr) / my_word_size;
                         if (request_table->add_entry(page_it->curr_idx, paddr, word_id) == false) {
-                            DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added! vaddr=0x%lx, paddr=0x%lx wid = %d\n", my_stream_id, page_it->curr_idx, block_vaddr, paddr, word_id);
-                            updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
+                            DPRINTF(MAAStream, "S[%d] RequestTable: entry %d not added because request table is full! vaddr=0x%lx, paddr=0x%lx wid = %d\n", my_stream_id, page_it->curr_idx, block_vaddr, paddr, word_id);
+                            // assume parallelism = #Channels
+                            // updateLatency(getCeiling(num_spd_read_accesses, my_words_per_cl), 0, getCeiling(num_request_table_cacheline_accesses, maa->m_org[ADDR_CHANNEL_LEVEL]));
                             (*maa->stats.STR_NumRTFull[my_stream_id])++;
                             page_it++;
                             broken = true;
@@ -398,11 +411,17 @@ void StreamAccessUnit::executeInstruction() {
                     }
                     DPRINTF(MAAStream, "S[%d] %s: page %s done, removing!\n", my_stream_id, __func__, page_it->print());
                     page_it = my_current_page_info.erase(page_it);
+                    bool was_last_page = page_it == my_current_page_info.end();
+                    // replacing with a new page and updating the iterator
+                    if (fillCurrentPageInfos() && was_last_page) {
+                        page_it = my_current_page_info.begin();
+                    }
                 }
             }
         }
 
         delete[] channel_sent;
+        // assume parallelism = #Channels
         updateLatency(num_spd_read_accesses, 0, num_request_table_cacheline_accesses);
         if (request_table->is_full()) {
             scheduleNextExecution();
@@ -455,11 +474,11 @@ void StreamAccessUnit::createReadPacket(Addr addr, int latency) {
     DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, my_pkt->print(), latency);
     (*maa->stats.STR_LoadsCacheAccessing[my_stream_id])++;
 }
-void StreamAccessUnit::createReadPacketEvict(Addr addr) {
+void StreamAccessUnit::createReadPacketEvict(Addr addr, int core_id) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
     PacketPtr my_pkt = new Packet(real_req, MemCmd::CleanEvict);
-    my_outstanding_evict_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(0))));
+    my_outstanding_evict_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(0)), core_id));
     DPRINTF(MAAStream, "S[%d] %s: created %s to send\n", my_stream_id, __func__, my_pkt->print());
     (*maa->stats.STR_Evicts[my_stream_id])++;
 }
@@ -482,6 +501,7 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
             read_packet_blocked = true;
             break;
         } else {
+            DPRINTF(MAAStream, "S[%d] %s: send succeeded...\n", my_stream_id, __func__);
             my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
         }
     }
@@ -491,7 +511,7 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
         StreamAccessUnit::StreamPacket evict_pkt = *my_outstanding_evict_pkts.begin();
         DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n", my_stream_id, __func__, evict_pkt.packet->print(), evict_pkt.tick);
         panic_if(evict_pkt.tick > curTick(), "S[%d] %s: waiting for %d cycles\n", my_stream_id, __func__, maa->getTicksToCycles(evict_pkt.tick - curTick()));
-        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, evict_pkt.packet) == false) {
+        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, evict_pkt.packet, evict_pkt.core_id) == false) {
             DPRINTF(MAAStream, "S[%d] %s: send failed, leaving send packet...\n", my_stream_id, __func__);
             break;
         } else {
@@ -503,17 +523,18 @@ bool StreamAccessUnit::sendOutstandingReadPacket() {
     if (read_packet_remaining) {
         scheduleNextSend();
     }
-    if (evict_packet_sent) {
-        if (my_received_responses == my_sent_requests) {
-            DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
-            scheduleNextExecution(true);
-        } else {
-            DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d!\n", my_stream_id, __func__, my_received_responses, my_received_responses);
-        }
+    if (evict_packet_sent && allPacketsSent() && my_received_responses == my_sent_requests) {
+        DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
+        scheduleNextExecution(true);
+    } else {
+        DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d!\n", my_stream_id, __func__, my_received_responses, my_received_responses);
     }
     return true;
 }
-bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr) {
+bool StreamAccessUnit::allPacketsSent() {
+    return my_outstanding_read_pkts.empty() && my_outstanding_evict_pkts.empty();
+}
+bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr, int core_id) {
     bool was_request_table_full = request_table->is_full();
     std::vector<RequestTableEntry> entries = request_table->get_entries(addr);
     if (entries.empty()) {
@@ -537,8 +558,14 @@ bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr) {
     my_received_responses++;
 
     updateLatency(0, entries.size(), 1);
-    createReadPacketEvict(addr);
-    scheduleNextSend();
+    if (allPacketsSent() && my_received_responses == my_sent_requests) {
+        DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
+        scheduleNextExecution(true);
+    } else {
+        DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d!\n", my_stream_id, __func__, my_received_responses, my_received_responses);
+    }
+    // createReadPacketEvict(addr, core_id);
+    // scheduleNextSend();
     if (was_request_table_full) {
         scheduleNextExecution(true);
     }
@@ -546,12 +573,7 @@ bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr) {
 }
 Addr StreamAccessUnit::translatePacket(Addr vaddr) {
     /**** Address translation ****/
-    RequestPtr translation_req = std::make_shared<Request>(vaddr,
-                                                           block_size,
-                                                           flags,
-                                                           maa->requestorId,
-                                                           my_instruction->PC,
-                                                           my_instruction->CID);
+    RequestPtr translation_req = std::make_shared<Request>(vaddr, block_size, flags, maa->requestorId, my_instruction->PC, my_instruction->CID);
     ThreadContext *tc = maa->system->threads[my_instruction->CID];
     maa->mmu->translateTiming(translation_req, tc, this, BaseMMU::Read);
     // The above function immediately does the translation and calls the finish function
@@ -559,8 +581,7 @@ Addr StreamAccessUnit::translatePacket(Addr vaddr) {
     my_translation_done = false;
     return my_translated_addr;
 }
-void StreamAccessUnit::finish(const Fault &fault,
-                              const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
+void StreamAccessUnit::finish(const Fault &fault, const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
     assert(fault == NoFault);
     assert(my_translation_done == false);
     my_translation_done = true;

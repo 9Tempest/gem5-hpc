@@ -76,6 +76,7 @@ def _get_maa_opts(options):
         opts["num_ALU_lanes"] = getattr(options, "maa_num_ALU_lanes")
     
     opts["num_memory_channels"] = options.mem_channels
+    opts["num_cores"] = options.num_cpus
     
     addr_ranges = []
     start = options.mem_size
@@ -138,10 +139,6 @@ def config_maa(options, system):
     assert(options.l3cache)
     opts = _get_maa_opts(options)
     system.maa = SharedMAA(clk_domain=system.cpu_clk_domain, **opts)
-
-    # CPU side is derived by the memory side of the memory bus
-    system.maa.cpu_side = system.membus.mem_side_ports
-    # LLC side derives the cpu side of the L3 bus
     
     # Increasing LLC side packets to accommodate the MAA routing table
     max_tol3_routing_table_size = (1 if "num_stream_access_units" not in opts else opts["num_stream_access_units"])
@@ -171,8 +168,12 @@ def config_maa(options, system):
     system.tol3bus.snoop_filter.max_capacity = max_capacity
     print(f"MAA max snoop filter capacity: {system.tol3bus.snoop_filter.max_capacity}/{system.membus.snoop_filter.max_capacity}")
     
-    system.maa.cache_side = system.tol3bus.cpu_side_ports
-    # Memory side derives the cpu side of the memory bus
+    for _ in range(options.num_cpus):
+        system.maa.cpu_sides = system.membus.mem_side_ports
+
+    for _ in range(options.num_cpus):
+        system.maa.cache_sides = system.tol3bus.cpu_side_ports
+
     for _ in range(options.mem_channels):
         system.membusnc.cpu_side_ports = system.maa.mem_sides
 

@@ -30,9 +30,9 @@ namespace gem5 {
 void MAA::recvMemTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAAMemPort, "%s: received %s, cmd: %s, size: %d\n", __func__, pkt->print(), pkt->cmdString(), pkt->getSize());
-    for (int i = 0; i < pkt->getSize(); i++) {
-        DPRINTF(MAAMemPort, "[%d] %02x %s\n", i, pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
-    }
+    // for (int i = 0; i < pkt->getSize(); i++) {
+    //     DPRINTF(MAAMemPort, "[%d] %02x %s\n", i, pkt->getPtr<uint8_t>()[i], pkt->req->getByteEnable()[i] ? "True" : "False");
+    // }
     switch (pkt->cmd.toInt()) {
     case MemCmd::ReadExResp:
     case MemCmd::ReadResp: {

@@ -21,7 +21,7 @@ class MAA(ClockedObject):
     num_row_table_rows_per_bank = Param.Unsigned(64, "Number of rows in each row table bank")
     num_row_table_entries_per_subbank_row = Param.Unsigned(8, "Number of row table entries (bursts) per each sub-bank of row table")
     num_row_table_config_cache_entries = Param.Unsigned(16, "Number of row table entry history in the configuration cache")
-    num_request_table_addresses = Param.Unsigned(64, "Number of addresses in the request table")
+    num_request_table_addresses = Param.Unsigned(128, "Number of addresses in the request table")
     num_request_table_entries_per_address = Param.Unsigned(16, "Number of entries in the request table per address")
     reconfigure_row_table = Param.Bool(False, "Reconfigure row table")
     num_initial_row_table_banks = Param.Unsigned(4, "Number of initial row table banks if row table is not reconfigurable")
@@ -36,14 +36,15 @@ class MAA(ClockedObject):
     max_outstanding_cache_side_packets = Param.Unsigned(512, "Maximum number of outstanding cache side packets")
     max_outstanding_cpu_side_packets = Param.Unsigned(512, "Maximum number of outstanding cpu side packets")
     num_memory_channels = Param.Unsigned(2, "Number of memory channels")
+    num_cores = Param.Unsigned(4, "Number of cores")
 
 
-    cpu_side = ResponsePort("Upstream port closer to the CPU and/or device")
+    cpu_sides = VectorResponsePort("Vector port for connecting to the CPU and/or device")
     mem_sides = VectorRequestPort("Vector port for connecting to DRAM memory")
-    master = DeprecatedParam(
-        mem_sides, "`master` is now called `mem_sides`"
-    )
-    cache_side = RequestPort("Downstream port connecting to LLC")
+    # master = DeprecatedParam(
+    #     mem_sides, "`master` is now called `mem_sides`"
+    # )
+    cache_sides = VectorRequestPort("Vector port for connecting to to LLC")
 
     addr_ranges = VectorParam.AddrRange(
         [AllMemory], "Address range for scratchpad data, scratchpad size, scratchpad ready, scalar registers, and instruction file"
