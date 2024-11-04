@@ -101,15 +101,23 @@ protected:
                    "], curr_idx: [" + std::to_string(curr_idx) +
                    "])";
         }
+        bool operator<(const PageInfo &rhs) const {
+            return curr_itr < rhs.curr_itr;
+        }
     };
     struct CompareByTick {
         bool operator()(const StreamPacket &lhs, const StreamPacket &rhs) const {
             return lhs.tick < rhs.tick;
         }
     };
+    struct CompareByItr {
+        bool operator()(const PageInfo &lhs, const PageInfo &rhs) const {
+            return lhs.curr_itr < rhs.curr_itr;
+        }
+    };
     std::multiset<StreamPacket, CompareByTick> my_outstanding_read_pkts;
-    std::multiset<StreamPacket, CompareByTick> my_outstanding_evict_pkts;
-    std::vector<PageInfo> my_all_page_info;
+    std::multiset<StreamPacket, CompareByTick> my_outstanding_write_pkts;
+    std::multiset<PageInfo, CompareByItr> my_all_page_info;
     std::vector<PageInfo> my_current_page_info;
     unsigned int num_tile_elements;
     unsigned int num_request_table_addresses;
@@ -131,12 +139,14 @@ public:
 
     void setInstruction(Instruction *_instruction);
 
-    Cycles updateLatency(int num_spd_read_accesses,
+    Cycles updateLatency(int num_spd_condread_accesses,
+                         int num_spd_srcread_accesses,
                          int num_spd_write_accesses,
                          int num_requesttable_accesses);
     bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
-    void scheduleSendPacketEvent(int latency = 0);
+    void scheduleSendReadPacketEvent(int latency = 0);
+    void scheduleSendWritePacketEvent(int latency = 0);
     bool recvData(const Addr addr, uint8_t *dataptr, int core_id = -1);
 
     /* Related to BaseMMU::Translation Inheretance */
@@ -151,7 +161,7 @@ protected:
     const Addr block_size = 64;
     const Addr page_size = 4096;
     Addr my_base_addr;
-    int my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
+    int my_src_tile, my_dst_tile, my_cond_tile, my_min, my_max, my_stride;
     int my_received_responses, my_sent_requests;
     int my_stream_id;
     Tick my_SPD_read_finish_tick;
@@ -167,13 +177,15 @@ protected:
     bool my_translation_done;
 
     void createReadPacket(Addr addr, int latency);
-    void createReadPacketEvict(Addr addr, int core_id);
     bool sendOutstandingReadPacket();
+    bool sendOutstandingWritePacket();
     Addr translatePacket(Addr vaddr);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
-    EventFunctionWrapper sendPacketEvent;
-    bool scheduleNextSend();
+    EventFunctionWrapper sendReadPacketEvent;
+    EventFunctionWrapper sendWritePacketEvent;
+    bool scheduleNextSendRead();
+    bool scheduleNextSendWrite();
     int getGBGAddr(int channel, int rank, int bankgroup);
     PageInfo getPageInfo(int i, Addr base_addr, int word_size, int min, int stride);
     bool fillCurrentPageInfos();

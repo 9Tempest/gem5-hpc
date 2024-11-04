@@ -50,13 +50,11 @@ void MAA::recvCacheTimingResp(PacketPtr pkt, int core_id) {
             }
         }
         bool received = false;
-        if (pkt->cmd == MemCmd::ReadResp) {
-            for (int i = 0; i < num_stream_access_units; i++) {
-                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
-                    if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), core_id)) {
-                        panic_if(received, "Received multiple responses for the same request\n");
-                        received = true;
-                    }
+        for (int i = 0; i < num_stream_access_units; i++) {
+            if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
+                if (streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), core_id)) {
+                    panic_if(received, "Received multiple responses for the same request\n");
+                    received = true;
                 }
             }
         }
@@ -200,7 +198,8 @@ void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
             assert(maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request);
             funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
             DPRINTF(MAACachePort, "%s unblocked Unit[stream][%d]...\n", __func__, i);
-            maa->streamAccessUnits[i].scheduleSendPacketEvent();
+            maa->streamAccessUnits[i].scheduleSendWritePacketEvent();
+            maa->streamAccessUnits[i].scheduleSendReadPacketEvent();
         }
     }
     for (int i = 0; i < maa->num_indirect_access_units; i++) {

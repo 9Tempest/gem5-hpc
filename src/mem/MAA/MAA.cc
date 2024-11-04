@@ -447,9 +447,11 @@ void MAA::dispatchInstruction() {
                     spd->setTileNotReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                 }
                 if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW ||
-                    instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
                     spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
+                }
+                if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+                    spd->setTileNotReady(instruction->src1SpdID, instruction->getWordSize(instruction->src1SpdID));
                 }
                 pkt->makeTimingResponse();
                 pkt->headerDelay = pkt->payloadDelay = 0;
@@ -485,9 +487,11 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
         setTileReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
     }
     if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-        instruction->opcode == Instruction::OpcodeType::INDIR_RMW ||
-        instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+        instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
         setTileReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
+    }
+    if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+        setTileReady(instruction->src1SpdID, instruction->getWordSize(instruction->src1SpdID));
     }
     ifile->finishInstructionCompute(instruction);
     switch (instruction->funcUniType) {

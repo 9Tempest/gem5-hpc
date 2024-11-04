@@ -129,8 +129,8 @@ void MAA::MemSidePort::setUnblocked() {
             isFuncBlocked[i] = false;
             DPRINTF(MAAMemPort, "%s: unblocked Unit[indirect][%d]...\n", __func__, i);
             maa->indirectAccessUnits[i].unblockMemChannel(channel_id);
-            maa->indirectAccessUnits[i].scheduleSendMemReadPacketEvent();
             maa->indirectAccessUnits[i].scheduleSendMemWritePacketEvent();
+            maa->indirectAccessUnits[i].scheduleSendMemReadPacketEvent();
             isAnyBlocked = true;
         }
     }

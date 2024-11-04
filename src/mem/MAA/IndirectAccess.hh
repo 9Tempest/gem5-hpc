@@ -118,16 +118,13 @@ public:
                   int _num_RT_entries_per_row,
                   OffsetTable *_offset_table,
                   IndirectAccessUnit *_indir_access);
-    bool insert(Addr grow_addr,
-                Addr addr,
-                int itr,
-                int wid);
+    bool insert(Addr grow_addr, Addr addr, int itr, int wid);
     bool get_entry_send(Addr &addr, bool drain);
     bool find_next_grow_addr();
+    bool is_full();
     void get_send_grow_rowid();
     std::vector<OffsetTableEntry>
-    get_entry_recv(Addr grow_addr,
-                   Addr addr);
+    get_entry_recv(Addr grow_addr, Addr addr);
 
     void reset();
     void check_reset();
@@ -283,7 +280,8 @@ protected:
     int my_indirect_id;
     Tick my_SPD_read_finish_tick;
     Tick my_SPD_write_finish_tick;
-    Tick my_RT_access_finish_tick;
+    Tick my_RT_read_access_finish_tick;
+    Tick my_RT_write_access_finish_tick;
     Tick my_decode_start_tick;
     Tick my_fill_start_tick;
     Tick my_build_start_tick;
@@ -317,7 +315,8 @@ protected:
     Cycles updateLatency(int num_spd_read_data_accesses,
                          int num_spd_read_condidx_accesses,
                          int num_spd_write_accesses,
-                         int num_rowtable_accesses,
+                         int num_rowtable_read_accesses,
+                         int num_rowtable_write_accesses,
                          int RT_access_parallelism);
 
 public:
