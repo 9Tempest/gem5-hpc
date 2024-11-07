@@ -266,6 +266,8 @@ const MemCmd::CommandInfo
             {{IsRead, IsResponse}, InvalidCmd, "HTMReqResp"},
             {{IsRead, IsRequest}, InvalidCmd, "HTMAbort"},
             {{IsRequest}, InvalidCmd, "TlbiExtSync"},
+            /* SnoopReq */
+            {{IsRequest, IsSnoop}, InvalidCmd, "SnoopReq"},
 };
 
 AddrRange

@@ -224,7 +224,7 @@ def addNoISAOptions(parser):
     parser.add_argument("--maa_num_row_table_config_cache_entries", type=int, default=16, help="Number of row table entry history in the configuration cache")
     parser.add_argument("--maa_reconfigure_row_table", action="store_true", help="Reconfigure row table")
     parser.add_argument("--maa_num_initial_row_table_banks", type=int, default=4, help="Number of initial row table banks if row table is not reconfigurable")
-    parser.add_argument("--maa_num_request_table_addresses", type=int, default=64, help="Number of addresses in the request table")
+    parser.add_argument("--maa_num_request_table_addresses", type=int, default=128, help="Number of addresses in the request table")
     parser.add_argument("--maa_num_request_table_entries_per_address", type=int, default=16, help="Number of entries in the request table per address")
     parser.add_argument("--maa_spd_read_latency", type=int, default=1, help="SPD read latency")
     parser.add_argument("--maa_spd_write_latency", type=int, default=1, help="SPD write latency")

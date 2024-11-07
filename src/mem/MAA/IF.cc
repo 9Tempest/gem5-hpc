@@ -65,8 +65,10 @@ int Instruction::getWordSize(int tile_id) {
             return WordSize();
         }
         case OpcodeType::INDIR_LD:
-        case OpcodeType::INDIR_ST:
-        case OpcodeType::INDIR_RMW:
+        case OpcodeType::INDIR_ST_VECTOR:
+        case OpcodeType::INDIR_ST_SCALAR:
+        case OpcodeType::INDIR_RMW_VECTOR:
+        case OpcodeType::INDIR_RMW_SCALAR:
         case OpcodeType::RANGE_LOOP: {
             return 4;
         }
@@ -75,8 +77,8 @@ int Instruction::getWordSize(int tile_id) {
         }
     } else if (tile_id == src2SpdID) {
         switch (opcode) {
-        case OpcodeType::INDIR_ST:
-        case OpcodeType::INDIR_RMW:
+        case OpcodeType::INDIR_ST_VECTOR:
+        case OpcodeType::INDIR_RMW_VECTOR:
         case OpcodeType::ALU_VECTOR: {
             return WordSize();
         }
@@ -98,7 +100,10 @@ int Instruction::getWordSize(int tile_id) {
         }
         case OpcodeType::STREAM_LD:
         case OpcodeType::INDIR_LD:
-        case OpcodeType::INDIR_RMW: {
+        case OpcodeType::INDIR_ST_VECTOR:
+        case OpcodeType::INDIR_ST_SCALAR:
+        case OpcodeType::INDIR_RMW_VECTOR:
+        case OpcodeType::INDIR_RMW_SCALAR: {
             return WordSize();
         }
         case OpcodeType::RANGE_LOOP: {
@@ -141,8 +146,10 @@ bool IF::pushInstruction(Instruction _instruction) {
         break;
     }
     case Instruction::OpcodeType::INDIR_LD:
-    case Instruction::OpcodeType::INDIR_ST:
-    case Instruction::OpcodeType::INDIR_RMW: {
+    case Instruction::OpcodeType::INDIR_ST_VECTOR:
+    case Instruction::OpcodeType::INDIR_ST_SCALAR:
+    case Instruction::OpcodeType::INDIR_RMW_VECTOR:
+    case Instruction::OpcodeType::INDIR_RMW_SCALAR: {
         _instruction.funcUniType = FuncUnitType::INDIRECT;
         break;
     }

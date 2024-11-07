@@ -27,40 +27,20 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     switch (pkt->cmd.toInt()) {
-    case MemCmd::ReadExResp:
-    case MemCmd::ReadResp: {
+    case MemCmd::ReadExResp: {
         assert(pkt->getSize() == 64);
         for (int i = 0; i < 64; i += 4) {
             panic_if(pkt->req->getByteEnable()[i] == false, "Byte enable [%d] is not set for the read response\n", i);
         }
-        bool received = false;
-
         AddressRangeType address_range = AddressRangeType(pkt->getAddr(), addrRanges);
-        if (address_range.isValid()) {
-            // It's a dirty data for the invalidator in the SPD range
-            assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
-            Addr offset = address_range.getOffset();
-            int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
-            int element_id = offset % (num_tile_elements * sizeof(uint32_t));
-            assert(element_id % sizeof(uint32_t) == 0);
-            element_id /= sizeof(uint32_t);
-            invalidator->recvData(tile_id, element_id, pkt->getPtr<uint8_t>());
-        } else {
-            // It's a data
-            for (int i = 0; i < num_indirect_access_units; i++) {
-                if (indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request) {
-                    if (indirectAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>(), true)) {
-                        panic_if(received, "Received multiple responses for the same request\n");
-                    }
-                }
-            }
-            for (int i = 0; i < num_stream_access_units; i++) {
-                if (streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request) {
-                    panic_if(streamAccessUnits[i].recvData(pkt->getAddr(), pkt->getPtr<uint8_t>()),
-                             "Received multiple responses for the same request\n");
-                }
-            }
-        }
+        panic_if(address_range.isValid() == false, "Invalid address range: %s\n", address_range.print());
+        assert(address_range.getType() == AddressRangeType::Type::SPD_DATA_CACHEABLE_RANGE);
+        Addr offset = address_range.getOffset();
+        int tile_id = offset / (num_tile_elements * sizeof(uint32_t));
+        int element_id = offset % (num_tile_elements * sizeof(uint32_t));
+        assert(element_id % sizeof(uint32_t) == 0);
+        element_id /= sizeof(uint32_t);
+        invalidator->recvData(tile_id, element_id, pkt->getPtr<uint8_t>());
         break;
     }
     default:
@@ -70,20 +50,12 @@ void MAA::recvTimingSnoopResp(PacketPtr pkt) {
 bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
     assert(pkt->isResponse());
     /// print the packet
-    DPRINTF(MAACpuPort, "%s: received %s, hasData %s, hasResponseData %s, size %u, isCached %s, satisfied: %d, be:\n",
-            __func__,
-            pkt->print(),
-            pkt->hasData() ? "True" : "False",
-            pkt->hasRespData() ? "True" : "False",
-            pkt->getSize(),
-            pkt->isBlockCached() ? "True" : "False",
-            pkt->satisfied());
-    // assert(false);
-    // Express snoop responses from requestor to responder, e.g., from L1 to L2
+    DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
     maa.recvTimingSnoopResp(pkt);
     outstandingCpuSidePackets--;
-    if (blockReason == BlockReason::MAX_XBAR_PACKETS) {
-        setUnblocked();
+    if (is_blocked) {
+        is_blocked = false;
+        maa.invalidator->scheduleExecuteInstructionEvent();
     }
     return true;
 }
@@ -373,7 +345,6 @@ bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     assert(pkt->isRequest());
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
-    panic_if(core_id != 0, "Only core 0 is allowed to recv requests\n");
 
     if (tryTiming(pkt)) {
         maa.recvTimingReq(pkt, core_id);
@@ -381,11 +352,9 @@ bool MAA::CpuSidePort::recvTimingReq(PacketPtr pkt) {
     }
     return false;
 }
-
 void MAA::CpuSidePort::recvFunctional(PacketPtr pkt) {
     assert(false);
 }
-
 Tick MAA::recvAtomic(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAACpuPort, "%s: received %s\n", __func__, pkt->print());
@@ -403,24 +372,16 @@ AddrRangeList MAA::CpuSidePort::getAddrRanges() const {
     return maa.getAddrRanges(core_id);
 }
 
-bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
+bool MAA::CpuSidePort::sendSnoopInvalidatePacket(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAACpuPort, "%s: UNIT[%s][%d] %s\n", __func__, func_unit_names[func_unit_type], func_unit_id, pkt->print());
-    panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
-    panic_if(func_unit_type == (int)FuncUnitType::STREAM, "Stream does not have any snoop requests\n");
+    DPRINTF(MAACpuPort, "%s: sending invalidation %s\n", __func__, pkt->print());
     int pkt_core_id = maa.core_addr(pkt->getAddr());
     panic_if(pkt_core_id != core_id, "%s: packet is for core %d\n", __func__, pkt_core_id);
-    if (blockReason != BlockReason::NOT_BLOCKED) {
-        DPRINTF(MAACpuPort, "%s Send snoop blocked because of MAX_XBAR_PACKETS...\n", __func__);
-        funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
-        return false;
-    }
+    panic_if(is_blocked, "%s: port is blocked\n", __func__);
     if (outstandingCpuSidePackets == maxOutstandingCpuSidePackets) {
         // XBAR is full
         DPRINTF(MAACpuPort, "%s Send failed because XBAR is full...\n", __func__);
-        assert(blockReason == BlockReason::NOT_BLOCKED);
-        blockReason = BlockReason::MAX_XBAR_PACKETS;
-        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
+        is_blocked = true;
         return false;
     }
     sendTimingSnoopReq(pkt);
@@ -429,40 +390,23 @@ bool MAA::CpuSidePort::sendSnoopPacket(uint8_t func_unit_type, int func_unit_id,
         outstandingCpuSidePackets++;
     return true;
 }
-bool MAA::sendSnoopPacketCpu(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
+bool MAA::sendSnoopInvalidateCpu(PacketPtr pkt) {
+    panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
     int pkt_core_id = core_addr(pkt->getAddr());
-    return cpuSidePorts[pkt_core_id]->sendSnoopPacket(func_unit_type, func_unit_id, pkt);
+    return cpuSidePorts[pkt_core_id]->sendSnoopInvalidatePacket(pkt);
 }
 
-void MAA::CpuSidePort::setUnblocked() {
-    blockReason = BlockReason::NOT_BLOCKED;
-    if (funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] != BlockReason::NOT_BLOCKED) {
-        assert(maa.invalidator->getState() == Invalidator::Status::Request);
-        funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
-        DPRINTF(MAACpuPort, "%s unblocked Unit[invalidator]...\n", __func__);
-        maa.invalidator->scheduleExecuteInstructionEvent();
-    }
-    for (int i = 0; i < maa.num_indirect_access_units; i++) {
-        if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
-            assert(maa.indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
-            funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
-            DPRINTF(MAACpuPort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa.indirectAccessUnits[i].scheduleSendCpuPacketEvent();
-        }
-    }
+void MAA::sendSnoopPacketCpu(PacketPtr pkt) {
+    panic_if(pkt->isExpressSnoop() == false, "Packet is not an express snoop packet\n");
+    int pkt_core_id = core_addr(pkt->getAddr());
+    cpuSidePorts[pkt_core_id]->sendTimingSnoopReq(pkt);
 }
 
 void MAA::CpuSidePort::allocate(int _core_id, int _maxOutstandingCpuSidePackets) {
     outstandingCpuSidePackets = 0;
     core_id = _core_id;
     maxOutstandingCpuSidePackets = _maxOutstandingCpuSidePackets - 16;
-    funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa.num_indirect_access_units];
-    for (int i = 0; i < maa.num_indirect_access_units; i++) {
-        funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
-    }
-    funcBlockReasons[(int)FuncUnitType::INVALIDATOR] = new BlockReason[1];
-    funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
-    blockReason = BlockReason::NOT_BLOCKED;
+    is_blocked = false;
 }
 
 MAA::CpuSidePort::CpuSidePort(const std::string &_name, MAA &_maa,

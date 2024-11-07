@@ -370,11 +370,7 @@ bool RowTable::is_full() {
 //
 ///////////////
 IndirectAccessUnit::IndirectAccessUnit()
-    : executeInstructionEvent([this] { executeInstruction(); }, name()),
-      sendCachePacketEvent([this] { sendOutstandingCachePacket(); }, name()),
-      sendCpuPacketEvent([this] { sendOutstandingCpuPacket(); }, name()),
-      sendMemReadPacketEvent([this] { sendOutstandingMemReadPacket(); }, name()),
-      sendMemWritePacketEvent([this] { sendOutstandingMemWritePacket(); }, name()) {
+    : executeInstructionEvent([this] { executeInstruction(); }, name()) {
     RT_bank_org = nullptr;
     num_RT_banks = nullptr;
     num_RT_rows_total = nullptr;
@@ -438,7 +434,6 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
                                   bool _reconfigure_row_table,
                                   int _num_initial_row_table_banks,
                                   Cycles _rowtable_latency,
-                                  Cycles _cache_snoop_latency,
                                   int _num_channels,
                                   int _num_cores,
                                   MAA *_maa) {
@@ -451,24 +446,12 @@ void IndirectAccessUnit::allocate(int _my_indirect_id,
     reconfigure_RT = _reconfigure_row_table;
     num_initial_RT_banks = _num_initial_row_table_banks;
     rowtable_latency = _rowtable_latency;
-    cache_snoop_latency = _cache_snoop_latency;
     num_channels = _num_channels;
     num_cores = _num_cores;
     my_translation_done = false;
     state = Status::Idle;
     my_instruction = nullptr;
     dst_tile_id = -1;
-
-    mem_channels_blocked = new bool[num_channels];
-    for (int i = 0; i < num_channels; i++) {
-        mem_channels_blocked[i] = false;
-    }
-
-    // core_blocked = new bool[num_cores];
-    // for (int i = 0; i < num_cores; i++) {
-    //     core_blocked[i] = false;
-    // }
-
     offset_table = new OffsetTable();
     offset_table->allocate(my_indirect_id, num_tile_elements, this);
 
@@ -693,11 +676,7 @@ void IndirectAccessUnit::check_reset() {
         }
     }
     offset_table->check_reset();
-    panic_if(my_outstanding_cache_read_pkts.size() != 0, "Outstanding cache read packets: %d!\n", my_outstanding_cache_read_pkts.size());
-    // panic_if(my_outstanding_cache_evict_pkts.size() != 0, "Outstanding cache evict packets: %d!\n", my_outstanding_cache_evict_pkts.size());
-    panic_if(my_outstanding_cpu_snoop_pkts.size() != 0, "Outstanding cache snoop packets: %d!\n", my_outstanding_cpu_snoop_pkts.size());
-    panic_if(my_outstanding_mem_read_pkts.size() != 0, "Outstanding mem read packets: %d!\n", my_outstanding_mem_read_pkts.size());
-    panic_if(my_outstanding_mem_write_pkts.size() != 0, "Outstanding mem write packets: %d!\n", my_outstanding_mem_write_pkts.size());
+    panic_if(maa->allIndirectPacketsSent() == false, "All indirect packets are not sent!\n");
     panic_if(my_decode_start_tick != 0, "Decode start tick is not 0: %lu!\n", my_decode_start_tick);
     panic_if(my_fill_start_tick != 0, "Fill start tick is not 0: %lu!\n", my_fill_start_tick);
     panic_if(my_build_start_tick != 0, "Build start tick is not 0: %lu!\n", my_build_start_tick);
@@ -759,49 +738,6 @@ bool IndirectAccessUnit::scheduleNextExecution(bool force) {
     }
     return false;
 }
-bool IndirectAccessUnit::scheduleNextSendCpu() {
-    if (my_outstanding_cpu_snoop_pkts.size() > 0) {
-        Cycles latency = Cycles(0);
-        if (my_outstanding_cpu_snoop_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_cpu_snoop_pkts.begin()->tick - curTick());
-        }
-        scheduleSendCpuPacketEvent(latency);
-        return true;
-    }
-    return false;
-}
-bool IndirectAccessUnit::scheduleNextSendCache() {
-    if (my_outstanding_cache_read_pkts.size() > 0) { //  || my_outstanding_cache_evict_pkts.size() > 0
-        scheduleSendCachePacketEvent(Cycles(0));
-        return true;
-    }
-    return false;
-}
-bool IndirectAccessUnit::scheduleNextSendMemRead() {
-    if (my_outstanding_mem_read_pkts.size() > 0) {
-        scheduleSendMemReadPacketEvent(Cycles(0));
-        return true;
-    }
-    return false;
-}
-bool IndirectAccessUnit::scheduleNextSendMemWrite() {
-    bool return_val = false;
-    for (auto it = my_outstanding_mem_write_pkts.begin(); it != my_outstanding_mem_write_pkts.end();) {
-        if (mem_channels_blocked[maa->channel_addr(it->packet->getAddr())]) {
-            return_val = true;
-            ++it;
-            continue;
-        }
-        Cycles latency = Cycles(0);
-        if (it->tick > curTick()) {
-            latency = maa->getTicksToCycles(it->tick - curTick());
-        }
-        scheduleSendMemWritePacketEvent(latency);
-        return_val = true;
-        break;
-    }
-    return return_val;
-}
 void IndirectAccessUnit::checkTileReady() {
     // Check if any of the source tiles are ready
     // Set my_max to the size of the ready tile
@@ -823,14 +759,14 @@ void IndirectAccessUnit::checkTileReady() {
         }
         panic_if(maa->spd->getSize(my_idx_tile) != my_max, "I[%d] %s: idx size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_idx_tile), my_max);
     }
-    if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
+    if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && my_instruction->opcode != Instruction::OpcodeType::INDIR_RMW_SCALAR && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
         my_src_tile_ready = true;
     }
 }
 bool IndirectAccessUnit::checkElementReady() {
     bool cond_ready = my_cond_tile == -1 || maa->spd->getElementFinished(my_cond_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
     bool idx_ready = cond_ready && maa->spd->getElementFinished(my_idx_tile, my_i, 4, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id);
-    bool src_ready = idx_ready && (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD || maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id));
+    bool src_ready = idx_ready && (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR || my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR || maa->spd->getElementFinished(my_src_tile, my_i, my_word_size, (uint8_t)FuncUnitType::INDIRECT, my_indirect_id));
     if (cond_ready == false) {
         DPRINTF(MAAIndirect, "I[%d] %s: cond tile[%d] element[%d] not ready, returning!\n", my_indirect_id, __func__, my_cond_tile, my_i);
     } else if (idx_ready == false) {
@@ -873,7 +809,7 @@ void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool 
     checkTileReady();
     while (true) {
         if (my_max != -1 && my_i >= my_max) {
-            if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+            if (my_dst_tile != -1) {
                 panic_if(my_max != -1 && my_i != my_max, "I[%d] %s: my_i(%d) != my_max(%d)!\n", my_indirect_id, __func__, my_i, my_max);
                 maa->spd->setSize(my_dst_tile, my_i);
             }
@@ -918,7 +854,7 @@ void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool 
                 my_unique_CL_addrs.insert(block_paddr);
                 my_unique_ROW_addrs.insert(grow_addr + my_RT_idx * num_RT_possible_grows[my_RT_config]);
             }
-        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
+        } else if (my_dst_tile != -1) {
             DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_indirect_id, __func__, my_dst_tile, my_i, 0);
             maa->spd->setFakeData(my_dst_tile, my_i, my_word_size);
         }
@@ -942,13 +878,17 @@ void IndirectAccessUnit::executeInstruction() {
         my_base_addr = my_instruction->baseAddr;
         my_idx_tile = my_instruction->src1SpdID;
         my_src_tile = my_instruction->src2SpdID;
+        my_src_reg = my_instruction->src1RegID;
         my_dst_tile = my_instruction->dst1SpdID;
         my_cond_tile = my_instruction->condSpdID;
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
             my_word_size = my_instruction->getWordSize(my_dst_tile);
-        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-                   my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
             my_word_size = my_instruction->getWordSize(my_src_tile);
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR) {
+            my_word_size = my_instruction->WordSize();
         } else {
             assert(false);
         }
@@ -957,25 +897,22 @@ void IndirectAccessUnit::executeInstruction() {
         (*maa->stats.IND_NumInsts[my_indirect_id])++;
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
             maa->stats.numInst_INDRD++;
-        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST) {
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR) {
             maa->stats.numInst_INDWR++;
-        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
             maa->stats.numInst_INDRMW++;
         } else {
             assert(false);
         }
         my_cond_tile_ready = (my_cond_tile == -1) ? true : false;
         my_idx_tile_ready = false;
-        my_src_tile_ready = (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) ? true : false;
+        my_src_tile_ready = (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD || my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR) ? true : false;
         my_RT_config = getRowTableConfig(my_base_addr);
 
         // Initialization
         my_virtual_addr = 0;
-        assert(my_outstanding_cache_read_pkts.size() == 0);
-        // assert(my_outstanding_cache_evict_pkts.size() == 0);
-        assert(my_outstanding_cpu_snoop_pkts.size() == 0);
-        assert(my_outstanding_mem_read_pkts.size() == 0);
-        assert(my_outstanding_mem_write_pkts.size() == 0);
         my_received_responses = my_expected_responses = 0;
         offset_table->reset();
         for (int i = 0; i < num_RT_banks[my_RT_config]; i++) {
@@ -993,6 +930,8 @@ void IndirectAccessUnit::executeInstruction() {
         my_build_start_tick = 0;
         my_request_start_tick = 0;
         my_fill_finished = false;
+        my_force_cache_determined = false;
+        my_force_cache = false;
 
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
@@ -1058,6 +997,16 @@ void IndirectAccessUnit::executeInstruction() {
         int last_RT_sent = 0;
         int num_rowtable_accesses = 0;
         Addr addr;
+        if (my_force_cache_determined == false) {
+            my_force_cache_determined = true;
+            if (my_unique_WORD_addrs.size() > my_words_per_cl * my_unique_CL_addrs.size()) {
+                DPRINTF(MAAIndirect, "I[%d] %s: Direct cache access is needed!\n", my_indirect_id, __func__);
+                my_force_cache = true;
+            } else {
+                DPRINTF(MAAIndirect, "I[%d] %s: Direct cache access is not needed!\n", my_indirect_id, __func__);
+                my_force_cache = false;
+            }
+        }
         while (true) {
             if (checkAndResetAllRowTablesSent())
                 break;
@@ -1070,7 +1019,7 @@ void IndirectAccessUnit::executeInstruction() {
                         DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n", my_indirect_id, __func__, RT_idx, addr);
                         my_expected_responses++;
                         num_rowtable_accesses++;
-                        createCacheSnoopPacket(addr, getCeiling(num_rowtable_accesses, total_num_RT_subbanks) * rowtable_latency);
+                        createReadPacket(addr, getCeiling(num_rowtable_accesses, total_num_RT_subbanks) * rowtable_latency);
                     } else {
                         DPRINTF(MAAIndirect, "I[%d] %s: T[%d] has nothing, setting sent to true!\n", my_indirect_id, __func__, RT_idx);
                         my_RT_req_sent[my_RT_config][RT_idx] = true;
@@ -1086,7 +1035,6 @@ void IndirectAccessUnit::executeInstruction() {
         updateLatency(0, 0, 0, num_rowtable_accesses, 0, total_num_RT_subbanks);
         state = Status::Request;
         scheduleNextExecution(true);
-        scheduleNextSendCpu();
         break;
     }
     case Status::Request: {
@@ -1099,7 +1047,7 @@ void IndirectAccessUnit::executeInstruction() {
             (*maa->stats.IND_CyclesBuild[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_build_start_tick);
             my_build_start_tick = 0;
         }
-        if (allPacketsSent() && my_received_responses == my_expected_responses) {
+        if (maa->allIndirectPacketsSent() && my_received_responses == my_expected_responses) {
             if (scheduleNextExecution()) {
                 DPRINTF(MAAIndirect, "I[%d] %s: requesting is still not ready, returning!\n", my_indirect_id, __func__);
                 break;
@@ -1128,10 +1076,7 @@ void IndirectAccessUnit::executeInstruction() {
         DPRINTF(MAAIndirect, "I[%d] %s: responding %s!\n", my_indirect_id, __func__, my_instruction->print());
         DPRINTF(MAATrace, "I[%d] End [%s]\n", my_indirect_id, my_instruction->print());
         panic_if(scheduleNextExecution(), "I[%d] %s: Execution is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendCache(), "I[%d] %s: Sending cache reads is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendCpu(), "I[%d] %s: Sending cpu snoop is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendMemRead(), "I[%d] %s: Sending mem reads is not completed!\n", my_indirect_id, __func__);
-        panic_if(scheduleNextSendMemWrite(), "I[%d] %s: Sending mem writes is not completed!\n", my_indirect_id, __func__);
+        panic_if(maa->allIndirectPacketsSent() == false, "All indirect packets are not sent!\n");
         panic_if(my_cond_tile_ready == false, "I[%d] %s: cond tile[%d] is not ready!\n", my_indirect_id, __func__, my_cond_tile);
         panic_if(my_idx_tile_ready == false, "I[%d] %s: idx tile[%d] is not ready!\n", my_indirect_id, __func__, my_idx_tile);
         panic_if(my_src_tile_ready == false, "I[%d] %s: src tile[%d] is not ready!\n", my_indirect_id, __func__, my_src_tile);
@@ -1152,7 +1097,8 @@ void IndirectAccessUnit::executeInstruction() {
         maa->finishInstructionCompute(my_instruction);
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
             maa->stats.cycles_INDRD += total_cycles;
-        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST) {
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR) {
             maa->stats.cycles_INDWR += total_cycles;
         } else {
             maa->stats.cycles_INDRMW += total_cycles;
@@ -1182,8 +1128,7 @@ bool IndirectAccessUnit::checkAndResetAllRowTablesSent() {
     }
     return true;
 }
-
-void IndirectAccessUnit::createCacheReadPacket(Addr addr) {
+void IndirectAccessUnit::createReadPacket(Addr addr, int latency) {
     /**** Packet generation ****/
     RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
     PacketPtr read_pkt;
@@ -1192,181 +1137,41 @@ void IndirectAccessUnit::createCacheReadPacket(Addr addr) {
     } else {
         read_pkt = new Packet(real_req, MemCmd::ReadExReq);
     }
+    read_pkt->headerDelay = read_pkt->payloadDelay = 0;
     read_pkt->allocate();
-    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(read_pkt, maa->getClockEdge(Cycles(0)));
-    my_outstanding_cache_read_pkts.insert(new_packet);
-    DPRINTF(MAAIndirect, "I[%d] %s: created %s to send for cache\n", my_indirect_id, __func__, read_pkt->print(), new_packet.tick);
-}
-void IndirectAccessUnit::createCacheSnoopPacket(Addr addr, int latency) {
-    /**** Packet generation ****/
-    RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
-    PacketPtr snoop_pkt;
-    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
-        snoop_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
-    } else {
-        snoop_pkt = new Packet(real_req, MemCmd::ReadExReq);
-    }
-    snoop_pkt->allocate();
-    snoop_pkt->setExpressSnoop();
-    snoop_pkt->headerDelay = snoop_pkt->payloadDelay = 0;
-    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(snoop_pkt, maa->getClockEdge(Cycles(latency)));
-    my_outstanding_cpu_snoop_pkts.insert(new_packet);
-    DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles at tick %u, for cache\n", my_indirect_id, __func__, snoop_pkt->print(), latency, new_packet.tick);
-}
-void IndirectAccessUnit::createMemReadPacket(Addr addr) {
-    /**** Packet generation ****/
-    RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
-    PacketPtr read_pkt;
-    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
-        read_pkt = new Packet(real_req, MemCmd::ReadSharedReq);
-    } else {
-        read_pkt = new Packet(real_req, MemCmd::ReadExReq);
-    }
-    read_pkt->allocate();
-    IndirectAccessUnit::IndirectPacket new_packet = IndirectAccessUnit::IndirectPacket(read_pkt, maa->getClockEdge(Cycles(0)));
-    my_outstanding_mem_read_pkts.insert(new_packet);
+    maa->sendPacket(FuncUnitType::INDIRECT, read_pkt, maa->getClockEdge(Cycles(latency)), my_force_cache);
     DPRINTF(MAAIndirect, "I[%d] %s: created %s for mem\n", my_indirect_id, __func__, read_pkt->print());
 }
-bool IndirectAccessUnit::sendOutstandingCpuPacket() {
-    bool mem_packet_pushed = false;
-    bool cache_packet_pushed = false;
-    bool snoop_packet_remained = false;
-
-    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cpu snoop packets...\n", my_indirect_id, __func__, my_outstanding_cpu_snoop_pkts.size());
-    while (my_outstanding_cpu_snoop_pkts.empty() == false) {
-        IndirectAccessUnit::IndirectPacket snoop_pkt = *my_outstanding_cpu_snoop_pkts.begin();
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide at time %u\n", my_indirect_id, __func__, snoop_pkt.packet->print(), snoop_pkt.tick);
-        if (snoop_pkt.tick > curTick()) {
-            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(snoop_pkt.tick - curTick()));
-            snoop_packet_remained = true;
-            break;
-        }
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending snoop %s to cpuSide\n", my_indirect_id, __func__, snoop_pkt.packet->print());
-        if (maa->sendSnoopPacketCpu((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, snoop_pkt.packet) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-            break;
-        }
-        DPRINTF(MAAIndirect, "I[%d] %s: successfully sent as a snoop to cpuSide, cache responding: %s, has sharers %s, had writable %s, satisfied %s, is block cached %s...\n",
-                my_indirect_id, __func__, snoop_pkt.packet->cacheResponding(), snoop_pkt.packet->hasSharers(), snoop_pkt.packet->responderHadWritable(), snoop_pkt.packet->satisfied(), snoop_pkt.packet->isBlockCached());
-        my_outstanding_cpu_snoop_pkts.erase(my_outstanding_cpu_snoop_pkts.begin());
-        if (snoop_pkt.packet->cacheResponding() == true) {
-            DPRINTF(MAAIndirect, "I[%d] %s: a cache in the O/M state will respond, send successfull...\n", my_indirect_id, __func__);
-            (*maa->stats.IND_LoadsCacheHitResponding[my_indirect_id])++;
-            LoadsCacheHitRespondingTimeHistory[snoop_pkt.packet->getAddr()] = curTick();
-        } else if (snoop_pkt.packet->hasSharers() == true) {
-            DPRINTF(MAAIndirect, "I[%d] %s: There's a cache in the E/S state will respond, creating again and sending to cache\n", my_indirect_id, __func__);
-            panic_if(snoop_pkt.packet->needsWritable(), "I[%d] %s: packet needs writable!\n", my_indirect_id, __func__);
-            createCacheReadPacket(snoop_pkt.packet->getAddr());
-            cache_packet_pushed = true;
-            (*maa->stats.IND_LoadsCacheHitAccessing[my_indirect_id])++;
-        } else {
-            DPRINTF(MAAIndirect, "I[%d] %s: no cache responds (I), creating again and sending to memory\n", my_indirect_id, __func__);
-            createMemReadPacket(snoop_pkt.packet->getAddr());
-            mem_packet_pushed = true;
-            (*maa->stats.IND_LoadsMemAccessing[my_indirect_id])++;
-        }
-    }
-
-    if (snoop_packet_remained) {
-        scheduleNextSendCpu();
-    }
-    if (cache_packet_pushed) {
-        scheduleNextSendCache();
-    }
-    if (mem_packet_pushed) {
-        scheduleNextSendMemRead();
-    }
-    return true;
+void IndirectAccessUnit::memReadPacketSent(PacketPtr pkt) {
+    DPRINTF(MAAIndirect, "I[%d] %s: mem read packet %s sent\n", my_indirect_id, __func__, pkt->print());
+    panic_if(pkt->needsResponse() == false, "I[%d] %s: packet %s does not need response!\n", my_indirect_id, __func__, pkt->print());
+    (*maa->stats.IND_LoadsMemAccessing[my_indirect_id])++;
+    LoadsMemAccessingTimeHistory[pkt->getAddr()] = curTick();
 }
-bool IndirectAccessUnit::sendOutstandingCachePacket() {
-    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding cache read packets...\n", my_indirect_id, __func__, my_outstanding_cache_read_pkts.size());
-    while (my_outstanding_cache_read_pkts.empty() == false) {
-        IndirectAccessUnit::IndirectPacket read_pkt = *my_outstanding_cache_read_pkts.begin();
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to cacheSide\n", my_indirect_id, __func__, read_pkt.packet->print());
-        panic_if(read_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
-        panic_if(read_pkt.packet->needsResponse() == false, "I[%d] %s: packet does not need response!\n", my_indirect_id, __func__);
-        if (maa->sendPacketCache((uint8_t)FuncUnitType::INDIRECT, my_indirect_id, read_pkt.packet) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed, leaving send packet...\n", my_indirect_id, __func__);
-            // read_packet_blocked = true;
-            break;
-        } else {
-            LoadsCacheHitAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
-            my_outstanding_cache_read_pkts.erase(my_outstanding_cache_read_pkts.begin());
-        }
-    }
-    return true;
-}
-bool IndirectAccessUnit::sendOutstandingMemReadPacket() {
-    DPRINTF(MAAIndirect, "I[%d] %s: sending %d outstanding mem read packets...\n", my_indirect_id, __func__, my_outstanding_mem_read_pkts.size());
-    for (auto it = my_outstanding_mem_read_pkts.begin(); it != my_outstanding_mem_read_pkts.end();) {
-        IndirectAccessUnit::IndirectPacket read_pkt = *it;
-        int channel_addr = maa->channel_addr(read_pkt.packet->getAddr());
-        if (mem_channels_blocked[channel_addr]) {
-            ++it;
-            continue;
-        }
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memSide\n", my_indirect_id, __func__, read_pkt.packet->print());
-        panic_if(read_pkt.tick > curTick(), "I[%d] %s: waiting for %d cycles\n", my_indirect_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
-        if (maa->sendPacketMem(my_indirect_id, read_pkt.packet) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed for channel %d...\n", my_indirect_id, __func__, channel_addr);
-            mem_channels_blocked[channel_addr] = true;
-            ++it;
-            continue;
-        } else {
-            if (read_pkt.packet->needsResponse()) {
-                LoadsMemAccessingTimeHistory[read_pkt.packet->getAddr()] = curTick();
-            }
-            it = my_outstanding_mem_read_pkts.erase(it);
-            continue;
-        }
-    }
-    return true;
-}
-bool IndirectAccessUnit::sendOutstandingMemWritePacket() {
-    bool write_packet_sent = false;
-    for (auto it = my_outstanding_mem_write_pkts.begin(); it != my_outstanding_mem_write_pkts.end();) {
-        IndirectAccessUnit::IndirectPacket write_pkt = *it;
-        if (write_pkt.tick > curTick()) {
-            DPRINTF(MAAIndirect, "I[%d] %s: waiting for %d cycles to send %s to memory\n", my_indirect_id, __func__, maa->getTicksToCycles(write_pkt.tick - curTick()), write_pkt.packet->print());
-            scheduleNextSendMemWrite();
-            return false;
-        }
-        int channel_addr = maa->channel_addr(write_pkt.packet->getAddr());
-        if (mem_channels_blocked[channel_addr]) {
-            ++it;
-            continue;
-        }
-        DPRINTF(MAAIndirect, "I[%d] %s: trying sending %s to memory\n", my_indirect_id, __func__, write_pkt.packet->print());
-        if (maa->sendPacketMem(my_indirect_id, write_pkt.packet) == false) {
-            DPRINTF(MAAIndirect, "I[%d] %s: send failed for channel %d\n", my_indirect_id, __func__, channel_addr);
-            mem_channels_blocked[channel_addr] = true;
-            ++it;
-            continue;
-        } else {
-            it = my_outstanding_mem_write_pkts.erase(it);
-            my_received_responses++;
-            write_packet_sent = true;
-            continue;
-        }
-    }
-    if (write_packet_sent && allPacketsSent() && (my_received_responses == my_expected_responses)) {
+void IndirectAccessUnit::memWritePacketSent(PacketPtr pkt) {
+    DPRINTF(MAAIndirect, "I[%d] %s: mem write packet %s sent\n", my_indirect_id, __func__, pkt->print());
+    my_received_responses++;
+    if (maa->allIndirectPacketsSent() && (my_received_responses == my_expected_responses)) {
         DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n", my_indirect_id, __func__, status_names[(int)state]);
         scheduleNextExecution(true);
     } else {
-        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d, packet send: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses, write_packet_sent);
+        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses);
     }
-    return true;
 }
-bool IndirectAccessUnit::allPacketsSent() {
-    return my_outstanding_cache_read_pkts.empty() &&
-           //    my_outstanding_cache_evict_pkts.empty() &&
-           my_outstanding_cpu_snoop_pkts.empty() &&
-           my_outstanding_mem_read_pkts.empty() &&
-           my_outstanding_mem_write_pkts.empty();
+void IndirectAccessUnit::cacheReadPacketSent(PacketPtr pkt) {
+    DPRINTF(MAAIndirect, "I[%d] %s: cache read packet %s sent\n", my_indirect_id, __func__, pkt->print());
+    LoadsCacheHitAccessingTimeHistory[pkt->getAddr()] = curTick();
+    (*maa->stats.IND_LoadsCacheHitAccessing[my_indirect_id])++;
 }
-void IndirectAccessUnit::unblockMemChannel(int channel_addr) {
-    panic_if(mem_channels_blocked[channel_addr] == false, "I[%d] %s: channel %d is not blocked!\n", my_indirect_id, __func__, channel_addr);
-    mem_channels_blocked[channel_addr] = false;
+void IndirectAccessUnit::cacheWritePacketSent(PacketPtr pkt) {
+    DPRINTF(MAAIndirect, "I[%d] %s: cache write packet %s sent\n", my_indirect_id, __func__, pkt->print());
+    my_received_responses++;
+    if (maa->allIndirectPacketsSent() && (my_received_responses == my_expected_responses)) {
+        DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again in state %s!\n", my_indirect_id, __func__, status_names[(int)state]);
+        scheduleNextExecution(true);
+    } else {
+        DPRINTF(MAAIndirect, "I[%d] %s: expected: %d, received: %d!\n", my_indirect_id, __func__, my_expected_responses, my_received_responses);
+    }
 }
 bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_block_cached, int core_id) {
     std::vector addr_vec = maa->map_addr(addr);
@@ -1399,8 +1204,8 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
         LoadsMemAccessingTimeHistory.erase(addr);
     }
     uint8_t new_data[block_size];
-    uint32_t *dataptr_u32_typed = (uint32_t *)dataptr;
-    uint64_t *dataptr_u64_typed = (uint64_t *)dataptr;
+    uint32_t *dataptr_u32_typed = (uint32_t *)new_data;
+    uint64_t *dataptr_u64_typed = (uint64_t *)new_data;
     std::memcpy(new_data, dataptr, block_size);
     int num_recv_spd_read_accesses = 0;
     int num_recv_spd_write_accesses = 0;
@@ -1409,31 +1214,39 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
         int itr = entry.itr;
         int wid = entry.wid;
         DPRINTF(MAAIndirect, "I[%d] %s: itr (%d) wid (%d) matched!\n", my_indirect_id, __func__, itr, wid);
-        switch (my_instruction->opcode) {
-        case Instruction::OpcodeType::INDIR_LD: {
+        if (my_dst_tile != -1) {
             if (my_word_size == 4) {
                 maa->spd->setData<uint32_t>(my_dst_tile, itr, dataptr_u32_typed[wid]);
             } else {
                 maa->spd->setData<uint64_t>(my_dst_tile, itr, dataptr_u64_typed[wid]);
             }
             num_recv_spd_write_accesses++;
+        }
+        switch (my_instruction->opcode) {
+        case Instruction::OpcodeType::INDIR_LD: {
+            assert(my_dst_tile != -1);
             break;
         }
-        case Instruction::OpcodeType::INDIR_ST: {
+        case Instruction::OpcodeType::INDIR_ST_VECTOR: {
             if (my_word_size == 4) {
                 ((uint32_t *)new_data)[wid] = maa->spd->getData<uint32_t>(my_src_tile, itr);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
-                        my_indirect_id, __func__, wid, my_src_tile, itr, ((float *)new_data)[wid]);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n", my_indirect_id, __func__, wid, my_src_tile, itr, ((float *)new_data)[wid]);
             } else {
                 ((uint64_t *)new_data)[wid] = maa->spd->getData<uint64_t>(my_src_tile, itr);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n",
-                        my_indirect_id, __func__, wid, my_src_tile, itr, ((double *)new_data)[wid]);
+                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = SPD[%d][%d] = %f!\n", my_indirect_id, __func__, wid, my_src_tile, itr, ((double *)new_data)[wid]);
             }
             num_recv_spd_read_accesses++;
             break;
         }
-        case Instruction::OpcodeType::INDIR_RMW: {
-            num_recv_spd_read_accesses++;
+        case Instruction::OpcodeType::INDIR_ST_SCALAR: {
+            if (my_word_size == 4) {
+                ((uint32_t *)new_data)[wid] = maa->rf->getData<uint32_t>(my_src_reg);
+            } else {
+                ((uint64_t *)new_data)[wid] = maa->rf->getData<uint64_t>(my_src_reg);
+            }
+            break;
+        }
+        case Instruction::OpcodeType::INDIR_RMW_VECTOR: {
             switch (my_instruction->datatype) {
             case Instruction::DataType::UINT32_TYPE: {
                 uint32_t word_data = maa->spd->getData<uint32_t>(my_src_tile, itr);
@@ -1488,6 +1301,49 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
             }
             break;
         }
+        case Instruction::OpcodeType::INDIR_RMW_SCALAR: {
+            switch (my_instruction->datatype) {
+            case Instruction::DataType::UINT32_TYPE: {
+                uint32_t word_data = maa->rf->getData<uint32_t>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((uint32_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::INT32_TYPE: {
+                int32_t word_data = maa->rf->getData<int32_t>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((int32_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::FLOAT32_TYPE: {
+                float word_data = maa->rf->getData<float>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((float *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::UINT64_TYPE: {
+                uint64_t word_data = maa->rf->getData<uint64_t>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((uint64_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::INT64_TYPE: {
+                int64_t word_data = maa->rf->getData<int64_t>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((int64_t *)new_data)[wid] += word_data;
+                break;
+            }
+            case Instruction::DataType::FLOAT64_TYPE: {
+                double word_data = maa->rf->getData<double>(my_src_reg);
+                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
+                ((double *)new_data)[wid] += word_data;
+                break;
+            }
+            default:
+                assert(false);
+            }
+            break;
+        }
         default:
             assert(false);
         }
@@ -1496,7 +1352,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
     // Row table parallelism = total #banks.
     // We will have total #banks offset table walkers.
     Cycles total_latency = updateLatency(num_recv_spd_read_accesses, 0, num_recv_spd_write_accesses, num_recv_rt_accesses, 0, total_num_RT_subbanks);
-    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+    if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR || my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR || my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR) {
         RequestPtr real_req = std::make_shared<Request>(addr, block_size, flags, maa->requestorId);
         PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
         write_pkt->allocate();
@@ -1508,13 +1364,11 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
                 DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] = %f!\n", my_indirect_id, __func__, i, write_pkt->getPtr<double>()[i]);
         }
         DPRINTF(MAAIndirect, "I[%d] %s: created %s to send in %d cycles\n", my_indirect_id, __func__, write_pkt->print(), total_latency);
-        my_outstanding_mem_write_pkts.insert(IndirectAccessUnit::IndirectPacket(write_pkt, maa->getClockEdge(total_latency)));
+        maa->sendPacket(FuncUnitType::INDIRECT, write_pkt, maa->getClockEdge(total_latency), my_force_cache);
         (*maa->stats.IND_StoresMemAccessing[my_indirect_id])++;
-        scheduleNextSendMemWrite();
-
     } else {
         my_received_responses++;
-        if (allPacketsSent() && my_received_responses == my_expected_responses) {
+        if (maa->allIndirectPacketsSent() && my_received_responses == my_expected_responses) {
             DPRINTF(MAAIndirect, "I[%d] %s: all responses received, calling execution again!\n", my_indirect_id, __func__);
             scheduleNextExecution(true);
         } else {
@@ -1560,66 +1414,6 @@ void IndirectAccessUnit::scheduleExecuteInstructionEvent(int latency) {
         if (new_when < old_when) {
             DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
             maa->reschedule(executeInstructionEvent, new_when);
-        }
-    }
-}
-void IndirectAccessUnit::scheduleSendCpuPacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send cpu read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendCpuPacketEvent.scheduled()) {
-        maa->schedule(sendCpuPacketEvent, new_when);
-    } else {
-        Tick old_when = sendCpuPacketEvent.when();
-        DPRINTF(MAAIndirect, "I[%d] %s: send cpu packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendCpuPacketEvent, new_when);
-        }
-    }
-}
-void IndirectAccessUnit::scheduleSendCachePacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send cache read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendCachePacketEvent.scheduled()) {
-        maa->schedule(sendCachePacketEvent, new_when);
-    } else {
-        Tick old_when = sendCachePacketEvent.when();
-        DPRINTF(MAAIndirect, "I[%d] %s: send cache packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendCachePacketEvent, new_when);
-        }
-    }
-}
-void IndirectAccessUnit::scheduleSendMemReadPacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send mem read packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendMemReadPacketEvent.scheduled()) {
-        maa->schedule(sendMemReadPacketEvent, new_when);
-    } else {
-        Tick old_when = sendMemReadPacketEvent.when();
-        DPRINTF(MAAIndirect, "I[%d] %s: send packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendMemReadPacketEvent, new_when);
-        }
-    }
-}
-void IndirectAccessUnit::scheduleSendMemWritePacketEvent(int latency) {
-    DPRINTF(MAAIndirect, "I[%d] %s: scheduling send mem write packet for the Indirect Unit in the next %d cycles!\n", my_indirect_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendMemWritePacketEvent.scheduled()) {
-        maa->schedule(sendMemWritePacketEvent, new_when);
-    } else {
-        Tick old_when = sendMemWritePacketEvent.when();
-        DPRINTF(MAAIndirect, "I[%d] %s: send packet already scheduled for tick %d\n", my_indirect_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAIndirect, "I[%d] %s: rescheduling for tick %d!\n", my_indirect_id, __func__, new_when);
-            maa->reschedule(sendMemWritePacketEvent, new_when);
         }
     }
 }

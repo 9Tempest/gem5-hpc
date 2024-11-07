@@ -144,12 +144,11 @@ void MAA::CacheSidePort::recvReqRetry() {
     setUnblocked(BlockReason::CACHE_FAILED);
 }
 
-bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt) {
+bool MAA::CacheSidePort::sendPacket(PacketPtr pkt) {
     /// print the packet
-    DPRINTF(MAACachePort, "%s: UNIT[%s][%d] %s\n", __func__, func_unit_names[func_unit_type], func_unit_id, pkt->print());
+    DPRINTF(MAACachePort, "%s: sending %s to cache\n", __func__, pkt->print());
     if (blockReason != BlockReason::NOT_BLOCKED) {
         DPRINTF(MAACachePort, "%s Send blocked because of %s...\n", __func__, blockReason == BlockReason::MAX_XBAR_PACKETS ? "MAX_XBAR_PACKETS" : "CACHE_FAILED");
-        funcBlockReasons[func_unit_type][func_unit_id] = blockReason;
         return false;
     }
     if (outstandingCacheSidePackets == maxOutstandingCacheSidePackets) {
@@ -157,14 +156,12 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type, int func_unit_id, Pa
         DPRINTF(MAACachePort, "%s Send failed because XBAR is full...\n", __func__);
         assert(blockReason == BlockReason::NOT_BLOCKED);
         blockReason = BlockReason::MAX_XBAR_PACKETS;
-        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::MAX_XBAR_PACKETS;
         return false;
     }
     if (sendTimingReq(pkt) == false) {
         // Cache cannot receive a new request
         DPRINTF(MAACachePort, "%s Send failed because cache returned false...\n", __func__);
         blockReason = BlockReason::CACHE_FAILED;
-        funcBlockReasons[func_unit_type][func_unit_id] = BlockReason::CACHE_FAILED;
         return false;
     }
     DPRINTF(MAACachePort, "%s Send is successfull...\n", __func__);
@@ -172,45 +169,16 @@ bool MAA::CacheSidePort::sendPacket(uint8_t func_unit_type, int func_unit_id, Pa
         outstandingCacheSidePackets++;
     return true;
 }
-bool MAA::sendPacketCache(uint8_t func_unit_type, int func_unit_id, PacketPtr pkt, int core_id) {
-    if (core_id != -1) {
-        return cacheSidePorts[core_id]->sendPacket(func_unit_type, func_unit_id, pkt);
-    } else {
-        bool success = cacheSidePorts[lastCacheSidePortSend]->sendPacket(func_unit_type, func_unit_id, pkt);
-        if (success)
-            lastCacheSidePortSend = (lastCacheSidePortSend + 1) % num_cores;
-        return success;
-    }
+bool MAA::sendPacketCache(PacketPtr pkt) {
+    bool success = cacheSidePorts[lastCacheSidePortSend]->sendPacket(pkt);
+    if (success)
+        lastCacheSidePortSend = (lastCacheSidePortSend + 1) % num_cores;
+    return success;
 }
 void MAA::CacheSidePort::setUnblocked(BlockReason reason) {
     assert(blockReason == reason);
     blockReason = BlockReason::NOT_BLOCKED;
-    if (funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] != BlockReason::NOT_BLOCKED) {
-        assert(funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] == reason);
-        assert(maa->invalidator->getState() == Invalidator::Status::Request);
-        funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
-        DPRINTF(MAACachePort, "%s unblocked Unit[invalidator]...\n", __func__);
-        maa->invalidator->scheduleExecuteInstructionEvent();
-    }
-    for (int i = 0; i < maa->num_stream_access_units; i++) {
-        if (funcBlockReasons[(int)FuncUnitType::STREAM][i] != BlockReason::NOT_BLOCKED) {
-            assert(funcBlockReasons[(int)FuncUnitType::STREAM][i] == reason);
-            assert(maa->streamAccessUnits[i].getState() == StreamAccessUnit::Status::Request);
-            funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
-            DPRINTF(MAACachePort, "%s unblocked Unit[stream][%d]...\n", __func__, i);
-            maa->streamAccessUnits[i].scheduleSendWritePacketEvent();
-            maa->streamAccessUnits[i].scheduleSendReadPacketEvent();
-        }
-    }
-    for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        if (funcBlockReasons[(int)FuncUnitType::INDIRECT][i] != BlockReason::NOT_BLOCKED) {
-            assert(funcBlockReasons[(int)FuncUnitType::INDIRECT][i] == reason);
-            assert(maa->indirectAccessUnits[i].getState() == IndirectAccessUnit::Status::Request);
-            funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
-            DPRINTF(MAACachePort, "%s unblocked Unit[indirect][%d]...\n", __func__, i);
-            maa->indirectAccessUnits[i].scheduleSendCachePacketEvent();
-        }
-    }
+    maa->unblockCache();
 }
 
 void MAA::CacheSidePort::allocate(int _core_id, int _maxOutstandingCacheSidePackets) {
@@ -222,16 +190,6 @@ void MAA::CacheSidePort::allocate(int _core_id, int _maxOutstandingCacheSidePack
     maxOutstandingCacheSidePackets = std::min(maxOutstandingCacheSidePackets, 16384);
     // We let it to be 32 less than the maximum
     maxOutstandingCacheSidePackets -= 32;
-    funcBlockReasons[(int)FuncUnitType::STREAM] = new BlockReason[maa->num_stream_access_units];
-    for (int i = 0; i < maa->num_stream_access_units; i++) {
-        funcBlockReasons[(int)FuncUnitType::STREAM][i] = BlockReason::NOT_BLOCKED;
-    }
-    funcBlockReasons[(int)FuncUnitType::INDIRECT] = new BlockReason[maa->num_indirect_access_units];
-    for (int i = 0; i < maa->num_indirect_access_units; i++) {
-        funcBlockReasons[(int)FuncUnitType::INDIRECT][i] = BlockReason::NOT_BLOCKED;
-    }
-    funcBlockReasons[(int)FuncUnitType::INVALIDATOR] = new BlockReason[1];
-    funcBlockReasons[(int)FuncUnitType::INVALIDATOR][0] = BlockReason::NOT_BLOCKED;
     blockReason = BlockReason::NOT_BLOCKED;
 }
 

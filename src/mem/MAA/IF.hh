@@ -32,20 +32,24 @@ public:
         STREAM_LD = 0,
         STREAM_ST = 1,
         INDIR_LD = 2,
-        INDIR_ST = 3,
-        INDIR_RMW = 4,
-        RANGE_LOOP = 5,
-        ALU_SCALAR = 6,
-        ALU_VECTOR = 7,
-        ALU_REDUCE = 8,
+        INDIR_ST_SCALAR = 3,
+        INDIR_ST_VECTOR = 4,
+        INDIR_RMW_SCALAR = 5,
+        INDIR_RMW_VECTOR = 6,
+        RANGE_LOOP = 7,
+        ALU_SCALAR = 8,
+        ALU_VECTOR = 9,
+        ALU_REDUCE = 10,
         MAX
     };
-    std::string opcode_names[9] = {
+    std::string opcode_names[11] = {
         "STREAM_LD",
         "STREAM_ST",
         "INDIR_LD",
-        "INDIR_ST",
-        "INDIR_RMW",
+        "INDIR_ST_SCALAR",
+        "INDIR_ST_VECTOR",
+        "INDIR_RMW_SCALAR",
+        "INDIR_RMW_VECTOR",
         "RANGE_LOOP",
         "ALU_SCALAR",
         "ALU_VECTOR",
@@ -148,8 +152,6 @@ public:
     Instruction();
     std::string print() const;
     int getWordSize(int tile_id);
-
-protected:
     int WordSize();
 };
 

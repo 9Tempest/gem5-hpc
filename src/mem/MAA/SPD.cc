@@ -170,7 +170,8 @@ void SPD::wakeup_waiting_units(int tile_id) {
             break;
         }
         case (uint8_t)FuncUnitType::INDIRECT: {
-            assert(maa->indirectAccessUnits[waiting_units_id].getState() == IndirectAccessUnit::Status::Fill);
+            assert(maa->indirectAccessUnits[waiting_units_id].getState() == IndirectAccessUnit::Status::Fill ||
+                   maa->indirectAccessUnits[waiting_units_id].getState() == IndirectAccessUnit::Status::Request);
             maa->indirectAccessUnits[waiting_units_id].scheduleNextExecution(true);
             break;
         }

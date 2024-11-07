@@ -132,9 +132,7 @@ bool RequestTable::is_full() {
 //
 ///////////////
 StreamAccessUnit::StreamAccessUnit()
-    : executeInstructionEvent([this] { executeInstruction(); }, name()),
-      sendReadPacketEvent([this] { sendOutstandingReadPacket(); }, name()),
-      sendWritePacketEvent([this] { sendOutstandingWritePacket(); }, name()) {
+    : executeInstructionEvent([this] { executeInstruction(); }, name()) {
     request_table = nullptr;
     my_instruction = nullptr;
 }
@@ -192,28 +190,6 @@ bool StreamAccessUnit::scheduleNextExecution(bool force) {
         return true;
     } else if (force) {
         scheduleExecuteInstructionEvent(Cycles(0));
-        return true;
-    }
-    return false;
-}
-bool StreamAccessUnit::scheduleNextSendRead() {
-    if (my_outstanding_read_pkts.size() > 0) {
-        Cycles latency = Cycles(0);
-        if (my_outstanding_read_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_read_pkts.begin()->tick - curTick());
-        }
-        scheduleSendReadPacketEvent(latency);
-        return true;
-    }
-    return false;
-}
-bool StreamAccessUnit::scheduleNextSendWrite() {
-    if (my_outstanding_write_pkts.size() > 0) {
-        Cycles latency = Cycles(0);
-        if (my_outstanding_write_pkts.begin()->tick > curTick()) {
-            latency = maa->getTicksToCycles(my_outstanding_write_pkts.begin()->tick - curTick());
-        }
-        scheduleSendWritePacketEvent(latency);
         return true;
     }
     return false;
@@ -324,8 +300,6 @@ void StreamAccessUnit::executeInstruction() {
         my_RT_access_finish_tick = curTick();
         my_decode_start_tick = curTick();
         my_request_start_tick = 0;
-        assert(my_outstanding_read_pkts.size() == 0);
-        assert(my_outstanding_write_pkts.size() == 0);
 
         // Setting the state of the instruction and stream unit
         my_instruction->state = Instruction::Status::Service;
@@ -433,7 +407,6 @@ void StreamAccessUnit::executeInstruction() {
         if (request_table->is_full()) {
             scheduleNextExecution();
         }
-        scheduleNextSendRead();
         if (my_received_responses != my_sent_requests) {
             DPRINTF(MAAStream, "S[%d] %s: Waiting for responses, received (%d) != send (%d)...\n", my_stream_id, __func__, my_received_responses, my_sent_requests);
         } else {
@@ -454,8 +427,7 @@ void StreamAccessUnit::executeInstruction() {
         DPRINTF(MAAStream, "S[%d] %s: responding %s!\n", my_stream_id, __func__, my_instruction->print());
         DPRINTF(MAATrace, "S[%d] End [%s]\n", my_stream_id, my_instruction->print());
         panic_if(scheduleNextExecution(), "S[%d] %s: Execution is not completed!\n", my_stream_id, __func__);
-        panic_if(scheduleNextSendRead(), "S[%d] %s: Sending reads is not completed!\n", my_stream_id, __func__);
-        panic_if(scheduleNextSendWrite(), "S[%d] %s: Sending writes is not completed!\n", my_stream_id, __func__);
+        panic_if(maa->allStreamPacketsSent() == false, "S[%d] %s: all stream packets are not sent!\n", my_stream_id, __func__);
         panic_if(my_received_responses != my_sent_requests, "S[%d] %s: received_responses(%d) != sent_requests(%d)!\n",
                  my_stream_id, __func__, my_received_responses, my_sent_requests);
         DPRINTF(MAAStream, "S[%d] %s: state set to finish for request %s!\n", my_stream_id, __func__, my_instruction->print());
@@ -491,59 +463,23 @@ void StreamAccessUnit::createReadPacket(Addr addr, int latency) {
         my_pkt = new Packet(real_req, MemCmd::ReadExReq);
     }
     my_pkt->allocate();
-    my_outstanding_read_pkts.insert(StreamAccessUnit::StreamPacket(my_pkt, maa->getClockEdge(Cycles(latency))));
+    maa->sendPacket(FuncUnitType::STREAM, my_pkt, maa->getClockEdge(Cycles(latency)));
     DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, my_pkt->print(), latency);
     (*maa->stats.STR_LoadsCacheAccessing[my_stream_id])++;
 }
-bool StreamAccessUnit::sendOutstandingReadPacket() {
-    DPRINTF(MAAStream, "S[%d] %s: sending %d outstanding read packets...\n", my_stream_id, __func__, my_outstanding_read_pkts.size());
-    while (my_outstanding_read_pkts.empty() == false) {
-        StreamAccessUnit::StreamPacket read_pkt = *my_outstanding_read_pkts.begin();
-        DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n", my_stream_id, __func__, read_pkt.packet->print(), read_pkt.tick);
-        if (read_pkt.tick > curTick()) {
-            DPRINTF(MAAStream, "S[%d] %s: waiting for %d cycles\n", my_stream_id, __func__, maa->getTicksToCycles(read_pkt.tick - curTick()));
-            scheduleNextSendRead();
-            break;
-        }
-        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, read_pkt.packet) == false) {
-            DPRINTF(MAAStream, "S[%d] %s: send failed, leaving send packet...\n", my_stream_id, __func__);
-            break;
-        } else {
-            DPRINTF(MAAStream, "S[%d] %s: send succeeded...\n", my_stream_id, __func__);
-            my_outstanding_read_pkts.erase(my_outstanding_read_pkts.begin());
-        }
-    }
-    return true;
+void StreamAccessUnit::readPacketSent(PacketPtr pkt) {
+    DPRINTF(MAAStream, "S[%d] %s: cache read packet %s sent\n", my_stream_id, __func__, pkt->print());
+    return;
 }
-bool StreamAccessUnit::sendOutstandingWritePacket() {
-    DPRINTF(MAAStream, "S[%d] %s: sending %d outstanding write packets...\n", my_stream_id, __func__, my_outstanding_write_pkts.size());
-    while (my_outstanding_write_pkts.empty() == false) {
-        StreamAccessUnit::StreamPacket write_pkt = *my_outstanding_write_pkts.begin();
-        DPRINTF(MAAStream, "S[%d] %s: trying sending %s to cache at time %u\n", my_stream_id, __func__, write_pkt.packet->print(), write_pkt.tick);
-        if (write_pkt.tick > curTick()) {
-            DPRINTF(MAAStream, "S[%d] %s: waiting for %d cycles\n", my_stream_id, __func__, maa->getTicksToCycles(write_pkt.tick - curTick()));
-            scheduleNextSendWrite();
-            return false;
-        }
-        if (maa->sendPacketCache((uint8_t)FuncUnitType::STREAM, my_stream_id, write_pkt.packet) == false) {
-            DPRINTF(MAAStream, "S[%d] %s: send failed, leaving send packet...\n", my_stream_id, __func__);
-            break;
-        } else {
-            my_received_responses++;
-            DPRINTF(MAAStream, "S[%d] %s: send succeeded...\n", my_stream_id, __func__);
-            my_outstanding_write_pkts.erase(my_outstanding_write_pkts.begin());
-        }
-    }
-    if (allPacketsSent() && (my_received_responses == my_sent_requests)) {
+void StreamAccessUnit::writePacketSent(PacketPtr pkt) {
+    DPRINTF(MAAStream, "S[%d] %s: cache write packet %s sent\n", my_stream_id, __func__, pkt->print());
+    my_received_responses++;
+    if (maa->allStreamPacketsSent() && (my_received_responses == my_sent_requests)) {
         DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
         scheduleNextExecution(true);
     } else {
         DPRINTF(MAAStream, "S[%d] %s: expected: %d, received: %d!\n", my_stream_id, __func__, my_received_responses, my_received_responses);
     }
-    return true;
-}
-bool StreamAccessUnit::allPacketsSent() {
-    return my_outstanding_read_pkts.empty() && my_outstanding_write_pkts.empty();
 }
 bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr, int core_id) {
     bool was_request_table_full = request_table->is_full();
@@ -590,7 +526,7 @@ bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr, int core_id) 
     if (my_instruction->opcode == Instruction::OpcodeType::STREAM_LD) {
         my_received_responses++;
         updateLatency(0, 0, entries.size(), 1);
-        if (allPacketsSent() && my_received_responses == my_sent_requests) {
+        if (maa->allStreamPacketsSent() && my_received_responses == my_sent_requests) {
             DPRINTF(MAAStream, "S[%d] %s: all responses received, calling execution again in state %s!\n", my_stream_id, __func__, status_names[(int)state]);
             scheduleNextExecution(true);
         } else {
@@ -601,9 +537,8 @@ bool StreamAccessUnit::recvData(const Addr addr, uint8_t *dataptr, int core_id) 
         PacketPtr write_pkt = new Packet(real_req, MemCmd::WritebackDirty);
         write_pkt->allocate();
         write_pkt->setData(new_data);
-        DPRINTF(MAAStream, "I[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, write_pkt->print(), total_latency);
-        my_outstanding_write_pkts.insert(StreamAccessUnit::StreamPacket(write_pkt, maa->getClockEdge(total_latency)));
-        scheduleNextSendWrite();
+        DPRINTF(MAAStream, "S[%d] %s: created %s to send in %d cycles\n", my_stream_id, __func__, write_pkt->print(), total_latency);
+        maa->sendPacket(FuncUnitType::STREAM, write_pkt, maa->getClockEdge(total_latency));
     }
     if (was_request_table_full) {
         scheduleNextExecution(true);
@@ -642,36 +577,6 @@ void StreamAccessUnit::scheduleExecuteInstructionEvent(int latency) {
         if (new_when < old_when) {
             DPRINTF(MAAStream, "S[%d] %s: rescheduling for tick %d!\n", my_stream_id, __func__, new_when);
             maa->reschedule(executeInstructionEvent, new_when);
-        }
-    }
-}
-void StreamAccessUnit::scheduleSendReadPacketEvent(int latency) {
-    DPRINTF(MAAStream, "S[%d] %s: scheduling send read packet for the Stream Unit in the next %d cycles!\n", my_stream_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendReadPacketEvent.scheduled()) {
-        maa->schedule(sendReadPacketEvent, new_when);
-    } else {
-        Tick old_when = sendReadPacketEvent.when();
-        DPRINTF(MAAStream, "S[%d] %s: send packet already scheduled for tick %d\n", my_stream_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAStream, "S[%d] %s: rescheduling for tick %d!\n", my_stream_id, __func__, new_when);
-            maa->reschedule(sendReadPacketEvent, new_when);
-        }
-    }
-}
-void StreamAccessUnit::scheduleSendWritePacketEvent(int latency) {
-    DPRINTF(MAAStream, "S[%d] %s: scheduling send write packet for the Stream Unit in the next %d cycles!\n", my_stream_id, __func__, latency);
-    panic_if(latency < 0, "Negative latency of %d!\n", latency);
-    Tick new_when = maa->getClockEdge(Cycles(latency));
-    if (!sendWritePacketEvent.scheduled()) {
-        maa->schedule(sendWritePacketEvent, new_when);
-    } else {
-        Tick old_when = sendWritePacketEvent.when();
-        DPRINTF(MAAStream, "S[%d] %s: send packet already scheduled for tick %d\n", my_stream_id, __func__, old_when);
-        if (new_when < old_when) {
-            DPRINTF(MAAStream, "S[%d] %s: rescheduling for tick %d!\n", my_stream_id, __func__, new_when);
-            maa->reschedule(sendWritePacketEvent, new_when);
         }
     }
 }

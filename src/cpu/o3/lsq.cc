@@ -119,9 +119,9 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
 }
 
 void LSQ::addAddrRegion(Addr start, Addr end, int8_t id) {
-    assert(id < MAX_CMD_REGIONS);
-    assert(start < end);
-    assert(end != 0);
+    panic_if(id >= MAX_CMD_REGIONS, "Region ID %d exceeds the maximum number of regions %d\n", id, MAX_CMD_REGIONS);
+    panic_if(start >= end, "Region ID %d start address 0x%x >= end address 0x%x\n", id, start, end);
+    panic_if(end == 0, "Region ID %d end address 0x%x is invalid\n", id, end);
     maxRegionID = -1;
     for (int i = 0; i < MAX_CMD_REGIONS; i++) {
         if (start <= addrRegions[i].first && addrRegions[i].first < end) {

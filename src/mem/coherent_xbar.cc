@@ -530,8 +530,18 @@ void CoherentXBar::recvTimingSnoopReq(PacketPtr pkt, PortID mem_side_port_id) {
                 __func__, memSidePorts[mem_side_port_id]->name(),
                 pkt->print(), sf_res.first.size(), sf_res.second);
 
-        // forward to all snoopers
-        forwardTiming(pkt, InvalidPortID, sf_res.first);
+        if (pkt->isSnoop()) {
+            // for block-evicting packets, i.e. writebacks and
+            // clean evictions, there is no need to snoop up, as
+            // all we do is determine if the block is cached or
+            // not, instead just set it here based on the snoop
+            // filter result
+            if (!sf_res.first.empty())
+                pkt->setBlockCached();
+        } else {
+            // forward to all snoopers
+            forwardTiming(pkt, InvalidPortID, sf_res.first);
+        }
     } else {
         forwardTiming(pkt, InvalidPortID);
     }

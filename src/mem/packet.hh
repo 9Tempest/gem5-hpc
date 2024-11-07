@@ -148,6 +148,7 @@ public:
         HTMAbort,
         // Tlb shootdown
         TlbiExtSync,
+        SnoopReq,
         NUM_MEM_CMDS
     };
 
@@ -175,6 +176,7 @@ private:
         IsPrint,     //!< Print state matching address (for debugging)
         IsFlush,     //!< Flush the address from caches
         FromCache,   //!< Request originated from a caching agent
+        IsSnoop,
         NUM_COMMAND_ATTRIBUTES
     };
 
@@ -223,6 +225,7 @@ public:
     bool needsWritable() const { return testCmdAttrib(NeedsWritable); }
     bool needsResponse() const { return testCmdAttrib(NeedsResponse); }
     bool isInvalidate() const { return testCmdAttrib(IsInvalidate); }
+    bool isSnoop() const { return testCmdAttrib(IsSnoop); }
     bool isEviction() const { return testCmdAttrib(IsEviction); }
     bool isClean() const { return testCmdAttrib(IsClean); }
     bool fromCache() const { return testCmdAttrib(FromCache); }
@@ -1398,6 +1401,11 @@ public:
     bool
     isCleanInvalidateRequest() const {
         return cmd == MemCmd::CleanInvalidReq;
+    }
+
+    bool
+    isSnoop() const {
+        return cmd == MemCmd::SnoopReq;
     }
 
     bool

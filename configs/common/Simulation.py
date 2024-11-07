@@ -557,6 +557,14 @@ def run(options, root, testsys, cpu_class):
                 switch_cpus[i].numPhysIntRegs = 180
                 switch_cpus[i].numPhysFloatRegs = 168
                 switch_cpus[i].numPhysVecRegs = 168
+                # switch_cpus[i].fetchWidth = 4
+                # switch_cpus[i].decodeWidth = 4
+                # switch_cpus[i].renameWidth = 4
+                # switch_cpus[i].dispatchWidth = 4
+                # switch_cpus[i].issueWidth = 4
+                # switch_cpus[i].wbWidth = 4
+                # switch_cpus[i].commitWidth = 4
+                # switch_cpus[i].squashWidth = 4
                 
                 if options.cpu_buffer_enlarge_factor != 1:
                     print("Enlarging CPU buffers by a factor of %d" % options.cpu_buffer_enlarge_factor)

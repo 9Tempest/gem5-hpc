@@ -64,22 +64,6 @@ protected:
         "Request",
         "Response",
         "max"};
-    class StreamPacket {
-    public:
-        PacketPtr packet;
-        Tick tick;
-        int core_id;
-        StreamPacket(PacketPtr _packet, Tick _tick, int _core_id = -1)
-            : packet(_packet), tick(_tick), core_id(_core_id) {}
-        StreamPacket(const StreamPacket &other) {
-            packet = other.packet;
-            tick = other.tick;
-            core_id = other.core_id;
-        }
-        bool operator<(const StreamPacket &rhs) const {
-            return tick < rhs.tick;
-        }
-    };
     class PageInfo {
     public:
         int max_itr, bg_addr, curr_itr, curr_idx;
@@ -105,18 +89,11 @@ protected:
             return curr_itr < rhs.curr_itr;
         }
     };
-    struct CompareByTick {
-        bool operator()(const StreamPacket &lhs, const StreamPacket &rhs) const {
-            return lhs.tick < rhs.tick;
-        }
-    };
     struct CompareByItr {
         bool operator()(const PageInfo &lhs, const PageInfo &rhs) const {
             return lhs.curr_itr < rhs.curr_itr;
         }
     };
-    std::multiset<StreamPacket, CompareByTick> my_outstanding_read_pkts;
-    std::multiset<StreamPacket, CompareByTick> my_outstanding_write_pkts;
     std::multiset<PageInfo, CompareByItr> my_all_page_info;
     std::vector<PageInfo> my_current_page_info;
     unsigned int num_tile_elements;
@@ -145,9 +122,9 @@ public:
                          int num_requesttable_accesses);
     bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
-    void scheduleSendReadPacketEvent(int latency = 0);
-    void scheduleSendWritePacketEvent(int latency = 0);
     bool recvData(const Addr addr, uint8_t *dataptr, int core_id = -1);
+    void writePacketSent(PacketPtr pkt);
+    void readPacketSent(PacketPtr pkt);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
@@ -177,19 +154,12 @@ protected:
     bool my_translation_done;
 
     void createReadPacket(Addr addr, int latency);
-    bool sendOutstandingReadPacket();
-    bool sendOutstandingWritePacket();
     Addr translatePacket(Addr vaddr);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
-    EventFunctionWrapper sendReadPacketEvent;
-    EventFunctionWrapper sendWritePacketEvent;
-    bool scheduleNextSendRead();
-    bool scheduleNextSendWrite();
     int getGBGAddr(int channel, int rank, int bankgroup);
     PageInfo getPageInfo(int i, Addr base_addr, int word_size, int min, int stride);
     bool fillCurrentPageInfos();
-    bool allPacketsSent();
 };
 } // namespace gem5
 

@@ -165,27 +165,6 @@ protected:
         "Request",
         "Response",
         "max"};
-    class IndirectPacket {
-    public:
-        PacketPtr packet;
-        Tick tick;
-        int core_id;
-        IndirectPacket(PacketPtr _packet, Tick _tick, int _core_id = -1)
-            : packet(_packet), tick(_tick), core_id(_core_id) {}
-        IndirectPacket(const IndirectPacket &other) {
-            packet = other.packet;
-            tick = other.tick;
-            core_id = other.core_id;
-        }
-        bool operator<(const IndirectPacket &rhs) const {
-            return tick < rhs.tick;
-        }
-    };
-    struct CompareByTick {
-        bool operator()(const IndirectPacket &lhs, const IndirectPacket &rhs) const {
-            return lhs.tick < rhs.tick;
-        }
-    };
     int total_num_RT_subbanks;
     int num_RT_configs;
     int my_RT_config;
@@ -207,14 +186,11 @@ protected:
     int num_cores;
     bool reconfigure_RT;
     int num_initial_RT_banks;
-    bool *mem_channels_blocked;
-    // bool *core_blocked;
     Status state;
     RowTable **RT;
     OffsetTable *offset_table;
     int dst_tile_id;
     Cycles rowtable_latency;
-    Cycles cache_snoop_latency;
     std::map<Addr, Tick> LoadsCacheHitRespondingTimeHistory;
     std::map<Addr, Tick> LoadsCacheHitAccessingTimeHistory;
     std::map<Addr, Tick> LoadsMemAccessingTimeHistory;
@@ -231,41 +207,33 @@ public:
                   bool _reconfigure_row_table,
                   int _num_initial_row_table_banks,
                   Cycles _rowtable_latency,
-                  Cycles _cache_snoop_latency,
                   int _num_channels,
                   int _num_cores,
                   MAA *_maa);
     Status getState() const { return state; }
     bool scheduleNextExecution(bool force = false);
     void scheduleExecuteInstructionEvent(int latency = 0);
-    void scheduleSendCachePacketEvent(int latency = 0);
-    void scheduleSendCpuPacketEvent(int latency = 0);
-    void scheduleSendMemReadPacketEvent(int latency = 0);
-    void scheduleSendMemWritePacketEvent(int latency = 0);
     void setInstruction(Instruction *_instruction);
-    void unblockMemChannel(int channel);
+    void memWritePacketSent(PacketPtr pkt);
+    void memReadPacketSent(PacketPtr pkt);
+    void cacheWritePacketSent(PacketPtr pkt);
+    void cacheReadPacketSent(PacketPtr pkt);
 
     bool recvData(const Addr addr, uint8_t *dataptr, bool is_block_cached, int core_id = -1);
 
     /* Related to BaseMMU::Translation Inheretance */
     void markDelayed() override {}
-    void finish(const Fault &fault, const RequestPtr &req,
-                ThreadContext *tc, BaseMMU::Mode mode) override;
+    void finish(const Fault &fault, const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) override;
 
 protected:
     Instruction *my_instruction;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cpu_snoop_pkts;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_read_pkts;
-    // std::multiset<IndirectPacket, CompareByTick> my_outstanding_cache_evict_pkts;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_write_pkts;
-    std::multiset<IndirectPacket, CompareByTick> my_outstanding_mem_read_pkts;
     Request::Flags flags = 0;
     const Addr block_size = 64;
     int my_word_size = -1;
     int my_words_per_cl = -1;
     Addr my_virtual_addr = 0;
     Addr my_base_addr;
-    int my_dst_tile, my_src_tile, my_cond_tile, my_max, my_idx_tile;
+    int my_dst_tile, my_src_tile, my_src_reg, my_cond_tile, my_max, my_idx_tile;
     bool my_cond_tile_ready, my_idx_tile_ready, my_src_tile_ready;
     int my_expected_responses;
     int my_received_responses;
@@ -274,6 +242,8 @@ protected:
     std::vector<int> *my_RT_bank_order;
     int my_i, my_RT_idx;
     bool my_fill_finished;
+    bool my_force_cache_determined;
+    bool my_force_cache;
 
     bool my_translation_done;
     Addr my_translated_addr;
@@ -302,16 +272,7 @@ protected:
     void fillRowTable(bool &finished, bool &waitForFinish, bool &waitForElement, bool &needDrain, int &num_spd_read_condidx_accesses, int &num_rowtable_accesses);
     void executeInstruction();
     EventFunctionWrapper executeInstructionEvent;
-    EventFunctionWrapper sendCachePacketEvent;
-    EventFunctionWrapper sendCpuPacketEvent;
-    EventFunctionWrapper sendMemReadPacketEvent;
-    EventFunctionWrapper sendMemWritePacketEvent;
     void check_reset();
-    bool scheduleNextSendCache();
-    bool scheduleNextSendCpu();
-    bool scheduleNextSendMemRead();
-    bool scheduleNextSendMemWrite();
-    bool allPacketsSent();
     Cycles updateLatency(int num_spd_read_data_accesses,
                          int num_spd_read_condidx_accesses,
                          int num_spd_write_accesses,
@@ -320,14 +281,7 @@ protected:
                          int RT_access_parallelism);
 
 public:
-    void createCacheReadPacket(Addr addr);
-    void createCacheSnoopPacket(Addr addr, int latency);
-    // void createCacheEvictPacket(Addr addr, int core_id);
-    void createMemReadPacket(Addr addr);
-    bool sendOutstandingCachePacket();
-    bool sendOutstandingCpuPacket();
-    bool sendOutstandingMemReadPacket();
-    bool sendOutstandingMemWritePacket();
+    void createReadPacket(Addr addr, int latency);
 };
 } // namespace gem5
 

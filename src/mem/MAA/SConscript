@@ -12,10 +12,12 @@ Source('RangeFuser.cc')
 Source('CpuSidePort.cc')
 Source('CacheSidePort.cc')
 Source('MemSidePort.cc')
+Source('Port.cc')
 Source('MAA.cc')
 
 DebugFlag('MAA')
 DebugFlag('MAATrace')
+DebugFlag('MAAPort')
 DebugFlag('SPD')
 DebugFlag('MAACpuPort')
 DebugFlag('MAACachePort')
@@ -31,6 +33,7 @@ DebugFlag('MAARangeFuser')
 # array on each timing access, that you should probably have to ask for
 # it explicitly even above and beyond MAAAll.
 CompoundFlag('MAAAll', ['MAA',
+                        'MAAPort',
                         'SPD',
                         'MAACpuPort',
                         'MAACachePort',

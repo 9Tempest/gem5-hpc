@@ -2,15 +2,24 @@ import argparse
 import os
 from threading import Thread, Lock
 
-parallelism = 28
+parallelism = 24
 GEM5_DIR = "/home/arkhadem/gem5-hpc"
 DATA_DIR = "/data1/arkhadem/gem5-hpc/tests"
-LOG_DIR = "/data1/arkhadem/gem5-hpc/tests/logs"
+CPT_DIR = f"{DATA_DIR}/checkpoints"
+RSLT_DIR = f"{DATA_DIR}/results"
+LOG_DIR = f"{DATA_DIR}/logs"
 
 os.system("mkdir -p " + LOG_DIR)
 
 tasks = []
 lock = Lock()
+
+class Task:
+    def __init__(self, command, dependency = None):
+        self.command = command
+        self.started = False
+        self.finished = False
+        self.dependency = dependency
 
 def workerthread(my_tid):
     global lock
@@ -19,25 +28,29 @@ def workerthread(my_tid):
     my_log_addr = f"{LOG_DIR}/logs_T{my_tid}.txt"
     os.system(f"rm {my_log_addr} 2>&1 > /dev/null; sleep 1;")
     while True:
+        selected_task = None
+        selected_task_id = None
         with lock:
-            if len(tasks) == 0:
-                task = None
-            else:
-                task = tasks.pop(0)
-        if task == None:
+            for task_id, task in enumerate(tasks):
+                if task.started == False and (task.dependency == None or tasks[task.dependency].finished == True):
+                    selected_task = task
+                    selected_task_id = task_id
+                    tasks[task_id].started = True
+                    break
+        if selected_task == None:
             with open (my_log_addr, "a") as f:
                 f.write("T[{}]: tasks finished, bye!\n".format(my_tid))
             print("T[{}]: tasks finished, bye!".format(my_tid))
             break
         else:
             with open (my_log_addr, "a") as f:
-                f.write("T[{}]: executing a new task: {}\n".format(my_tid, task))
-            print("T[{}]: executing a new task: {}".format(my_tid, task))
-            os.system(f"{task} 2>&1 | tee -a {my_log_addr}")
-
+                f.write("T[{}]: executing a new task: {}\n".format(my_tid, selected_task.command))
+            print("T[{}]: executing a new task: {}".format(my_tid, selected_task.command))
+            os.system(f"{selected_task.command} 2>&1 | tee -a {my_log_addr}")
+            with lock:
+                tasks[selected_task_id].finished = True
 
 cpu_type = "X86O3CPU"
-core_num = 4
 mem_size = "16GB"
 sys_clock = "3.2GHz"
 l1d_size = "32kB"
@@ -54,29 +67,30 @@ l2_mshrs = 32
 l3_mshrs = 256
 mem_type = "Ramulator2"
 ramulator_config = f"{GEM5_DIR}/ext/ramulator2/ramulator2/example_gem5_config.yaml"
-mem_channels = 1
+mem_channels = 2
 program_interval = 1000
-debug_type = "XBar,Cache,MAAAll,HWPrefetch" # PacketQueue
+debug_type = "MAATrace" # "MAAAll,MAATrace" # "XBar,Cache,MAAAll" # "MAAAll" # "XBar,Cache,MAAAll,HWPrefetch" # PacketQueue
 # debug_type = "LSQ,CacheAll,PseudoInst"
 # debug_type = "O3CPUAll,CacheAll,PseudoInst"
 # MemoryAccess,XBar,Cache,MAACpuPort,XBar,MemoryAccess,Cache,
-# if sim_type == "MAA":
+# if sim_type == "MAA": 
 #     debug_type = "SPD,MAARangeFuser,MAAALU,MAAController,MAACachePort,MAAMemPort,MAAIndirect,MAAStream,MAAInvalidator"
     # debug_type = "MAACachePort,MAAIndirect,MAAStream,Cache"
 
-def add_command_checkpoint(directory, command, options):
-    COMMAND = f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory}; sleep 1; "
-    COMMAND += f"OMP_PROC_BIND=false OMP_NUM_THREADS=4 build/X86/gem5.fast "
+def add_command_checkpoint(directory, command, options, num_cores = 4):
+    COMMAND = f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory}; sleep 2; "
+    COMMAND += f"OMP_PROC_BIND=false OMP_NUM_THREADS={num_cores} build/X86/gem5.fast "
     COMMAND += f"--outdir={directory} "
     COMMAND += f"{GEM5_DIR}/configs/deprecated/example/se.py "
-    COMMAND += f"--cpu-type AtomicSimpleCPU -n 4 --mem-size \"16GB\" "
+    COMMAND += f"--cpu-type AtomicSimpleCPU -n {num_cores} --mem-size \"16GB\" "
     COMMAND += f"--cmd {command} --options \"{options}\" "
     COMMAND += f"2>&1 "
     COMMAND += "| awk '{ print strftime(), $0; fflush() }' "
     COMMAND += f"| tee {directory}/logs_cpt.txt "
-    tasks.append(COMMAND)
+    tasks.append(Task(command=COMMAND))
+    return len(tasks) - 1
 
-def add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size, non_l2_cacheable, non_l3_cacheable):
+def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, mode, tile_size = 16384, reconfigurable_RT = False, maa_warmer = False, num_cores = 4):
     have_maa = False
     l2_hwp_type = "StridePrefetcher"
     l3_size = "8MB"
@@ -93,13 +107,13 @@ def add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size
     else:
         raise ValueError("Unknown mode")
 
-    COMMAND = f"OMP_PROC_BIND=false OMP_NUM_THREADS={core_num} {GEM5_DIR}/build/X86/gem5.opt "
-    if debug_type != None and mode == "MAA":
-        COMMAND += f"--debug-flags={debug_type} "
+    COMMAND = f"OMP_PROC_BIND=false OMP_NUM_THREADS={num_cores} {GEM5_DIR}/build/X86/gem5.opt "
+    # if debug_type != None: # and mode == "MAA":
+    COMMAND += f"--debug-flags={debug_type} "
     COMMAND += f"--outdir={directory} "
     COMMAND += f"{GEM5_DIR}/configs/deprecated/example/se.py "
     COMMAND += f"--cpu-type {cpu_type} "
-    COMMAND += f"-n {core_num} "
+    COMMAND += f"-n {num_cores} "
     COMMAND += f"--mem-size '{mem_size}' "
     COMMAND += f"--sys-clock '{sys_clock}' "
     COMMAND += f"--cpu-clock '{sys_clock}' "
@@ -127,13 +141,19 @@ def add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size
     COMMAND += f"--mem-type {mem_type} "
     COMMAND += f"--ramulator-config {ramulator_config} "
     COMMAND += f"--mem-channels {mem_channels} "
-    if have_maa:
+    if have_maa or maa_warmer:
         COMMAND += "--maa "
         COMMAND += f"--maa_num_tile_elements {tile_size} "
-        if non_l2_cacheable:
-            COMMAND += "--maa_l2_uncacheable "
-        if non_l3_cacheable:
-            COMMAND += "--maa_l3_uncacheable "
+        COMMAND += "--maa_l2_uncacheable "
+        COMMAND += "--maa_l3_uncacheable "
+        COMMAND += "--maa_num_spd_read_ports 4 "
+        COMMAND += "--maa_num_spd_write_ports 4 "
+        COMMAND += "--maa_num_ALU_lanes 16 "
+        # if reconfigurable_RT:
+        #     COMMAND += "--maa_reconfigure_row_table "
+        # else:
+        #     COMMAND += "--maa_num_initial_row_table_banks 4 "
+        COMMAND += "--maa_num_initial_row_table_banks 32 "
     COMMAND += f"--cmd {command} "
     COMMAND += f"--options \"{options}\" "
     if checkpoint != None:
@@ -142,377 +162,198 @@ def add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size
     COMMAND += f"2>&1 "
     COMMAND += "| awk '{ print strftime(), $0; fflush() }' "
     COMMAND += f"| tee {directory}/logs_run.txt "
+    command = None
     if checkpoint != None:
-        tasks.append(f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; rm -r {checkpoint}/cpt.%d 2>&1 > /dev/null; sleep 1; cp -r {checkpoint}/cpt.* {directory}/; sleep 1; {COMMAND}; sleep 1;")
+        command=f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; rm -r {checkpoint}/cpt.%d 2>&1 > /dev/null; sleep 1; cp -r {checkpoint}/cpt.* {directory}/; sleep 1; {COMMAND}; sleep 1;"
     else:
-        tasks.append(f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; {COMMAND}; sleep 1;")
+        command=f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; {COMMAND}; sleep 1;"
+    tasks.append(Task(command=command, dependency=checkpoint_id))
 
 
-all_tiles = [1024, 2048, 4096, 8192, 16384]
-all_tiles_str = ["1K", "2K", "4K", "8K", "16K"]
-all_sizes = [200000] #, 2000000]
-all_sizes_str = ["200K"] #, "2M"]
-all_distances = [256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
-all_distances_str = ["256", "1K", "4K", "16K", "64K", "256K", "1M", "4M"]
-all_kernels =   ["gather",
-                "scatter",
-                "rmw",
-                "gather_scatter",
-                "gather_rmw",
-                "gather_rmw_cond",
-                "gather_rmw_directrangeloop_cond",
-                "gather_rmw_indirectrangeloop_cond",
-                "gather_rmw_cond_indirectrangeloop_cond",
-                "gather_rmw_indirectcond_indirectrangeloop_indirectcond"]
+# all_tiles = [1024, 2048, 4096, 8192, 16384]
+# all_tiles_str = ["1K", "2K", "4K", "8K", "16K"]
+# all_sizes = [200000] #, 2000000]
+# all_sizes_str = ["200K"] #, "2M"]
+# all_distances = [256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304]
+# all_distances_str = ["256", "1K", "4K", "16K", "64K", "256K", "1M", "4M"]
+# all_kernels =   ["gather",
+#                 "scatter",
+#                 "rmw",
+#                 "gather_scatter",
+#                 "gather_rmw",
+#                 "gather_rmw_cond",
+#                 "gather_rmw_directrangeloop_cond",
+#                 "gather_rmw_indirectrangeloop_cond",
+#                 "gather_rmw_cond_indirectrangeloop_cond",
+#                 "gather_rmw_indirectcond_indirectrangeloop_indirectcond"]
 
-# for kernel in all_kernels:
-#     for size, size_str in zip(all_sizes, all_sizes_str):
-#         for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-#             for distance, distance_str in zip(all_distances, all_distances_str):
-#                 for mode in ["BASE", "MAA", "CMP"]:
-#                     directory = f"{DATA_DIR}/checkpoint/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-#                     command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
-#                     options = f"{size} {distance} {mode} {kernel}"
-#                     add_command_checkpoint(directory, command, options)
-#                     # directory = f"{DATA_DIR}/checkpoint/{kernel}/M{mode}/T{tile_size_str}/S{size_str}/FP64"
-#                     # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
-#                     # add_command_checkpoint(directory, command, options)
-#     for size, size_str in zip(all_sizes, all_sizes_str):
-#         for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-#             for distance, distance_str in zip(all_distances, all_distances_str):
-#                 for mode in ["BASE", "MAA", "DMP", "CMP"]:
-#                     new_mode = mode
-#                     if mode == "DMP":
-#                         new_mode = f"BASE"
-#                     options = f"{size} {distance} {new_mode} {kernel}"
+# add_command_run_MAA(directory=f"{RSLT_DIR}/rmw/allmiss/BAH0/RBH100/CBH0/BGH0/64K_MAA_port",
+#                     checkpoint=f"{CPT_DIR}/rmw/allmiss/BAH0/RBH100/CBH0/BGH0/64K_MAA_port",
+#                     checkpoint_id = None,
+#                     command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
+#                     options=f"65536 MAA rmw allmiss 0 100 0 0",
+#                     mode="MAA",
+#                     num_cores=4)
 
-#                     checkpoint = f"{DATA_DIR}/checkpoint/{kernel}/M{new_mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-#                     directory = f"{DATA_DIR}/results/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32"
-#                     command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T{tile_size_str}.o"
-#                     add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
-                    
-#                     # checkpoint = f"{DATA_DIR}/checkpoint/{kernel}/M{new_mode}/T{tile_size_str}/S{size_str}/FP64"
-#                     # directory = f"{DATA_DIR}/results/M{mode}/T{tile_size_str}/S{size_str}/FP64"
-#                     # command = f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_double_T{tile_size_str}.o"
-#                     # add_command_run_MAA(directory, checkpoint, command, options, mode, tile_size)
+# test_dir = "CISC"
+# for kernel in ["rmw", "scatter", "gather_full"]: #["gather"]: #, "rmw", "scatter", "gather_full"]: #  ["gather_directrangeloop_indircond"]:
+#     num_cores = 1 if kernel == "scatter" else 4
+#     for size, size_str in zip([65536], ["64K"]):
+#         for mode in ["MAA", "CMP", "BASE"]: #, "CMP"]: # ["MAA"]:
+#             for BAH in [0, 1]:
+#                 for RBH in [0, 50, 100]:
+#                     for CHH in [0, 1]:
+#                         if CHH == 1 and (BAH != 1 or RBH != 100):
+#                             continue
+#                         for BGH in [0, 1]:
+#                             if BGH == 1 and (BAH != 1 or RBH != 100 or CHH != 1):
+#                                 continue
+#                             checkpoint_id = None
+#                             # checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}_port",
+#                             #                                         command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                             #                                         options=f"{size} {mode} {kernel} allmiss {BAH} {RBH} {CHH} {BGH}",
+#                             #                                         num_cores=num_cores)
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_1T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 BASE gather")
+#                             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}_port",
+#                                                 checkpoint=f"{CPT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}_port",
+#                                                 checkpoint_id = checkpoint_id,
+#                                                 command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                                 options=f"{size} {mode} {kernel} allmiss {BAH} {RBH} {CHH} {BGH}",
+#                                                 mode=mode,
+#                                                 num_cores=num_cores)
+                        
+#             checkpoint_id = None
+#             # checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/allhit/{size_str}_{mode}_port",
+#             #                                         command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#             #                                         options=f"{size} {mode} {kernel} allhit", num_cores=num_cores)
+#             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/allhit/{size_str}_{mode}_port",
+#                                 checkpoint=f"{CPT_DIR}/{kernel}/allhit/{size_str}_{mode}_port",
+#                                 checkpoint_id = checkpoint_id,
+#                                 command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                 options=f"{size} {mode} {kernel} allhit",
+#                                 mode=mode,
+#                                 num_cores=num_cores)
+            
+#             checkpoint_id = None
+#             # checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/allhitl3/{size_str}_{mode}_port",
+#             #                                         command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#             #                                         options=f"{size} {mode} {kernel} allhitl3", num_cores=num_cores)
+#             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/allhitl3/{size_str}_{mode}_port",
+#                                 checkpoint=f"{CPT_DIR}/{kernel}/allhitl3/{size_str}_{mode}_port",
+#                                 checkpoint_id = checkpoint_id,
+#                                 command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                 options=f"{size} {mode} {kernel} allhitl3",
+#                                 mode=mode,
+#                                 maa_warmer=True,
+#                                 num_cores=num_cores)
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_16T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 BASE gather")
+# for mode in ["CMP", "BASE", "MAA"]:
+#     checkpoint_id = None
+#     # checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/gather_full/random/64K_{mode}_new",
+#     #                                         command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
+#     #                                         options=f"262144 {mode} gather_full random 262144", num_cores=4)
+#     add_command_run_MAA(directory=f"{RSLT_DIR}/gather_full/random/64K_{mode}_new",
+#                         checkpoint=f"{CPT_DIR}/gather_full/random/64K_{mode}_new",
+#                         checkpoint_id = checkpoint_id,
+#                         command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
+#                         options=f"262144 {mode} gather_full random 262144",
+#                         mode=mode,
+#                         num_cores=4)
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 MAA gather")
+########################################## NAS ##########################################
+# all_kernels = [ "cga",
+#                 "cgb",
+#                 "isa",
+#                 "isb"]
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 MAA gather")
+all_kernels = ["cga", "cgb"]
+                 
+all_test_dirs = {"cga": "NAS/NPB3.4-OMP/CG_CPP",
+                 "cgb": "NAS/NPB3.4-OMP/CG_CPP",
+                 "isa": "NAS/NPB3.4-OMP/IS",
+                 "isb": "NAS/NPB3.4-OMP/IS"}
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 CMP gather")
+all_file_names = {"cga": "A.16384",
+                 "cgb": "B.16384",
+                 "isa": "A.16384",
+                 "isb": "B.16384"}
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 CMP gather")
+all_modes = ["BASE", "MAA", "DMP"]
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_1T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 BASE gather")
+for kernel in all_kernels:
+    for mode in all_modes:
+        test_dir = all_test_dirs[kernel]
+        file_name = all_file_names[kernel]
+        checkpoint_id = None
+        new_mode = mode
+        if mode == "DMP":
+            new_mode = "BASE"
+        checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}",
+                                                command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
+                                                options=f"{new_mode}")
+        add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}_2",
+                            checkpoint=f"{CPT_DIR}/{kernel}/{mode}",
+                            checkpoint_id = checkpoint_id,
+                            command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
+                            options=f"{new_mode}",
+                            mode=mode)
+        
+########################################## GAPB ##########################################
+all_modes = ["BASE", "MAA", "DMP"]
+all_kernels = ["bfs", "bc", "pr"]
+for kernel in all_kernels:
+    for mode in all_modes:
+        for size in [21, 22]:
+            checkpoint_id = None
+            file_name = f"{kernel}"
+            new_mode = mode
+            if mode == "DMP":
+                new_mode = "BASE"
+            if mode == "MAA":
+                file_name = f"{kernel}_maa"
+            
+            checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size}",
+                                                    command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
+                                                    options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.sg -l -n 1")
+            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size}_2",
+                                checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size}",
+                                checkpoint_id = checkpoint_id,
+                                command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
+                                options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.sg -l -n 1",
+                                mode=mode)
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_16T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 BASE gather")
+# for kernel in ["gather", "rmw"]: # ["rmw", "gather", "gather_rmw_directrangeloop_cond"]: # ["rmw"]:
+#     test_dir = "CISC_allrowmiss" # "CISC_allrowmiss_gathercorrect" if kernel == "gather" else "CISC_allrowmiss"
+#     for size, size_str in zip([65536], ["64K"]): # zip([16384], ["16K"]): #  zip([16384, 262144], ["16K", "256K"]):
+#         for mode in ["BASE", "MAA"]: # , "CMP"]: # ["MAA"]:
+#             for BAH in [0, 1]:
+#                 for RBH in [0, 13, 25, 38, 50, 63, 75, 88, 100]:
+#                     for CHH in [0]:
+#                         for BGH in [0]:
+#                             checkpoint_id = None
+#                             checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}",
+#                                                                     command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                                                     options=f"{size} {mode} {kernel} allmiss {BAH} {RBH} {CHH} {BGH}")
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 MAA gather")
+#                             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}",
+#                                                 checkpoint=f"{CPT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}",
+#                                                 checkpoint_id = checkpoint_id,
+#                                                 command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                                 options=f"{size} {mode} {kernel} allmiss {BAH} {RBH} {CHH} {BGH}",
+#                                                 mode=mode,
+#                                                 tile_size=16384)
+                        
+#             checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/allhit/{size_str}_{mode}",
+#                                                     command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                                     options=f"{size} {mode} {kernel} allhit")
 
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 MAA gather")
-
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 CMP gather")
-
-add_command_checkpoint(directory=f"{DATA_DIR}/tests_allmiss_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 CMP gather")
-
-if parallelism != 0:
-    threads = []
-    for i in range(parallelism):
-        threads.append(Thread(target=workerthread, args=(i,)))
-    
-    for i in range(parallelism):
-        threads[i].start()
-    
-    for i in range(parallelism):
-        print("T[M]: Waiting for T[{}] to join!".format(i))
-        threads[i].join()
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_l2_l3_base",
-                    checkpoint=f"{DATA_DIR}/tests_1T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 BASE gather",
-                    mode="BASE",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_l2_l3_base",
-                    checkpoint=f"{DATA_DIR}/tests_16T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 BASE gather",
-                    mode="BASE",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_l2_l3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_l2_l3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_l2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_l2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_nol2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_nol2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_l2_l3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_l2_l3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_l2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_l2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_1T_nol2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_16T_nol2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-
-
-
-
-
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_l2_l3_base",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 BASE gather",
-                    mode="BASE",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_l2_l3_base",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_base",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 BASE gather",
-                    mode="BASE",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_l2_l3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_l2_l3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_l2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_l2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_nol2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_nol2_nol3_cmp",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_cmp",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 CMP gather",
-                    mode="CMP",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_l2_l3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_l2_l3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=False)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_l2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_l2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=False,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_1T_nol2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_1T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="16384 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
-
-add_command_run_MAA(directory=f"{DATA_DIR}/tests_allmiss_16T_nol2_nol3_maa",
-                    checkpoint=f"{DATA_DIR}/tests_allmiss_16T_maa",
-                    command=f"{GEM5_DIR}/tests/test-progs/MAA/CISC_allmiss/test_T16K.o",
-                    options="262144 1 MAA gather",
-                    mode="MAA",
-                    tile_size=16384,
-                    non_l2_cacheable=True,
-                    non_l3_cacheable=True)
+#             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/allhit/{size_str}_{mode}",
+#                                 checkpoint=f"{CPT_DIR}/{kernel}/allhit/{size_str}_{mode}",
+#                                 checkpoint_id = checkpoint_id,
+#                                 command=f"{GEM5_DIR}/tests/test-progs/MAA/{test_dir}/test_T16K.o",
+#                                 options=f"{size} {mode} {kernel} allhit",
+#                                 mode=mode,
+#                                 tile_size=16384)
 
 if parallelism != 0:
     threads = []

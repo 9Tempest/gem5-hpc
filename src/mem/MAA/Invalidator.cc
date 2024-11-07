@@ -169,7 +169,7 @@ void Invalidator::createMyPacket() {
 }
 bool Invalidator::sendOutstandingPacket() {
     DPRINTF(MAAInvalidator, "%s: trying sending %s\n", __func__, my_pkt->print());
-    if (maa->sendSnoopPacketCpu((uint8_t)FuncUnitType::INVALIDATOR, 0, my_pkt) == false) {
+    if (maa->sendSnoopInvalidateCpu(my_pkt) == false) {
         DPRINTF(MAAInvalidator, "%s: send failed, leaving send packet...\n", __func__);
         return false;
     }
@@ -192,12 +192,7 @@ bool Invalidator::recvData(int tile_id, int element_id, uint8_t *dataptr) {
     int cl_id = get_cl_id(tile_id, element_id, 4);
     assert(cl_status[cl_id] != CLStatus::Uncached);
     cl_status[cl_id] = CLStatus::Uncached;
-    DPRINTF(MAAInvalidator, "%s T[%d] E[%d-%d] CL[%d]: uncached\n",
-            __func__,
-            tile_id,
-            element_id,
-            element_id + 15,
-            cl_id);
+    DPRINTF(MAAInvalidator, "%s T[%d] E[%d-%d] CL[%d]: uncached\n", __func__, tile_id, element_id, element_id + 15, cl_id);
     my_received_responses++;
     uint32_t *dataptr_u32_typed = (uint32_t *)dataptr;
     for (int i = 0; i < 16; i++) {
@@ -216,12 +211,5 @@ void Invalidator::scheduleExecuteInstructionEvent(int latency) {
     Tick new_when = maa->getClockEdge(Cycles(latency));
     panic_if(executeInstructionEvent.scheduled(), "Event already scheduled!\n");
     maa->schedule(executeInstructionEvent, new_when);
-    // if (!executeInstructionEvent.scheduled()) {
-    //     maa->schedule(executeInstructionEvent, new_when);
-    // } else {
-    //     Tick old_when = executeInstructionEvent.when();
-    //     if (new_when < old_when)
-    //         maa->reschedule(executeInstructionEvent, new_when);
-    // }
 }
 } // namespace gem5

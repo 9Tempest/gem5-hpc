@@ -71,7 +71,9 @@ MAA::MAA(const MAAParams &p)
       mmu(p.mmu),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
-      stats(this, p.num_indirect_access_units, p.num_stream_access_units, p.num_range_units, p.num_alu_units) {
+      stats(this, p.num_indirect_access_units, p.num_stream_access_units, p.num_range_units, p.num_alu_units),
+      sendCacheEvent([this] { sendOutstandingCachePacket(); }, name()),
+      sendMemEvent([this] { sendOutstandingMemPacket(); }, name()) {
 
     m_core_addr_bits = calc_log2(num_cores);
     requestorId = p.system->getRequestorId(this);
@@ -208,8 +210,14 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
             m_addr_bits[ADDR_CHANNEL_LEVEL],
             m_tx_offset);
     assert(m_num_levels == 6);
+    panic_if(memSidePorts.size() != m_org[ADDR_CHANNEL_LEVEL], "Number of memory channels %d != number of memside ports %d\n", m_org[ADDR_CHANNEL_LEVEL], memSidePorts.size());
+    mem_channels_blocked = new bool[m_org[ADDR_CHANNEL_LEVEL]];
+    for (int i = 0; i < m_org[ADDR_CHANNEL_LEVEL]; i++) {
+        mem_channels_blocked[i] = false;
+    }
+    cache_blocked = false;
     for (int i = 0; i < memSidePorts.size(); i++) {
-        memSidePorts[i]->allocate(i, num_indirect_access_units);
+        memSidePorts[i]->allocate(i);
     }
     for (int i = 0; i < num_indirect_access_units; i++) {
         indirectAccessUnits[i].allocate(i, num_tile_elements, num_row_table_rows_per_bank,
@@ -218,7 +226,6 @@ void MAA::addRamulator(memory::Ramulator2 *_ramulator2) {
                                         reconfigure_row_table,
                                         num_initial_row_table_banks,
                                         rowtable_latency,
-                                        cache_snoop_latency,
                                         m_org[ADDR_CHANNEL_LEVEL],
                                         num_cores,
                                         this);
@@ -446,8 +453,8 @@ void MAA::dispatchInstruction() {
                     spd->setTileIdle(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                     spd->setTileNotReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                 }
-                if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+                if (instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
+                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
                     spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
                 }
                 if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
@@ -486,8 +493,8 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
         spd->setTileFinished(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
         setTileReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
     }
-    if (instruction->opcode == Instruction::OpcodeType::INDIR_ST ||
-        instruction->opcode == Instruction::OpcodeType::INDIR_RMW) {
+    if (instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
+        instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
         setTileReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
     }
     if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
