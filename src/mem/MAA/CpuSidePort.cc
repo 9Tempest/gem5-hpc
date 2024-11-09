@@ -57,6 +57,7 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
         is_blocked = false;
         maa.invalidator->scheduleExecuteInstructionEvent();
     }
+    delete pkt;
     return true;
 }
 
@@ -94,6 +95,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
                 spd->setData<uint32_t>(tile_id, element_id + i, data);
             }
             assert(pkt->needsResponse() == false);
+            pendingDelete.reset(pkt);
             break;
         }
         default:

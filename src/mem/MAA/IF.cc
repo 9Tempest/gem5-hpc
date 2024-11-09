@@ -208,41 +208,44 @@ bool IF::pushInstruction(Instruction _instruction) {
     return true;
 }
 Instruction *IF::getReady(FuncUnitType funcUniType) {
+    int rand_base = rand() % num_instructions;
     if (funcUniType == FuncUnitType::INVALIDATOR) {
         for (int i = 0; i < num_instructions; i++) {
-            if (valids[i] && instructions[i].state == Instruction::Status::Idle) {
+            int instr_idx = (rand_base + i) % num_instructions;
+            if (valids[instr_idx] && instructions[instr_idx].state == Instruction::Status::Idle) {
                 int tile_id = -1;
-                if (instructions[i].dst1Status == Instruction::TileStatus::WaitForInvalidation) {
-                    tile_id = instructions[i].dst1SpdID;
-                } else if (instructions[i].dst2Status == Instruction::TileStatus::WaitForInvalidation) {
-                    tile_id = instructions[i].dst2SpdID;
-                } else if (instructions[i].src1Status == Instruction::TileStatus::WaitForInvalidation) {
-                    tile_id = instructions[i].src1SpdID;
-                } else if (instructions[i].src2Status == Instruction::TileStatus::WaitForInvalidation) {
-                    tile_id = instructions[i].src2SpdID;
-                } else if (instructions[i].condStatus == Instruction::TileStatus::WaitForInvalidation) {
-                    tile_id = instructions[i].condSpdID;
+                if (instructions[instr_idx].dst1Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[instr_idx].dst1SpdID;
+                } else if (instructions[instr_idx].dst2Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[instr_idx].dst2SpdID;
+                } else if (instructions[instr_idx].src1Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[instr_idx].src1SpdID;
+                } else if (instructions[instr_idx].src2Status == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[instr_idx].src2SpdID;
+                } else if (instructions[instr_idx].condStatus == Instruction::TileStatus::WaitForInvalidation) {
+                    tile_id = instructions[instr_idx].condSpdID;
                 }
                 if (tile_id != -1) {
-                    issueInstructionInvalidate(&instructions[i], tile_id);
-                    DPRINTF(MAAController, "%s: returned instruction[%d] %s for invalidation!\n", __func__, i, instructions[i].print());
-                    return &instructions[i];
+                    issueInstructionInvalidate(&instructions[instr_idx], tile_id);
+                    DPRINTF(MAAController, "%s: returned instruction[%d] %s for invalidation!\n", __func__, instr_idx, instructions[instr_idx].print());
+                    return &instructions[instr_idx];
                 }
             }
         }
     } else {
         for (int i = 0; i < num_instructions; i++) {
-            if (valids[i] &&
-                instructions[i].state == Instruction::Status::Idle &&
-                (instructions[i].src1SpdID == -1 || instructions[i].src1Status == Instruction::TileStatus::Service || instructions[i].src1Status == Instruction::TileStatus::Finished) &&
-                (instructions[i].src2SpdID == -1 || instructions[i].src2Status == Instruction::TileStatus::Service || instructions[i].src2Status == Instruction::TileStatus::Finished) &&
-                (instructions[i].condSpdID == -1 || instructions[i].condStatus == Instruction::TileStatus::Service || instructions[i].condStatus == Instruction::TileStatus::Finished) &&
-                (instructions[i].dst1SpdID == -1 || instructions[i].dst1Status == Instruction::TileStatus::WaitForService) &&
-                (instructions[i].dst2SpdID == -1 || instructions[i].dst2Status == Instruction::TileStatus::WaitForService) &&
-                instructions[i].funcUniType == funcUniType) {
-                issueInstructionCompute(&instructions[i]);
-                DPRINTF(MAAController, "%s: returned instruction[%d] %s for execute!\n", __func__, i, instructions[i].print());
-                return &instructions[i];
+            int instr_idx = (rand_base + i) % num_instructions;
+            if (valids[instr_idx] &&
+                instructions[instr_idx].state == Instruction::Status::Idle &&
+                (instructions[instr_idx].src1SpdID == -1 || instructions[instr_idx].src1Status == Instruction::TileStatus::Service || instructions[instr_idx].src1Status == Instruction::TileStatus::Finished) &&
+                (instructions[instr_idx].src2SpdID == -1 || instructions[instr_idx].src2Status == Instruction::TileStatus::Service || instructions[instr_idx].src2Status == Instruction::TileStatus::Finished) &&
+                (instructions[instr_idx].condSpdID == -1 || instructions[instr_idx].condStatus == Instruction::TileStatus::Service || instructions[instr_idx].condStatus == Instruction::TileStatus::Finished) &&
+                (instructions[instr_idx].dst1SpdID == -1 || instructions[instr_idx].dst1Status == Instruction::TileStatus::WaitForService) &&
+                (instructions[instr_idx].dst2SpdID == -1 || instructions[instr_idx].dst2Status == Instruction::TileStatus::WaitForService) &&
+                instructions[instr_idx].funcUniType == funcUniType) {
+                issueInstructionCompute(&instructions[instr_idx]);
+                DPRINTF(MAAController, "%s: returned instruction[%d] %s for execute!\n", __func__, instr_idx, instructions[instr_idx].print());
+                return &instructions[instr_idx];
             }
         }
     }

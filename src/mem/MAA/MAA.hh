@@ -455,6 +455,7 @@ protected:
     bool *rangeUnitsIdle;
     bool invalidatorIdle;
     int lastCacheSidePortSend;
+    std::unique_ptr<Packet> pendingDelete;
 
 public:
     struct MAAStats : public statistics::Group {

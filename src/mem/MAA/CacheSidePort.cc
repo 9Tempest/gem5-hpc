@@ -94,6 +94,7 @@ bool MAA::CacheSidePort::recvTimingResp(PacketPtr pkt) {
     if (blockReason == BlockReason::MAX_XBAR_PACKETS) {
         setUnblocked(BlockReason::MAX_XBAR_PACKETS);
     }
+    delete pkt;
     return true;
 }
 

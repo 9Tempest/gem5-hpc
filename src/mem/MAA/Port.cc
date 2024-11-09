@@ -39,6 +39,7 @@ void MAA::sendPacket(FuncUnitType funcUnit, PacketPtr pkt, Tick tick, bool force
         sendSnoopPacketCpu(snoop_pkt);
         isBlockCached = snoop_pkt->isBlockCached();
         DPRINTF(MAAPort, "%s: force_cache is false, snoop request for %s determined %s\n", __func__, pkt->print(), isBlockCached ? "cached" : "not cached");
+        delete snoop_pkt;
     }
     OutstandingPacket outstanding_pkt(pkt, tick);
     bool send_cache = false;

@@ -65,6 +65,7 @@ bool MAA::MemSidePort::recvTimingResp(PacketPtr pkt) {
     /// print the packet
     DPRINTF(MAAMemPort, "%s: received %s\n", __func__, pkt->print());
     maa->recvMemTimingResp(pkt);
+    delete pkt;
     return true;
 }
 
