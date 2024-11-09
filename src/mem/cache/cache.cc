@@ -1126,9 +1126,11 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
             // to delete it
             assert(pkt->needsResponse());
 
-            // we have passed the block to a cache upstream, that
-            // cache should be responding
-            assert(pkt->cacheResponding());
+            if (!inExclRange(pkt->getAddr())) {
+                // we have passed the block to a cache upstream, that
+                // cache should be responding
+                assert(pkt->cacheResponding());
+            }
 
             delete pkt;
         }

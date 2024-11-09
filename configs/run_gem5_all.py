@@ -20,6 +20,11 @@ class Task:
         self.started = False
         self.finished = False
         self.dependency = dependency
+    
+    def __eq__(self, value):
+        if value == None or self == None:
+            return False
+        return self.command == value.command
 
 def workerthread(my_tid):
     global lock
@@ -69,7 +74,7 @@ mem_type = "Ramulator2"
 ramulator_config = f"{GEM5_DIR}/ext/ramulator2/ramulator2/example_gem5_config.yaml"
 mem_channels = 2
 program_interval = 1000
-debug_type = "MAATrace" # "MAAAll,MAATrace" # "XBar,Cache,MAAAll" # "MAAAll" # "XBar,Cache,MAAAll,HWPrefetch" # PacketQueue
+debug_type = "MAATrace" # "MAAAll,MAATrace,XBar,Cache,CacheVerbose,MSHR" # "MAAAll,MAATrace" # "XBar,Cache,MAAAll" # "MAAAll" # "XBar,Cache,MAAAll,HWPrefetch" # PacketQueue
 # debug_type = "LSQ,CacheAll,PseudoInst"
 # debug_type = "O3CPUAll,CacheAll,PseudoInst"
 # MemoryAccess,XBar,Cache,MAACpuPort,XBar,MemoryAccess,Cache,
@@ -87,7 +92,11 @@ def add_command_checkpoint(directory, command, options, num_cores = 4):
     COMMAND += f"2>&1 "
     COMMAND += "| awk '{ print strftime(), $0; fflush() }' "
     COMMAND += f"| tee {directory}/logs_cpt.txt "
-    tasks.append(Task(command=COMMAND))
+    task = Task(command=COMMAND)
+    if task in tasks:
+        print(f"Task {COMMAND} already exists!")
+        exit(1)
+    tasks.append(task)
     return len(tasks) - 1
 
 def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, mode, tile_size = 16384, reconfigurable_RT = False, maa_warmer = False, num_cores = 4):
@@ -167,7 +176,11 @@ def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, 
         command=f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; rm -r {checkpoint}/cpt.%d 2>&1 > /dev/null; sleep 1; cp -r {checkpoint}/cpt.* {directory}/; sleep 1; {COMMAND}; sleep 1;"
     else:
         command=f"rm -r {directory} 2>&1 > /dev/null; sleep 1; mkdir -p {directory} 2>&1 > /dev/null; sleep 1; {COMMAND}; sleep 1;"
-    tasks.append(Task(command=command, dependency=checkpoint_id))
+    task = Task(command=command, dependency=checkpoint_id)
+    if task in tasks:
+        print(f"Task {command} already exists!")
+        exit(1)
+    tasks.append(task)
 
 
 # all_tiles = [1024, 2048, 4096, 8192, 16384]
@@ -261,12 +274,18 @@ def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, 
 #                         num_cores=4)
 
 ########################################## NAS ##########################################
-# all_kernels = [ "cga",
-#                 "cgb",
-#                 "isa",
-#                 "isb"]
 
-all_kernels = ["cga", "cgb"]
+# add_command_run_MAA(directory=f"{RSLT_DIR}/cga/MAA2",
+#                     checkpoint=f"{CPT_DIR}/cga/MAA",
+#                     checkpoint_id = None,
+#                     command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/NAS/NPB3.4-OMP/CG_CPP/B.16384",
+#                     options=f"MAA",
+#                     mode="MAA")
+
+all_kernels = [ "cga",
+                "cgb",
+                "isa",
+                "isb"]
                  
 all_test_dirs = {"cga": "NAS/NPB3.4-OMP/CG_CPP",
                  "cgb": "NAS/NPB3.4-OMP/CG_CPP",
@@ -278,7 +297,7 @@ all_file_names = {"cga": "A.16384",
                  "isa": "A.16384",
                  "isb": "B.16384"}
 
-all_modes = ["BASE", "MAA", "DMP"]
+all_modes = ["MAA"] # ["BASE", "DMP"] # ["BASE", "MAA", "DMP"]
 
 for kernel in all_kernels:
     for mode in all_modes:
@@ -291,7 +310,7 @@ for kernel in all_kernels:
         checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}",
                                                 command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
                                                 options=f"{new_mode}")
-        add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}_2",
+        add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}",
                             checkpoint=f"{CPT_DIR}/{kernel}/{mode}",
                             checkpoint_id = checkpoint_id,
                             command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
@@ -299,12 +318,11 @@ for kernel in all_kernels:
                             mode=mode)
         
 ########################################## GAPB ##########################################
-all_modes = ["BASE", "MAA", "DMP"]
+all_modes = ["MAA"] # ["BASE", "DMP"] # ["BASE", "MAA", "DMP"]
 all_kernels = ["bfs", "bc", "pr"]
 for kernel in all_kernels:
     for mode in all_modes:
         for size in [21, 22]:
-            checkpoint_id = None
             file_name = f"{kernel}"
             new_mode = mode
             if mode == "DMP":
@@ -312,10 +330,11 @@ for kernel in all_kernels:
             if mode == "MAA":
                 file_name = f"{kernel}_maa"
             
+            checkpoint_id = None
             checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size}",
                                                     command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
                                                     options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.sg -l -n 1")
-            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size}_2",
+            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size}",
                                 checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size}",
                                 checkpoint_id = checkpoint_id,
                                 command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
