@@ -453,12 +453,11 @@ void MAA::dispatchInstruction() {
                     spd->setTileIdle(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                     spd->setTileNotReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
                 }
-                if (instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
-                    instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
-                    spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
-                }
-                if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+                if (instruction->src1SpdID != -1) {
                     spd->setTileNotReady(instruction->src1SpdID, instruction->getWordSize(instruction->src1SpdID));
+                }
+                if (instruction->src2SpdID != -1) {
+                    spd->setTileNotReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
                 }
                 pkt->makeTimingResponse();
                 pkt->headerDelay = pkt->payloadDelay = 0;
@@ -493,12 +492,11 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
         spd->setTileFinished(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
         setTileReady(instruction->dst2SpdID, instruction->getWordSize(instruction->dst2SpdID));
     }
-    if (instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
-        instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR) {
-        setTileReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
-    }
-    if (instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+    if (instruction->src1SpdID != -1) {
         setTileReady(instruction->src1SpdID, instruction->getWordSize(instruction->src1SpdID));
+    }
+    if (instruction->src2SpdID != -1) {
+        setTileReady(instruction->src2SpdID, instruction->getWordSize(instruction->src2SpdID));
     }
     ifile->finishInstructionCompute(instruction);
     switch (instruction->funcUniType) {
