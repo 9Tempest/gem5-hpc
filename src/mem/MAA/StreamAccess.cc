@@ -209,7 +209,7 @@ StreamAccessUnit::PageInfo StreamAccessUnit::getPageInfo(int i, Addr base_addr, 
     int diff_word_page_words = diff_word_page_paddr / word_size;
     int min_itr = std::max(min, i - diff_word_page_words);
     // we use ceiling here to find the minimum idx in the page
-    int min_idx = ((int)((min_itr - min - 1) / stride)) + 1;
+    int min_idx = min_itr == min ? 0 : ((int)((min_itr - min - 1) / stride)) + 1;
     // We find the minimum itr based on the minimum idx which is stride aligned
     min_itr = min_idx * stride + min;
     std::vector<int> addr_vec = maa->map_addr(page_paddr);
