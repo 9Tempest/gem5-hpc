@@ -430,7 +430,7 @@ void DiffMatching::insertRT(
             iddt_ent_match.getLast(), data_match, addr_match, shift);
 
     if (base_addr_tmp > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-        printf("Warning: %llx > %llx (LastData %llx Data %llx Addr %llx Shift %d)\n",
+        printf("Warning: %ld > %ld (LastData %ld Data %ld Addr %ld Shift %d)\n",
                base_addr_tmp, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()),
                iddt_ent_match.getLast(), data_match, addr_match, shift);
         return;
