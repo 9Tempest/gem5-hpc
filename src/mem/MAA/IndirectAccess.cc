@@ -759,7 +759,7 @@ void IndirectAccessUnit::checkTileReady() {
         }
         panic_if(maa->spd->getSize(my_idx_tile) != my_max, "I[%d] %s: idx size (%d) != max (%d)!\n", my_indirect_id, __func__, maa->spd->getSize(my_idx_tile), my_max);
     }
-    if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && my_instruction->opcode != Instruction::OpcodeType::INDIR_RMW_SCALAR && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
+    if (my_instruction->opcode != Instruction::OpcodeType::INDIR_LD && my_instruction->opcode != Instruction::OpcodeType::INDIR_ST_SCALAR && my_instruction->opcode != Instruction::OpcodeType::INDIR_RMW_SCALAR && maa->spd->getTileStatus(my_src_tile) == SPD::TileStatus::Finished) {
         my_src_tile_ready = true;
     }
 }
@@ -1250,50 +1250,92 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
             switch (my_instruction->datatype) {
             case Instruction::DataType::UINT32_TYPE: {
                 uint32_t word_data = maa->spd->getData<uint32_t>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%u) += SPD[%d][%d] (%u) = %u!\n",
-                        my_indirect_id, __func__, wid, ((uint32_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint32_t *)new_data)[wid] + word_data);
-                ((uint32_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%u) += SPD[%d][%d] (%u) = %u!\n",
+                            my_indirect_id, __func__, wid, ((uint32_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint32_t *)new_data)[wid] + word_data);
+                    ((uint32_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((uint32_t *)new_data)[wid] = ((uint32_t *)new_data)[wid] < word_data ? ((uint32_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((uint32_t *)new_data)[wid] = ((uint32_t *)new_data)[wid] > word_data ? ((uint32_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::INT32_TYPE: {
                 int32_t word_data = maa->spd->getData<int32_t>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%d) += SPD[%d][%d] (%d) = %d!\n",
-                        my_indirect_id, __func__, wid, ((int32_t *)new_data)[wid], my_src_tile, itr, word_data, ((int32_t *)new_data)[wid] + word_data);
-                ((int32_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%d) += SPD[%d][%d] (%d) = %d!\n",
+                            my_indirect_id, __func__, wid, ((int32_t *)new_data)[wid], my_src_tile, itr, word_data, ((int32_t *)new_data)[wid] + word_data);
+                    ((int32_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((int32_t *)new_data)[wid] = ((int32_t *)new_data)[wid] < word_data ? ((int32_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((int32_t *)new_data)[wid] = ((int32_t *)new_data)[wid] > word_data ? ((int32_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::FLOAT32_TYPE: {
                 float word_data = maa->spd->getData<float>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%f) += SPD[%d][%d] (%f) = %f!\n",
-                        my_indirect_id, __func__, wid, ((float *)new_data)[wid], my_src_tile, itr, word_data, ((float *)new_data)[wid] + word_data);
-                ((float *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%f) += SPD[%d][%d] (%f) = %f!\n",
+                            my_indirect_id, __func__, wid, ((float *)new_data)[wid], my_src_tile, itr, word_data, ((float *)new_data)[wid] + word_data);
+                    ((float *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((float *)new_data)[wid] = ((float *)new_data)[wid] < word_data ? ((float *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((float *)new_data)[wid] = ((float *)new_data)[wid] > word_data ? ((float *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::UINT64_TYPE: {
                 uint64_t word_data = maa->spd->getData<uint64_t>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lu) += SPD[%d][%d] (%lu) = %lu!\n",
-                        my_indirect_id, __func__, wid, ((uint64_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint64_t *)new_data)[wid] + word_data);
-                ((uint64_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lu) += SPD[%d][%d] (%lu) = %lu!\n",
+                            my_indirect_id, __func__, wid, ((uint64_t *)new_data)[wid], my_src_tile, itr, word_data, ((uint64_t *)new_data)[wid] + word_data);
+                    ((uint64_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((uint64_t *)new_data)[wid] = ((uint64_t *)new_data)[wid] < word_data ? ((uint64_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((uint64_t *)new_data)[wid] = ((uint64_t *)new_data)[wid] > word_data ? ((uint64_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::INT64_TYPE: {
                 int64_t word_data = maa->spd->getData<int64_t>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%ld) += SPD[%d][%d] (%ld) = %ld!\n",
-                        my_indirect_id, __func__, wid, ((int64_t *)new_data)[wid], my_src_tile, itr, word_data, ((int64_t *)new_data)[wid] + word_data);
-                ((int64_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%ld) += SPD[%d][%d] (%ld) = %ld!\n",
+                            my_indirect_id, __func__, wid, ((int64_t *)new_data)[wid], my_src_tile, itr, word_data, ((int64_t *)new_data)[wid] + word_data);
+                    ((int64_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((int64_t *)new_data)[wid] = ((int64_t *)new_data)[wid] < word_data ? ((int64_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((int64_t *)new_data)[wid] = ((int64_t *)new_data)[wid] > word_data ? ((int64_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::FLOAT64_TYPE: {
                 double word_data = maa->spd->getData<double>(my_src_tile, itr);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lf) += SPD[%d][%d] (%lf) = %lf!\n",
-                        my_indirect_id, __func__, wid, ((double *)new_data)[wid], my_src_tile, itr, word_data, ((double *)new_data)[wid] + word_data);
-                ((double *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: new_data[%d] (%lf) += SPD[%d][%d] (%lf) = %lf!\n",
+                            my_indirect_id, __func__, wid, ((double *)new_data)[wid], my_src_tile, itr, word_data, ((double *)new_data)[wid] + word_data);
+                    ((double *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((double *)new_data)[wid] = ((double *)new_data)[wid] < word_data ? ((double *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((double *)new_data)[wid] = ((double *)new_data)[wid] > word_data ? ((double *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             default:
@@ -1305,38 +1347,80 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
             switch (my_instruction->datatype) {
             case Instruction::DataType::UINT32_TYPE: {
                 uint32_t word_data = maa->rf->getData<uint32_t>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((uint32_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((uint32_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((uint32_t *)new_data)[wid] = ((uint32_t *)new_data)[wid] < word_data ? ((uint32_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((uint32_t *)new_data)[wid] = ((uint32_t *)new_data)[wid] > word_data ? ((uint32_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::INT32_TYPE: {
                 int32_t word_data = maa->rf->getData<int32_t>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((int32_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((int32_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((int32_t *)new_data)[wid] = ((int32_t *)new_data)[wid] < word_data ? ((int32_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((int32_t *)new_data)[wid] = ((int32_t *)new_data)[wid] > word_data ? ((int32_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::FLOAT32_TYPE: {
                 float word_data = maa->rf->getData<float>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((float *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((float *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((float *)new_data)[wid] = ((float *)new_data)[wid] < word_data ? ((float *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((float *)new_data)[wid] = ((float *)new_data)[wid] > word_data ? ((float *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::UINT64_TYPE: {
                 uint64_t word_data = maa->rf->getData<uint64_t>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((uint64_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((uint64_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((uint64_t *)new_data)[wid] = ((uint64_t *)new_data)[wid] < word_data ? ((uint64_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((uint64_t *)new_data)[wid] = ((uint64_t *)new_data)[wid] > word_data ? ((uint64_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::INT64_TYPE: {
                 int64_t word_data = maa->rf->getData<int64_t>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((int64_t *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((int64_t *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((int64_t *)new_data)[wid] = ((int64_t *)new_data)[wid] < word_data ? ((int64_t *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((int64_t *)new_data)[wid] = ((int64_t *)new_data)[wid] > word_data ? ((int64_t *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             case Instruction::DataType::FLOAT64_TYPE: {
                 double word_data = maa->rf->getData<double>(my_src_reg);
-                assert(my_instruction->optype == Instruction::OPType::ADD_OP);
-                ((double *)new_data)[wid] += word_data;
+                if (my_instruction->optype == Instruction::OPType::ADD_OP) {
+                    ((double *)new_data)[wid] += word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MIN_OP) {
+                    ((double *)new_data)[wid] = ((double *)new_data)[wid] < word_data ? ((double *)new_data)[wid] : word_data;
+                } else if (my_instruction->optype == Instruction::OPType::MAX_OP) {
+                    ((double *)new_data)[wid] = ((double *)new_data)[wid] > word_data ? ((double *)new_data)[wid] : word_data;
+                } else {
+                    panic_if(true, "I[%d] %s: unknown optype %s!\n", my_indirect_id, __func__, my_instruction->print());
+                }
                 break;
             }
             default:

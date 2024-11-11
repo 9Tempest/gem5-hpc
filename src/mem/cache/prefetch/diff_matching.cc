@@ -424,12 +424,18 @@ void DiffMatching::insertRT(
 
     TargetAddr addr_match = tadt_ent_match.getLast();
 
-    int64_t base_addr_tmp = addr_match - (data_match << shift);
+    TargetAddr base_addr_tmp = addr_match - (data_match << shift);
 
     DPRINTF(DMP, "Matched: LastData %llx Data %llx Addr %llx Shift %d\n",
             iddt_ent_match.getLast(), data_match, addr_match, shift);
 
-    assert(base_addr_tmp <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
+    if (base_addr_tmp > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        printf("Warning: %llx > %llx (LastData %llx Data %llx Addr %llx Shift %d)\n",
+               base_addr_tmp, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()),
+               iddt_ent_match.getLast(), data_match, addr_match, shift);
+        return;
+    }
+
     Addr target_base_addr = static_cast<uint64_t>(base_addr_tmp);
 
     if (checkRedundantRTE(new_index_pc, target_base_addr, cID))
