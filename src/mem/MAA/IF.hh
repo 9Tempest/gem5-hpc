@@ -73,13 +73,18 @@ public:
         EQ_OP = 15,
         MAX
     };
-    std::string optype_names[11] = {
+    std::string optype_names[16] = {
         "ADD",
         "SUB",
         "MUL",
         "DIV",
         "MIN",
         "MAX",
+        "AND",
+        "OR",
+        "XOR",
+        "SHL",
+        "SHR",
         "GT",
         "GTE",
         "LT",

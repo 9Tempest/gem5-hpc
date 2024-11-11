@@ -99,8 +99,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
             break;
         }
         default:
-            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
-                    __func__, address_range.print(), pkt->cmdString());
+            panic_if(true, "%s: Error: Range(%s) and cmd(%s) is illegal. Packet: %s\n", __func__, address_range.print(), pkt->cmdString(), pkt->print());
             assert(false);
         }
         break;
@@ -229,8 +228,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
             // Write to SPD_DATA_CACHEABLE_RANGE not possible. All SPD writes must be to SPD_DATA_NONCACHEABLE_RANGE
             // Write to SPD_SIZE_RANGE not possible. Size is read-only.
             // Write to SPD_READY_RANGE not possible. Ready is read-only.
-            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
-                    __func__, address_range.print(), pkt->cmdString());
+            panic_if(true, "%s: Error: Range(%s) and cmd(%s) is illegal. Packet: %s\n", __func__, address_range.print(), pkt->cmdString(), pkt->print());
             assert(false);
         }
         break;
@@ -298,8 +296,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
         default: {
             // Read from SPD_DATA_CACHEABLE_RANGE uses ReadSharedReq command.
             // Read from SPD_DATA_NONCACHEABLE_RANGE not possible. All SPD reads must be from SPD_DATA_CACHEABLE_RANGE.
-            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
-                    __func__, address_range.print(), pkt->cmdString());
+            panic_if(true, "%s: Error: Range(%s) and cmd(%s) is illegal. Packet: %s\n", __func__, address_range.print(), pkt->cmdString(), pkt->print());
             assert(false);
         }
         }
@@ -333,8 +330,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
             break;
         }
         default:
-            DPRINTF(MAAController, "%s: Error: Range(%s) and cmd(%s) is illegal\n",
-                    __func__, address_range.print(), pkt->cmdString());
+            panic_if(true, "%s: Error: Range(%s) and cmd(%s) is illegal. Packet: %s\n", __func__, address_range.print(), pkt->cmdString(), pkt->print());
             assert(false);
         }
         break;
