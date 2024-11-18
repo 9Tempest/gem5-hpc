@@ -1,6 +1,53 @@
 import os
 DATA_DIR = "/data1/arkhadem/gem5-hpc/tests"
 RSLT_DIR = f"{DATA_DIR}/results"
+import argparse
+
+parser = argparse.ArgumentParser(description='Parse gem5.')
+parser.add_argument('--dir', type=str, help='Path to the result directory.', required=True)
+parser.add_argument('--mode', type=str, help='Path to the result directory.', required=True)
+parser.add_argument('--target', type=int, help='Traget stat number.', required=True)
+args = parser.parse_args()
+directory = args.dir
+mode = args.mode
+if mode == "maa":
+    mode = "MAA"
+elif mode == "base":
+    mode = "BASE"
+target_stats = args.target
+
+# P_PRE_STBY = 54.9
+# P_ACT_STBY = 75.0
+# P_ACT = 25.1
+# P_RD = 150.4
+# P_WR = 127.7
+# P_DQ = 85.6
+
+# MAX PRE STBY CURRENT
+IDD2N = 37.0
+# MAX ACT STBY CURRENT
+IDD3N = 53.0
+# ACT/PRE BANK CURRENT
+IDD0 = 57.0
+# MAX RD BURST CURRENT
+IDD4R = 168.0
+# MAX WR BURST CURRENT
+IDD4W = 150.0
+# DQ OUTPUT DRIVER POWER
+PDSDQ = 85.6
+VDD = 1.2
+
+# PRE-ACT time
+tRP = 20.0 * 0.625
+nRP = 20.0
+# ACT-RD time
+tRCD = 20.0 * 0.625
+nRCD = 20.0
+# RD/WR time
+tBL = 4.0 * 0.625
+nBL = 4.0
+# clock time in ns
+tCK = 0.625
 
 all_kernels =   ["gather",
                 "scatter",
@@ -36,110 +83,110 @@ all_maa_cycles = ["INDRD",
                 "Total"]
 
 all_maa_indirect_cycles = ["Fill", "Drain", "Build", "Request"]
-all_cache_stats = {"Avg-SPD-Latency": "system.switch_cpus0.lsq0.loadToUse_0::mean",
-                   "L1-SPD-Hits": "system.cpu0.dcache.demandHits_0::switch_cpus0.data",
-                   "L1-SPD-Misses": "system.cpu0.dcache.demandMisses_0::switch_cpus0.data",
-                   "M1-SPD-Hits": "system.cpu0.dcache.demandMshrHits_0::switch_cpus0.data",
-                   "M1-SPD-Misses": "system.cpu0.dcache.demandMshrMisses_0::switch_cpus0.data",
-                   "L2-SPD-Hits": "system.cpu0.l2cache.demandHits_0::switch_cpus0.data",
-                   "L2-SPD-Misses": "system.cpu0.l2cache.demandMisses_0::switch_cpus0.data",
-                   "M2-SPD-Hits": "system.cpu0.l2cache.demandMshrHits_0::switch_cpus0.data",
-                   "M2-SPD-Misses": "system.cpu0.l2cache.demandMshrMisses_0::switch_cpus0.data",
-                   "L3-SPD-Hits": "system.l3.demandHits_0::switch_cpus0.data",
-                   "L3-SPD-Misses": "system.l3.demandMisses_0::switch_cpus0.data",
-                   "M3-SPD-Hits": "system.l3.demandMshrHits_0::switch_cpus0.data",
-                   "M3-SPD-Misses": "system.l3.demandMshrMisses_0::switch_cpus0.data",
-                   "Avg-A1-Latency": "system.switch_cpus0.lsq0.loadToUse_6::mean",
-                   "L1-A1-Hits": "system.cpu0.dcache.demandHits_6::switch_cpus0.data",
-                   "L1-A1-Misses": "system.cpu0.dcache.demandMisses_6::switch_cpus0.data",
-                   "M1-A1-Hits": "system.cpu0.dcache.demandMshrHits_6::switch_cpus0.data",
-                   "M1-A1-Misses": "system.cpu0.dcache.demandMshrMisses_6::switch_cpus0.data",
-                   "L2-A1-Hits": "system.cpu0.l2cache.demandHits_6::switch_cpus0.data",
-                   "L2-A1-Misses": "system.cpu0.l2cache.demandMisses_6::switch_cpus0.data",
-                   "M2-A1-Hits": "system.cpu0.l2cache.demandMshrHits_6::switch_cpus0.data",
-                   "M2-A1-Misses": "system.cpu0.l2cache.demandMshrMisses_6::switch_cpus0.data",
-                   "L3-A1-Hits": "system.l3.demandHits_6::switch_cpus0.data",
-                   "L3-A1-Misses": "system.l3.demandMisses_6::switch_cpus0.data",
-                   "M3-A1-Hits": "system.l3.demandMshrHits_6::switch_cpus0.data",
-                   "M3-A1-Misses": "system.l3.demandMshrMisses_6::switch_cpus0.data",
-                   "Avg-A2-Latency": "system.switch_cpus0.lsq0.loadToUse_7::mean",
-                   "L1-A2-Hits": "system.cpu0.dcache.demandHits_7::switch_cpus0.data",
-                   "L1-A2-Misses": "system.cpu0.dcache.demandMisses_7::switch_cpus0.data",
-                   "M1-A2-Hits": "system.cpu0.dcache.demandMshrHits_7::switch_cpus0.data",
-                   "M1-A2-Misses": "system.cpu0.dcache.demandMshrMisses_7::switch_cpus0.data",
-                   "L2-A2-Hits": "system.cpu0.l2cache.demandHits_7::switch_cpus0.data",
-                   "L2-A2-Misses": "system.cpu0.l2cache.demandMisses_7::switch_cpus0.data",
-                   "M2-A2-Hits": "system.cpu0.l2cache.demandMshrHits_7::switch_cpus0.data",
-                   "M2-A2-Misses": "system.cpu0.l2cache.demandMshrMisses_7::switch_cpus0.data",
-                   "L3-A2-Hits": "system.l3.demandHits_7::switch_cpus0.data",
-                   "L3-A2-Misses": "system.l3.demandMisses_7::switch_cpus0.data",
-                   "M3-A2-Hits": "system.l3.demandMshrHits_7::switch_cpus0.data",
-                   "M3-A2-Misses": "system.l3.demandMshrMisses_7::switch_cpus0.data",
-                   "Avg-B-Latency": "system.switch_cpus0.lsq0.loadToUse_8::mean",
-                   "L1-B-Hits": "system.cpu0.dcache.demandHits_8::switch_cpus0.data",
-                   "L1-B-Misses": "system.cpu0.dcache.demandMisses_8::switch_cpus0.data",
-                   "M1-B-Hits": "system.cpu0.dcache.demandMshrHits_8::switch_cpus0.data",
-                   "M1-B-Misses": "system.cpu0.dcache.demandMshrMisses_8::switch_cpus0.data",
-                   "L2-B-Hits": "system.cpu0.l2cache.demandHits_8::switch_cpus0.data",
-                   "L2-B-Misses": "system.cpu0.l2cache.demandMisses_8::switch_cpus0.data",
-                   "M2-B-Hits": "system.cpu0.l2cache.demandMshrHits_8::switch_cpus0.data",
-                   "M2-B-Misses": "system.cpu0.l2cache.demandMshrMisses_8::switch_cpus0.data",
-                   "L3-B-Hits": "system.l3.demandHits_8::switch_cpus0.data",
-                   "L3-B-Misses": "system.l3.demandMisses_8::switch_cpus0.data",
-                   "M3-B-Hits": "system.l3.demandMshrHits_8::switch_cpus0.data",
-                   "M3-B-Misses": "system.l3.demandMshrMisses_8::switch_cpus0.data",
-                   "Avg-IDX-Latency": "system.switch_cpus0.lsq0.loadToUse_9::mean",
-                   "L1-IDX-Hits": "system.cpu0.dcache.demandHits_9::switch_cpus0.data",
-                   "L1-IDX-Misses": "system.cpu0.dcache.demandMisses_9::switch_cpus0.data",
-                   "M1-IDX-Hits": "system.cpu0.dcache.demandMshrHits_9::switch_cpus0.data",
-                   "M1-IDX-Misses": "system.cpu0.dcache.demandMshrMisses_9::switch_cpus0.data",
-                   "L2-IDX-Hits": "system.cpu0.l2cache.demandHits_9::switch_cpus0.data",
-                   "L2-IDX-Misses": "system.cpu0.l2cache.demandMisses_9::switch_cpus0.data",
-                   "M2-IDX-Hits": "system.cpu0.l2cache.demandMshrHits_9::switch_cpus0.data",
-                   "M2-IDX-Misses": "system.cpu0.l2cache.demandMshrMisses_9::switch_cpus0.data",
-                   "L3-IDX-Hits": "system.l3.demandHits_9::switch_cpus0.data",
-                   "L3-IDX-Misses": "system.l3.demandMisses_9::switch_cpus0.data",
-                   "M3-IDX-Hits": "system.l3.demandMshrHits_9::switch_cpus0.data",
-                   "M3-IDX-Misses": "system.l3.demandMshrMisses_9::switch_cpus0.data",
-                   "Avg-BND-Latency": "system.switch_cpus0.lsq0.loadToUse_10::mean",
-                   "L1-BND-Hits": "system.cpu0.dcache.demandHits_10::switch_cpus0.data",
-                   "L1-BND-Misses": "system.cpu0.dcache.demandMisses_10::switch_cpus0.data",
-                   "M1-BND-Hits": "system.cpu0.dcache.demandMshrHits_10::switch_cpus0.data",
-                   "M1-BND-Misses": "system.cpu0.dcache.demandMshrMisses_10::switch_cpus0.data",
-                   "L2-BND-Hits": "system.cpu0.l2cache.demandHits_10::switch_cpus0.data",
-                   "L2-BND-Misses": "system.cpu0.l2cache.demandMisses_10::switch_cpus0.data",
-                   "M2-BND-Hits": "system.cpu0.l2cache.demandMshrHits_10::switch_cpus0.data",
-                   "M2-BND-Misses": "system.cpu0.l2cache.demandMshrMisses_10::switch_cpus0.data",
-                   "L3-BND-Hits": "system.l3.demandHits_10::switch_cpus0.data",
-                   "L3-BND-Misses": "system.l3.demandMisses_10::switch_cpus0.data",
-                   "M3-BND-Hits": "system.l3.demandMshrHits_10::switch_cpus0.data",
-                   "M3-BND-Misses": "system.l3.demandMshrMisses_10::switch_cpus0.data",
-                   "Avg-COND-Latency": "system.switch_cpus0.lsq0.loadToUse_11::mean",
-                   "L1-COND-Hits": "system.cpu0.dcache.demandHits_11::switch_cpus0.data",
-                   "L1-COND-Misses": "system.cpu0.dcache.demandMisses_11::switch_cpus0.data",
-                   "M1-COND-Hits": "system.cpu0.dcache.demandMshrHits_11::switch_cpus0.data",
-                   "M1-COND-Misses": "system.cpu0.dcache.demandMshrMisses_11::switch_cpus0.data",
-                   "L2-COND-Hits": "system.cpu0.l2cache.demandHits_11::switch_cpus0.data",
-                   "L2-COND-Misses": "system.cpu0.l2cache.demandMisses_11::switch_cpus0.data",
-                   "M2-COND-Hits": "system.cpu0.l2cache.demandMshrHits_11::switch_cpus0.data",
-                   "M2-COND-Misses": "system.cpu0.l2cache.demandMshrMisses_11::switch_cpus0.data",
-                   "L3-COND-Hits": "system.l3.demandHits_11::switch_cpus0.data",
-                   "L3-COND-Misses": "system.l3.demandMisses_11::switch_cpus0.data",
-                   "M3-COND-Hits": "system.l3.demandMshrHits_11::switch_cpus0.data",
-                   "M3-COND-Misses": "system.l3.demandMshrMisses_11::switch_cpus0.data",
-                   "Avg-Latency": "system.switch_cpus0.lsq0.loadToUse_T::mean",
-                   "L1-Hits": "system.cpu0.dcache.demandHits_T::switch_cpus0.data",
-                   "L1-Misses": "system.cpu0.dcache.demandMisses_T::switch_cpus0.data",
-                   "M1-Hits": "system.cpu0.dcache.demandMshrHits_T::switch_cpus0.data",
-                   "M1-Misses": "system.cpu0.dcache.demandMshrMisses_T::switch_cpus0.data",
-                   "L2-Hits": "system.cpu0.l2cache.demandHits_T::switch_cpus0.data",
-                   "L2-Misses": "system.cpu0.l2cache.demandMisses_T::switch_cpus0.data",
-                   "M2-Hits": "system.cpu0.l2cache.demandMshrHits_T::switch_cpus0.data",
-                   "M2-Misses": "system.cpu0.l2cache.demandMshrMisses_T::switch_cpus0.data",
-                   "L3-Hits": "system.l3.demandHits_T::switch_cpus0.data",
-                   "L3-Misses": "system.l3.demandMisses_T::switch_cpus0.data",
-                   "M3-Hits": "system.l3.demandMshrHits_T::switch_cpus0.data",
-                   "M3-Misses": "system.l3.demandMshrMisses_T::switch_cpus0.data"}
+all_cache_stats = {"Avg-SPD-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_0::mean"},
+                   "L1-SPD-Hits": {"PRE": "dcache.demandHits_0::switch_cpus", "POST": ".data"},
+                   "L1-SPD-Misses": {"PRE": "dcache.demandMisses_0::switch_cpus", "POST": ".data"},
+                   "M1-SPD-Hits": {"PRE": "dcache.demandMshrHits_0::switch_cpus", "POST": ".data"},
+                   "M1-SPD-Misses": {"PRE": "dcache.demandMshrMisses_0::switch_cpus", "POST": ".data"},
+                   "L2-SPD-Hits": {"PRE": "l2cache.demandHits_0::switch_cpus", "POST": ".data"},
+                   "L2-SPD-Misses": {"PRE": "l2cache.demandMisses_0::switch_cpus", "POST": ".data"},
+                   "M2-SPD-Hits": {"PRE": "l2cache.demandMshrHits_0::switch_cpus", "POST": ".data"},
+                   "M2-SPD-Misses": {"PRE": "l2cache.demandMshrMisses_0::switch_cpus", "POST": ".data"},
+                   "L3-SPD-Hits": {"PRE": "system.l3.demandHits_0::switch_cpus", "POST": ".data"},
+                   "L3-SPD-Misses": {"PRE": "system.l3.demandMisses_0::switch_cpus", "POST": ".data"},
+                   "M3-SPD-Hits": {"PRE": "system.l3.demandMshrHits_0::switch_cpus", "POST": ".data"},
+                   "M3-SPD-Misses": {"PRE": "system.l3.demandMshrMisses_0::switch_cpus", "POST": ".data"},
+                   "Avg-6-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_6::mean"},
+                   "L1-6-Hits": {"PRE": "dcache.demandHits_6::switch_cpus", "POST": ".data"},
+                   "L1-6-Misses": {"PRE": "dcache.demandMisses_6::switch_cpus", "POST": ".data"},
+                   "M1-6-Hits": {"PRE": "dcache.demandMshrHits_6::switch_cpus", "POST": ".data"},
+                   "M1-6-Misses": {"PRE": "dcache.demandMshrMisses_6::switch_cpus", "POST": ".data"},
+                   "L2-6-Hits": {"PRE": "l2cache.demandHits_6::switch_cpus", "POST": ".data"},
+                   "L2-6-Misses": {"PRE": "l2cache.demandMisses_6::switch_cpus", "POST": ".data"},
+                   "M2-6-Hits": {"PRE": "l2cache.demandMshrHits_6::switch_cpus", "POST": ".data"},
+                   "M2-6-Misses": {"PRE": "l2cache.demandMshrMisses_6::switch_cpus", "POST": ".data"},
+                   "L3-6-Hits": {"PRE": "system.l3.demandHits_6::switch_cpus", "POST": ".data"},
+                   "L3-6-Misses": {"PRE": "system.l3.demandMisses_6::switch_cpus", "POST": ".data"},
+                   "M3-6-Hits": {"PRE": "system.l3.demandMshrHits_6::switch_cpus", "POST": ".data"},
+                   "M3-6-Misses": {"PRE": "system.l3.demandMshrMisses_6::switch_cpus", "POST": ".data"},
+                   "Avg-7-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_7::mean"},
+                   "L1-7-Hits": {"PRE": "dcache.demandHits_7::switch_cpus", "POST": ".data"},
+                   "L1-7-Misses": {"PRE": "dcache.demandMisses_7::switch_cpus", "POST": ".data"},
+                   "M1-7-Hits": {"PRE": "dcache.demandMshrHits_7::switch_cpus", "POST": ".data"},
+                   "M1-7-Misses": {"PRE": "dcache.demandMshrMisses_7::switch_cpus", "POST": ".data"},
+                   "L2-7-Hits": {"PRE": "l2cache.demandHits_7::switch_cpus", "POST": ".data"},
+                   "L2-7-Misses": {"PRE": "l2cache.demandMisses_7::switch_cpus", "POST": ".data"},
+                   "M2-7-Hits": {"PRE": "l2cache.demandMshrHits_7::switch_cpus", "POST": ".data"},
+                   "M2-7-Misses": {"PRE": "l2cache.demandMshrMisses_7::switch_cpus", "POST": ".data"},
+                   "L3-7-Hits": {"PRE": "system.l3.demandHits_7::switch_cpus", "POST": ".data"},
+                   "L3-7-Misses": {"PRE": "system.l3.demandMisses_7::switch_cpus", "POST": ".data"},
+                   "M3-7-Hits": {"PRE": "system.l3.demandMshrHits_7::switch_cpus", "POST": ".data"},
+                   "M3-7-Misses": {"PRE": "system.l3.demandMshrMisses_7::switch_cpus", "POST": ".data"},
+                   "Avg-8-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_8::mean"},
+                   "L1-8-Hits": {"PRE": "dcache.demandHits_8::switch_cpus", "POST": ".data"},
+                   "L1-8-Misses": {"PRE": "dcache.demandMisses_8::switch_cpus", "POST": ".data"},
+                   "M1-8-Hits": {"PRE": "dcache.demandMshrHits_8::switch_cpus", "POST": ".data"},
+                   "M1-8-Misses": {"PRE": "dcache.demandMshrMisses_8::switch_cpus", "POST": ".data"},
+                   "L2-8-Hits": {"PRE": "l2cache.demandHits_8::switch_cpus", "POST": ".data"},
+                   "L2-8-Misses": {"PRE": "l2cache.demandMisses_8::switch_cpus", "POST": ".data"},
+                   "M2-8-Hits": {"PRE": "l2cache.demandMshrHits_8::switch_cpus", "POST": ".data"},
+                   "M2-8-Misses": {"PRE": "l2cache.demandMshrMisses_8::switch_cpus", "POST": ".data"},
+                   "L3-8-Hits": {"PRE": "system.l3.demandHits_8::switch_cpus", "POST": ".data"},
+                   "L3-8-Misses": {"PRE": "system.l3.demandMisses_8::switch_cpus", "POST": ".data"},
+                   "M3-8-Hits": {"PRE": "system.l3.demandMshrHits_8::switch_cpus", "POST": ".data"},
+                   "M3-8-Misses": {"PRE": "system.l3.demandMshrMisses_8::switch_cpus", "POST": ".data"},
+                   "Avg-9-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_9::mean"},
+                   "L1-9-Hits": {"PRE": "dcache.demandHits_9::switch_cpus", "POST": ".data"},
+                   "L1-9-Misses": {"PRE": "dcache.demandMisses_9::switch_cpus", "POST": ".data"},
+                   "M1-9-Hits": {"PRE": "dcache.demandMshrHits_9::switch_cpus", "POST": ".data"},
+                   "M1-9-Misses": {"PRE": "dcache.demandMshrMisses_9::switch_cpus", "POST": ".data"},
+                   "L2-9-Hits": {"PRE": "l2cache.demandHits_9::switch_cpus", "POST": ".data"},
+                   "L2-9-Misses": {"PRE": "l2cache.demandMisses_9::switch_cpus", "POST": ".data"},
+                   "M2-9-Hits": {"PRE": "l2cache.demandMshrHits_9::switch_cpus", "POST": ".data"},
+                   "M2-9-Misses": {"PRE": "l2cache.demandMshrMisses_9::switch_cpus", "POST": ".data"},
+                   "L3-9-Hits": {"PRE": "system.l3.demandHits_9::switch_cpus", "POST": ".data"},
+                   "L3-9-Misses": {"PRE": "system.l3.demandMisses_9::switch_cpus", "POST": ".data"},
+                   "M3-9-Hits": {"PRE": "system.l3.demandMshrHits_9::switch_cpus", "POST": ".data"},
+                   "M3-9-Misses": {"PRE": "system.l3.demandMshrMisses_9::switch_cpus", "POST": ".data"},
+                   "Avg-10-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_10::mean"},
+                   "L1-10-Hits": {"PRE": "dcache.demandHits_10::switch_cpus", "POST": ".data"},
+                   "L1-10-Misses": {"PRE": "dcache.demandMisses_10::switch_cpus", "POST": ".data"},
+                   "M1-10-Hits": {"PRE": "dcache.demandMshrHits_10::switch_cpus", "POST": ".data"},
+                   "M1-10-Misses": {"PRE": "dcache.demandMshrMisses_10::switch_cpus", "POST": ".data"},
+                   "L2-10-Hits": {"PRE": "l2cache.demandHits_10::switch_cpus", "POST": ".data"},
+                   "L2-10-Misses": {"PRE": "l2cache.demandMisses_10::switch_cpus", "POST": ".data"},
+                   "M2-10-Hits": {"PRE": "l2cache.demandMshrHits_10::switch_cpus", "POST": ".data"},
+                   "M2-10-Misses": {"PRE": "l2cache.demandMshrMisses_10::switch_cpus", "POST": ".data"},
+                   "L3-10-Hits": {"PRE": "system.l3.demandHits_10::switch_cpus", "POST": ".data"},
+                   "L3-10-Misses": {"PRE": "system.l3.demandMisses_10::switch_cpus", "POST": ".data"},
+                   "M3-10-Hits": {"PRE": "system.l3.demandMshrHits_10::switch_cpus", "POST": ".data"},
+                   "M3-10-Misses": {"PRE": "system.l3.demandMshrMisses_10::switch_cpus", "POST": ".data"},
+                   "Avg-11-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_11::mean"},
+                   "L1-11-Hits": {"PRE": "dcache.demandHits_11::switch_cpus", "POST": ".data"},
+                   "L1-11-Misses": {"PRE": "dcache.demandMisses_11::switch_cpus", "POST": ".data"},
+                   "M1-11-Hits": {"PRE": "dcache.demandMshrHits_11::switch_cpus", "POST": ".data"},
+                   "M1-11-Misses": {"PRE": "dcache.demandMshrMisses_11::switch_cpus", "POST": ".data"},
+                   "L2-11-Hits": {"PRE": "l2cache.demandHits_11::switch_cpus", "POST": ".data"},
+                   "L2-11-Misses": {"PRE": "l2cache.demandMisses_11::switch_cpus", "POST": ".data"},
+                   "M2-11-Hits": {"PRE": "l2cache.demandMshrHits_11::switch_cpus", "POST": ".data"},
+                   "M2-11-Misses": {"PRE": "l2cache.demandMshrMisses_11::switch_cpus", "POST": ".data"},
+                   "L3-11-Hits": {"PRE": "system.l3.demandHits_11::switch_cpus", "POST": ".data"},
+                   "L3-11-Misses": {"PRE": "system.l3.demandMisses_11::switch_cpus", "POST": ".data"},
+                   "M3-11-Hits": {"PRE": "system.l3.demandMshrHits_11::switch_cpus", "POST": ".data"},
+                   "M3-11-Misses": {"PRE": "system.l3.demandMshrMisses_11::switch_cpus", "POST": ".data"},
+                   "Avg-T-Latency": {"PRE": "system.switch_cpus", "POST": ".lsq0.loadToUse_T::mean"},
+                   "L1-T-Hits": {"PRE": "dcache.demandHits_T::switch_cpus", "POST": ".data"},
+                   "L1-T-Misses": {"PRE": "dcache.demandMisses_T::switch_cpus", "POST": ".data"},
+                   "M1-T-Hits": {"PRE": "dcache.demandMshrHits_T::switch_cpus", "POST": ".data"},
+                   "M1-T-Misses": {"PRE": "dcache.demandMshrMisses_T::switch_cpus", "POST": ".data"},
+                   "L2-T-Hits": {"PRE": "l2cache.demandHits_T::switch_cpus", "POST": ".data"},
+                   "L2-T-Misses": {"PRE": "l2cache.demandMisses_T::switch_cpus", "POST": ".data"},
+                   "M2-T-Hits": {"PRE": "l2cache.demandMshrHits_T::switch_cpus", "POST": ".data"},
+                   "M2-T-Misses": {"PRE": "l2cache.demandMshrMisses_T::switch_cpus", "POST": ".data"},
+                   "L3-T-Hits": {"PRE": "system.l3.demandHits_T::switch_cpus", "POST": ".data"},
+                   "L3-T-Misses": {"PRE": "system.l3.demandMisses_T::switch_cpus", "POST": ".data"},
+                   "M3-T-Hits": {"PRE": "system.l3.demandMshrHits_T::switch_cpus", "POST": ".data"},
+                   "M3-T-Misses": {"PRE": "system.l3.demandMshrMisses_T::switch_cpus", "POST": ".data"}}
 
 all_instruction_types = {"LDFP": "commitStats0.committedInstType::FloatMemRead",
                          "STFP": "commitStats0.committedInstType::FloatMemWrite",
@@ -196,14 +243,19 @@ def parse_gem5_stats(stats, mode, target_stats):
                 if "simTicks" == words[0]:
                     cycles = int(words[1]) / 313
                     continue
-                for cache_stat in all_cache_stats.keys():
-                    if all_cache_stats[cache_stat] == words[0]:
-                        try:
-                            cache_stats[cache_stat] = int(words[1])
-                        except:
-                            cache_stats[cache_stat] = float(words[1])
-                        found = True
-                        break
+                if "cpus" in words[0]:
+                    pre = words[0].split("cpus")[0] + "cpus"
+                    post = words[0].split("cpus")[1][1:]
+                    if "system.cpu" in pre:
+                        pre = pre.split("system.cpu")[1][2:]
+                    for cache_stat in all_cache_stats.keys():
+                        if all_cache_stats[cache_stat]["PRE"] == pre and all_cache_stats[cache_stat]["POST"] == post:
+                            try:
+                                cache_stats[cache_stat] = int(words[1])
+                            except:
+                                cache_stats[cache_stat] = float(words[1])
+                            found = True
+                            break
                 if found:
                     continue
                 if "system.switch_cpus" in words[0]:
@@ -244,6 +296,13 @@ def parse_ramulator_stats(stats, target_stats):
     DRAM_total_BW = 0
     DRAM_RB_hitrate = 0
     DRAM_CTRL_occ = 0
+    DRAM_PRE_STBY_ENERGY = 0
+    DRAM_ACT_STBY_ENERGY = 0
+    DRAM_ACTPRE_ENERGY = 0
+    DRAM_RD_ENERGY = 0
+    DRAM_WR_ENERGY = 0
+    DRAM_DQ_ENERGY = 0
+    total_DRAM_energy = 0
 
     if os.path.exists(f"{stats}") == True:    
         COMMAND = f"cat {stats} | sed -n \'/Dumping ramulator/,$p\' > {stats}.ramulator"
@@ -320,10 +379,16 @@ def parse_ramulator_stats(stats, target_stats):
             DRAM_RB_hitrate = 100.00 - (DRAM_ACT * 100.00 / (DRAM_RD + DRAM_WR))
             # assert DRAM_RB_hitrate >= 0, f"DRAM_RB_hitrate: 100 - {DRAM_ACT * 100.00} / {DRAM_RD + DRAM_WR} == {DRAM_RB_hitrate}"
             DRAM_CTRL_occ = sum(avg_occupancy) / len(avg_occupancy)
+            DRAM_PRE_STBY_ENERGY = (DRAM_ACT * tRP * VDD * IDD2N) / 1000000000.000
+            DRAM_ACT_STBY_ENERGY = ((cycles * 16 - DRAM_ACT * nRCD) * tCK * VDD * IDD3N) / 1000000000.000
+            DRAM_ACTPRE_ENERGY = (DRAM_ACT * ((IDD0 - IDD3N) * tRCD + (IDD0 - IDD2N) * tRP) * VDD) / 1000000000.000
+            DRAM_RD_ENERGY = (DRAM_RD * tBL * VDD * (IDD4R - IDD3N)) / 1000000000.000
+            DRAM_WR_ENERGY = (DRAM_WR * tBL * VDD * (IDD4W - IDD3N)) / 1000000000.000
+            total_DRAM_energy = DRAM_PRE_STBY_ENERGY + DRAM_ACT_STBY_ENERGY + DRAM_ACTPRE_ENERGY + DRAM_RD_ENERGY + DRAM_WR_ENERGY
     # exit()
-    return DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ
+    return DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, total_DRAM_energy
 
-print("K,S,D,M,cycles", end=",")
+print("cycles", end=",")
 for maa_cycle in all_maa_cycles:
     print(f"{maa_cycle}", end=",")
 for maa_indirect_cycle in all_maa_indirect_cycles:
@@ -333,15 +398,16 @@ for cache_stat in all_cache_stats.keys():
 for instruction_type in all_instruction_types.keys():
     print(f"{instruction_type}", end=",")
 print("LSQ-LD-OCC", end=",")
-print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ", end=",")
+print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ,DRAM-PRE-STB,DRAM-ACT-STB,DRAM-ACTPRE,DRAM-RD,DRAM-WR,DRAM-Total", end=",")
 print()
 
-def get_print_results(directory, target_stats, kernel, size_str, distr, mode):
+
+def get_print_results(directory, target_stats, mode):
     stats = f"{directory}/stats.txt"
     cycles, maa_cycles, maa_indirect_cycles, cache_stats, instruction_types = parse_gem5_stats(stats, mode, target_stats)
     logs = f"{directory}/logs_run.txt"
-    DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ = parse_ramulator_stats(logs, target_stats)
-    print(f"{kernel},{size_str},{distr},{mode},{cycles}", end=",")
+    DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, total_DRAM_energy = parse_ramulator_stats(logs, target_stats)
+    print(f"{cycles}", end=",")
     for maa_cycle in all_maa_cycles:
         print(maa_cycles[maa_cycle], end=",")
     for maa_indirect_cycle in all_maa_indirect_cycles:
@@ -353,121 +419,10 @@ def get_print_results(directory, target_stats, kernel, size_str, distr, mode):
     if cycles == 0:
         print(0, end=",")
     else:
-        print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-Latency"]) / cycles, end=",")
-    print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ}", end=",")
+        print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-T-Latency"]) / cycles, end=",")
+    print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ},{DRAM_PRE_STBY_ENERGY},{DRAM_ACT_STBY_ENERGY},{DRAM_ACTPRE_ENERGY},{DRAM_RD_ENERGY},{DRAM_WR_ENERGY},{total_DRAM_energy}", end=",")
     print()
 
-for kernel in ["gather", "rmw", "scatter", "gather_directrangeloop_indircond"]:
-    test_dir = "CISC"
-    for size, size_str in zip([65536], ["64K"]):
-        for mode in ["BASE", "MAA"]:
-            directory=f"{RSLT_DIR}/{kernel}/allhit/{size_str}_{mode}_new"
-            get_print_results(directory, 2, kernel, size_str, "allhit", mode)
-            directory=f"{RSLT_DIR}/{kernel}/allhitl3/{size_str}_{mode}_new"
-            get_print_results(directory, 1, kernel, size_str, "allhitl3", mode)
-            # for BAH in [0, 1]:
-            #     for RBH in [0, 50, 100]: # [0, 25, 50, 75, 100]: # [0]:
-            #         for CHH in [0, 1]: # [0]:
-            #             if CHH == 1 and (BAH != 1 or RBH != 100):
-            #                 continue
-            #             for BGH in [0, 1]: # [0]:
-            #                 if BGH == 1 and (BAH != 1 or RBH != 100 or CHH != 1):
-            #                     continue
-            #                 directory=f"{RSLT_DIR}/{kernel}/allmiss/BAH{BAH}/RBH{RBH}/CBH{CHH}/BGH{BGH}/{size_str}_{mode}_new"
-            #                 get_print_results(directory, 1, kernel, size_str, f"allmiss_BAH{BAH}_RBH{RBH}_CBH{CHH}_BGH{BGH}", mode)
-
-# print("M,L2,L3,cycles", end=",")
-# for maa_cycle in all_maa_cycles:
-#     print(f"{maa_cycle}", end=",")
-# for maa_indirect_cycle in all_maa_indirect_cycles:
-#     print(f"IND_{maa_indirect_cycle}", end=",")
-# for cache_stat in all_cache_stats.keys():
-#     print(f"{cache_stat}", end=",")
-# for instruction_type in all_instruction_types.keys():
-#     print(f"{instruction_type}", end=",")
-# print("LSQ-LD-OCC", end=",")
-# print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ", end=",")
-# print()
-
-# for mode in ["maa", "base"]:
-#     for l2 in ["l2", "nol2"]:
-#         for l3 in ["l3", "nol3"]:
-#             if mode == "base" and (l2 == "nol2" or l3 == "nol3"):
-#                 continue
-#             stats = f"tests_16T_{l2}_{l3}_{mode}/stats.txt"
-#             cycles, maa_cycles, maa_indirect_cycles, cache_stats, instruction_types = parse_gem5_stats(stats, mode)
-#             logs = f"tests_16T_{l2}_{l3}_{mode}/logs_run.txt"
-#             DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ = parse_ramulator_stats(logs)
-#             print(f"{mode},{l2},{l3},{cycles}", end=",")
-#             for maa_cycle in all_maa_cycles:
-#                 print(maa_cycles[maa_cycle], end=",")
-#             for maa_indirect_cycle in all_maa_indirect_cycles:
-#                 print(maa_indirect_cycles[maa_indirect_cycle], end=",")
-#             for cache_stat in all_cache_stats.keys():
-#                 print(cache_stats[cache_stat], end=",")
-#             for instruction_type in all_instruction_types.keys():
-#                 print(instruction_types[instruction_type], end=",")
-#             if cycles == 0:
-#                 print(0, end=",")
-#             else:
-#                 print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-Latency"]) / cycles, end=",")
-#             print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ}", end=",")
-#             print()
-# exit(-1)
-
-# print("K,S,D,T,M,cycles", end=",")
-# for maa_cycle in all_maa_cycles:
-#     print(f"{maa_cycle}", end=",")
-# for maa_indirect_cycle in all_maa_indirect_cycles:
-#     print(f"IND_{maa_indirect_cycle}", end=",")
-# for cache_stat in all_cache_stats.keys():
-#     print(f"{cache_stat}", end=",")
-# for instruction_type in all_instruction_types.keys():
-#     print(f"{instruction_type}", end=",")
-# print("LSQ-LD-OCC", end=",")
-# print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ", end=",")
-# print()
-
-# MAA_BASE_Speedup = {}
-# for kernel in all_kernels:
-#     MAA_BASE_Speedup[kernel] = {}
-#     for tile_size, tile_size_str in zip(all_tiles, all_tiles_str):
-#         MAA_BASE_Speedup[kernel][tile_size] = {}
-#         for size, size_str in zip(all_sizes, all_sizes_str):
-#             for distance, distance_str in zip(all_distances, all_distances_str):
-#                 all_cycles = {}
-#                 for mode in all_modes:
-#                     stats = f"{DATA_DIR}/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32/stats.txt"
-#                     cycles, maa_cycles, maa_indirect_cycles, cache_stats, instruction_types = parse_gem5_stats(stats, mode)
-#                     logs = f"{DATA_DIR}/{kernel}/M{mode}/D{distance_str}/T{tile_size_str}/S{size_str}/FP32/logs.txt"
-#                     DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ = parse_ramulator_stats(logs)
-#                     all_cycles[mode] = cycles
-#                     print(f"{kernel},{size_str},{distance_str},{tile_size_str},{mode},{cycles}", end=",")
-#                     for maa_cycle in all_maa_cycles:
-#                         print(maa_cycles[maa_cycle], end=",")
-#                     for maa_indirect_cycle in all_maa_indirect_cycles:
-#                         print(maa_indirect_cycles[maa_indirect_cycle], end=",")
-#                     for cache_stat in all_cache_stats.keys():
-#                         print(cache_stats[cache_stat], end=",")
-#                     for instruction_type in all_instruction_types.keys():
-#                         print(instruction_types[instruction_type], end=",")
-#                     print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-Latency"]) / cycles, end=",")
-#                     print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ}", end=",")
-#                     print()
-#                 if all_cycles["MAA"] == 0 or "BASE" not in all_modes:
-#                     MAA_BASE_Speedup[kernel][tile_size][distance] = 0
-#                 else:
-#                     MAA_BASE_Speedup[kernel][tile_size][distance] = all_cycles["BASE"] / all_cycles["MAA"]
-
-# if "BASE" in all_modes:
-#     print("Speedup")
-#     for kernel in all_kernels:
-#         print(kernel, end=",")
-#         for tile_size_str in all_tiles_str:
-#             print(tile_size_str, end=",")
-#         print()
-#         for distance, distance_str in zip(all_distances, all_distances_str):
-#             print(f"{distance_str},", end="")
-#             for tile_size in all_tiles:
-#                 print(MAA_BASE_Speedup[kernel][tile_size][distance], end=",")
-#             print()
+if directory[-1] == "/":
+    directory = directory[:-1]
+get_print_results(directory, target_stats, mode)
