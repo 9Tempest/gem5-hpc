@@ -23,30 +23,43 @@ target_stats = args.target
 # P_WR = 127.7
 # P_DQ = 85.6
 
-# MAX PRE STBY CURRENT
+# x8 -- 3200 -- Rev B
+# https://www.mouser.com/datasheet/2/671/Micron_05092023_8gb_ddr4_sdram-3175546.pdf?srsltid=AfmBOorxWdf6393VEklwSz6hS_D2snTlD1BFveSa1q4XOGWcUWcsct2i
+# MAX PRE STBY CURRENT (mA)
 IDD2N = 37.0
-# MAX ACT STBY CURRENT
-IDD3N = 53.0
-# ACT/PRE BANK CURRENT
+IPP2N = 3.0
+# MAX ACT STBY CURRENT (mA)
+IDD3N = 52.0
+IPP3N = 3.0
+# ACT/PRE BANK CURRENT (mA)
 IDD0 = 57.0
-# MAX RD BURST CURRENT
+IPP0 = 3.0
+# MAX RD BURST CURRENT (mA)
 IDD4R = 168.0
-# MAX WR BURST CURRENT
+IPP4R = 3.0
+# MAX WR BURST CURRENT (mA)
 IDD4W = 150.0
-# DQ OUTPUT DRIVER POWER
+IPP4W = 3.0
+# DQ OUTPUT DRIVER POWER (mW)
 PDSDQ = 85.6
 VDD = 1.2
+VPP = 2.5
 
-# PRE-ACT time
+GIGA = 1000000000.000
+
+# PRE-ACT time (ns)
 tRP = 20.0 * 0.625
 nRP = 20.0
-# ACT-RD time
+# ACT-RD time (ns)
 tRCD = 20.0 * 0.625
 nRCD = 20.0
-# RD/WR time
+# RD/WR time (ns)
 tBL = 4.0 * 0.625
 nBL = 4.0
-# clock time in ns
+# ACT to PRE time (ns)
+tRAS = 52.0 * 0.625
+nRAS = 52.0
+# clock time (ns)
 tCK = 0.625
 
 all_kernels =   ["gather",
@@ -313,6 +326,8 @@ def parse_ramulator_stats(stats, target_stats):
         num_reads = [0 for _ in range(num_channels)]
         num_writes = [0 for _ in range(num_channels)]
         num_acts = [0 for _ in range(num_channels)]
+        num_pres = [0 for _ in range(num_channels)]
+        num_preas = [0 for _ in range(num_channels)]
         avg_occupancy = [0 for _ in range(num_channels)]
         with open(f"{stats}.ramulator", "r") as f:
             lines = f.readlines()
@@ -361,6 +376,18 @@ def parse_ramulator_stats(stats, target_stats):
                         num_acts[channel] = int(words[-1])
                         # print(f"num_acts[{channel}] = {num_acts[channel]}")
                     continue
+                if "num_PRE_commands_T" in line:
+                    channel = int(words[-2].split("_")[0].split("CH")[1])
+                    if num_pres[channel] == 0:
+                        num_pres[channel] = int(words[-1])
+                        # print(f"num_pres[{channel}] = {num_pres[channel]}")
+                    continue
+                if "num_PREA_commands_T" in line:
+                    channel = int(words[-2].split("_")[0].split("CH")[1])
+                    if num_preas[channel] == 0:
+                        num_preas[channel] = int(words[-1])
+                        # print(f"num_preas[{channel}] = {num_preas[channel]}")
+                    continue
         if cycles != 0:
             # for channel in range(num_channels):
             #     if num_reads[channel] == 0 or num_writes[channel] == 0 or num_acts[channel] == 0 or avg_occupancy[channel] == 0:
@@ -369,6 +396,7 @@ def parse_ramulator_stats(stats, target_stats):
             DRAM_RD = sum(num_reads)
             DRAM_WR = sum(num_writes)
             DRAM_ACT = sum(num_acts)
+            DRAM_PRE = sum(num_pres) + sum(num_preas) * 16.00
             DRAM_RD_BW = (DRAM_RD * 64)  / (cycles * 625)
             DRAM_RD_BW *= 1e12 # 625 is in PS
             DRAM_RD_BW /= (1024 * 1024 * 1024) # BW is in GB/s
@@ -379,14 +407,19 @@ def parse_ramulator_stats(stats, target_stats):
             DRAM_RB_hitrate = 100.00 - (DRAM_ACT * 100.00 / (DRAM_RD + DRAM_WR))
             # assert DRAM_RB_hitrate >= 0, f"DRAM_RB_hitrate: 100 - {DRAM_ACT * 100.00} / {DRAM_RD + DRAM_WR} == {DRAM_RB_hitrate}"
             DRAM_CTRL_occ = sum(avg_occupancy) / len(avg_occupancy)
-            DRAM_PRE_STBY_ENERGY = (DRAM_ACT * tRP * VDD * IDD2N) / 1000000000.000
-            DRAM_ACT_STBY_ENERGY = ((cycles * 16 - DRAM_ACT * nRCD) * tCK * VDD * IDD3N) / 1000000000.000
-            DRAM_ACTPRE_ENERGY = (DRAM_ACT * ((IDD0 - IDD3N) * tRCD + (IDD0 - IDD2N) * tRP) * VDD) / 1000000000.000
-            DRAM_RD_ENERGY = (DRAM_RD * tBL * VDD * (IDD4R - IDD3N)) / 1000000000.000
-            DRAM_WR_ENERGY = (DRAM_WR * tBL * VDD * (IDD4W - IDD3N)) / 1000000000.000
-            total_DRAM_energy = DRAM_PRE_STBY_ENERGY + DRAM_ACT_STBY_ENERGY + DRAM_ACTPRE_ENERGY + DRAM_RD_ENERGY + DRAM_WR_ENERGY
-    # exit()
-    return DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, total_DRAM_energy
+            PRE_time = DRAM_PRE / 16.0000 * tRP
+            ACT_time = cycles * tCK - PRE_time
+            assert ACT_time >= 0, f"ACT_time: {cycles} * {tCK} - {PRE_time} == {ACT_time} <= 0"
+            DRAM_PRE_STBY_ENERGY = (PRE_time * ((VDD * IDD2N) + (VPP * IPP2N))) / GIGA
+            DRAM_ACT_STBY_ENERGY = (ACT_time * ((VDD * IDD3N) + (VPP * IPP3N))) / GIGA
+            DRAM_ACTPRE_ENERGY = DRAM_ACT * ((IDD0 - IDD3N) * VDD + (IPP0 - IPP3N) * VPP) * tRAS
+            DRAM_ACTPRE_ENERGY += DRAM_PRE * ((IDD0 - IDD2N) * VDD + (IPP0 - IPP2N) * VPP) * tRP
+            DRAM_ACTPRE_ENERGY /= GIGA
+            DRAM_RD_ENERGY = DRAM_RD * ((IDD4R - IDD3N) * VDD + (IPP4R - IPP3N) * VPP) * tBL / GIGA
+            DRAM_WR_ENERGY = DRAM_WR * ((IDD4W - IDD3N) * VDD + (IPP4W - IPP3N) * VPP) * tBL / GIGA
+            DRAM_DQ_ENERGY = (DRAM_RD + DRAM_WR) * PDSDQ * tBL / GIGA
+            total_DRAM_energy = DRAM_PRE_STBY_ENERGY + DRAM_ACT_STBY_ENERGY + DRAM_ACTPRE_ENERGY + DRAM_RD_ENERGY + DRAM_WR_ENERGY + DRAM_DQ_ENERGY
+    return DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, DRAM_DQ_ENERGY, total_DRAM_energy
 
 print("cycles", end=",")
 for maa_cycle in all_maa_cycles:
@@ -398,7 +431,7 @@ for cache_stat in all_cache_stats.keys():
 for instruction_type in all_instruction_types.keys():
     print(f"{instruction_type}", end=",")
 print("LSQ-LD-OCC", end=",")
-print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ,DRAM-PRE-STB,DRAM-ACT-STB,DRAM-ACTPRE,DRAM-RD,DRAM-WR,DRAM-Total", end=",")
+print("DRAM-RD,DRAM-WR,DRAM-ACT,DRAM-RD-BW,DRAM-WR-BW,DRAM-total-BW,DRAM-RB-hitrate,DRAM-CTRL-occ,DRAM-PRE-STB,DRAM-ACT-STB,DRAM-ACTPRE,DRAM-RD,DRAM-WR,DRAM-DQ,DRAM-Total", end=",")
 print()
 
 
@@ -406,7 +439,7 @@ def get_print_results(directory, target_stats, mode):
     stats = f"{directory}/stats.txt"
     cycles, maa_cycles, maa_indirect_cycles, cache_stats, instruction_types = parse_gem5_stats(stats, mode, target_stats)
     logs = f"{directory}/logs_run.txt"
-    DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, total_DRAM_energy = parse_ramulator_stats(logs, target_stats)
+    DRAM_RD, DRAM_WR, DRAM_ACT, DRAM_RD_BW, DRAM_WR_BW, DRAM_total_BW, DRAM_RB_hitrate, DRAM_CTRL_occ, DRAM_PRE_STBY_ENERGY, DRAM_ACT_STBY_ENERGY, DRAM_ACTPRE_ENERGY, DRAM_RD_ENERGY, DRAM_WR_ENERGY, DRAM_DQ_ENERGY, total_DRAM_energy = parse_ramulator_stats(logs, target_stats)
     print(f"{cycles}", end=",")
     for maa_cycle in all_maa_cycles:
         print(maa_cycles[maa_cycle], end=",")
@@ -420,7 +453,7 @@ def get_print_results(directory, target_stats, mode):
         print(0, end=",")
     else:
         print(((instruction_types["LDINT"] + instruction_types["LDFP"]) * cache_stats["Avg-T-Latency"]) / cycles, end=",")
-    print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ},{DRAM_PRE_STBY_ENERGY},{DRAM_ACT_STBY_ENERGY},{DRAM_ACTPRE_ENERGY},{DRAM_RD_ENERGY},{DRAM_WR_ENERGY},{total_DRAM_energy}", end=",")
+    print(f"{DRAM_RD},{DRAM_WR},{DRAM_ACT},{DRAM_RD_BW},{DRAM_WR_BW},{DRAM_total_BW},{DRAM_RB_hitrate},{DRAM_CTRL_occ},{DRAM_PRE_STBY_ENERGY},{DRAM_ACT_STBY_ENERGY},{DRAM_ACTPRE_ENERGY},{DRAM_RD_ENERGY},{DRAM_WR_ENERGY},{DRAM_DQ_ENERGY},{total_DRAM_energy}", end=",")
     print()
 
 if directory[-1] == "/":
