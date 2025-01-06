@@ -393,11 +393,12 @@ public:
     unsigned int num_indirect_access_units;
     unsigned int num_range_units;
     unsigned int num_alu_units;
-    unsigned int num_row_table_rows_per_bank;
-    unsigned int num_row_table_entries_per_subbank_row;
+    unsigned int num_row_table_rows_per_slice;
+    unsigned int num_row_table_entries_per_subslice_row;
     unsigned int num_row_table_config_cache_entries;
     bool reconfigure_row_table;
-    unsigned int num_initial_row_table_banks;
+    bool reorder_row_table;
+    unsigned int num_initial_row_table_slices;
     unsigned int num_request_table_addresses;
     unsigned int num_request_table_entries_per_address;
     unsigned int num_memory_channels;

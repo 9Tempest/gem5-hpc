@@ -16,117 +16,6 @@
 namespace gem5 {
 
 ///////////////
-// REQUEST TABLE
-///////////////
-RequestTable::RequestTable(StreamAccessUnit *_stream_access, unsigned int _num_addresses, unsigned int _num_entries_per_address, int _my_stream_id) {
-    stream_access = _stream_access;
-    num_addresses = _num_addresses;
-    num_entries_per_address = _num_entries_per_address;
-    my_stream_id = _my_stream_id;
-    entries = new RequestTableEntry *[num_addresses];
-    entries_valid = new bool *[num_addresses];
-    for (int i = 0; i < num_addresses; i++) {
-        entries[i] = new RequestTableEntry[num_entries_per_address];
-        entries_valid[i] = new bool[num_entries_per_address];
-        for (int j = 0; j < num_entries_per_address; j++) {
-            entries_valid[i][j] = false;
-        }
-    }
-    addresses = new Addr[num_addresses];
-    addresses_valid = new bool[num_addresses];
-    for (int i = 0; i < num_addresses; i++) {
-        addresses_valid[i] = false;
-    }
-}
-RequestTable::~RequestTable() {
-    for (int i = 0; i < num_addresses; i++) {
-        delete[] entries[i];
-        delete[] entries_valid[i];
-    }
-    delete[] entries;
-    delete[] entries_valid;
-    delete[] addresses;
-    delete[] addresses_valid;
-}
-std::vector<RequestTableEntry> RequestTable::get_entries(Addr base_addr) {
-    std::vector<RequestTableEntry> result;
-    for (int i = 0; i < num_addresses; i++) {
-        if (addresses_valid[i] == true && addresses[i] == base_addr) {
-            for (int j = 0; j < num_entries_per_address; j++) {
-                if (entries_valid[i][j] == true) {
-                    result.push_back(entries[i][j]);
-                    entries_valid[i][j] = false;
-                }
-            }
-            addresses_valid[i] = false;
-            break;
-        }
-    }
-    return result;
-}
-bool RequestTable::add_entry(int itr, Addr base_addr, uint16_t wid) {
-    int address_itr = -1;
-    int free_address_itr = -1;
-    for (int i = 0; i < num_addresses; i++) {
-        if (addresses_valid[i] == true) {
-            if (addresses[i] == base_addr) {
-                // Duplicate should not be allowed
-                assert(address_itr == -1);
-                address_itr = i;
-            }
-        } else if (free_address_itr == -1) {
-            free_address_itr = i;
-        }
-    }
-    if (address_itr == -1) {
-        if (free_address_itr == -1) {
-            return false;
-        } else {
-            addresses[free_address_itr] = base_addr;
-            addresses_valid[free_address_itr] = true;
-            address_itr = free_address_itr;
-            (*stream_access->maa->stats.STR_NumCacheLineInserted[my_stream_id])++;
-        }
-    }
-    int free_entry_itr = -1;
-    for (int i = 0; i < num_entries_per_address; i++) {
-        if (entries_valid[address_itr][i] == false) {
-            free_entry_itr = i;
-            break;
-        }
-    }
-    assert(free_entry_itr != -1);
-    entries[address_itr][free_entry_itr] = RequestTableEntry(itr, wid);
-    entries_valid[address_itr][free_entry_itr] = true;
-    (*stream_access->maa->stats.STR_NumWordsInserted[my_stream_id])++;
-    return true;
-}
-void RequestTable::check_reset() {
-    for (int i = 0; i < num_addresses; i++) {
-        panic_if(addresses_valid[i], "Address %d is valid: 0x%lx!\n", i, addresses[i]);
-        for (int j = 0; j < num_entries_per_address; j++) {
-            panic_if(entries_valid[i][j], "Entry %d is valid: itr(%u) wid(%u)!\n", j, entries[i][j].itr, entries[i][j].wid);
-        }
-    }
-}
-void RequestTable::reset() {
-    for (int i = 0; i < num_addresses; i++) {
-        addresses_valid[i] = false;
-        for (int j = 0; j < num_entries_per_address; j++) {
-            entries_valid[i][j] = false;
-        }
-    }
-}
-bool RequestTable::is_full() {
-    for (int i = 0; i < num_addresses; i++) {
-        if (addresses_valid[i] == false) {
-            return false;
-        }
-    }
-    return true;
-}
-
-///////////////
 //
 // STREAM ACCESS UNIT
 //
@@ -144,7 +33,7 @@ void StreamAccessUnit::allocate(int _my_stream_id, unsigned int _num_request_tab
     state = Status::Idle;
     maa = _maa;
     dst_tile_id = -1;
-    request_table = new RequestTable(this, num_request_table_addresses, num_request_table_entries_per_address, my_stream_id);
+    request_table = new RequestTable(maa, num_request_table_addresses, num_request_table_entries_per_address, my_stream_id, true);
     my_translation_done = false;
     my_instruction = nullptr;
 }

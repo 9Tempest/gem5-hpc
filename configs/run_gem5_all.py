@@ -99,7 +99,7 @@ def add_command_checkpoint(directory, command, options, num_cores = 4):
     tasks.append(task)
     return len(tasks) - 1
 
-def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, mode, tile_size = 16384, reconfigurable_RT = False, maa_warmer = False, num_cores = 4):
+def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, mode, tile_size = 16384, reconfigurable_RT = False, maa_warmer = False, num_cores = 4, do_prefetch = True):
     have_maa = False
     l2_hwp_type = "StridePrefetcher"
     l3_size = "8MB"
@@ -129,18 +129,21 @@ def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, 
     COMMAND += f"--caches "
     COMMAND += f"--l1d_size={l1d_size} "
     COMMAND += f"--l1d_assoc={l1d_assoc} "
-    COMMAND += f"--l1d-hwp-type={l1d_hwp_type} "
+    if do_prefetch:
+        COMMAND += f"--l1d-hwp-type={l1d_hwp_type} "
     COMMAND += f"--l1d_mshrs={l1d_mshrs} "
     COMMAND += f"--l1i_size={l1i_size} "
     COMMAND += f"--l1i_assoc={l1i_assoc} "
-    COMMAND += f"--l1i-hwp-type={l1i_hwp_type} "
+    if do_prefetch:
+        COMMAND += f"--l1i-hwp-type={l1i_hwp_type} "
     COMMAND += f"--l1i_mshrs={l1i_mshrs} "
     COMMAND += f"--l2cache "
     COMMAND += f"--l2_size={l2_size} "
     COMMAND += f"--l2_assoc={l2_assoc} "
-    COMMAND += f"--l2-hwp-type={l2_hwp_type} "
-    if l2_hwp_type == "DiffMatchingPrefetcher":
-        COMMAND += f"--dmp-notify l1 "
+    if do_prefetch:
+        COMMAND += f"--l2-hwp-type={l2_hwp_type} "
+        if l2_hwp_type == "DiffMatchingPrefetcher":
+            COMMAND += f"--dmp-notify l1 "
     COMMAND += f"--l2_mshrs={l2_mshrs} "
     COMMAND += f"--l3cache "
     COMMAND += f"--l3_size={l3_size} "
@@ -161,8 +164,8 @@ def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, 
         # if reconfigurable_RT:
         #     COMMAND += "--maa_reconfigure_row_table "
         # else:
-        #     COMMAND += "--maa_num_initial_row_table_banks 4 "
-        COMMAND += "--maa_num_initial_row_table_banks 32 "
+        #     COMMAND += "--maa_num_initial_row_table_slices 4 "
+        COMMAND += "--maa_num_initial_row_table_slices 32 "
     COMMAND += f"--cmd {command} "
     COMMAND += f"--options \"{options}\" "
     if checkpoint != None:
@@ -303,41 +306,41 @@ def add_command_run_MAA(directory, checkpoint, checkpoint_id, command, options, 
 # #                     options=f"MAA",
 # #                     mode="MAA")
 
-all_kernels = ["cgc"] # ["isc", "cgb", "cgc"] #, "isa", "isb"]
+# all_kernels = ["cgb"]# , "isc", "cgb", "cgc"] #, "isa", "isb"]
                  
-all_test_dirs = {"cga": "NAS/NPB3.4-OMP/CG_CPP",
-                 "cgb": "NAS/NPB3.4-OMP/CG_CPP",
-                 "cgc": "NAS/NPB3.4-OMP/CG_CPP",
-                 "isa": "NAS/NPB3.4-OMP/IS",
-                 "isb": "NAS/NPB3.4-OMP/IS",
-                 "isc": "NAS/NPB3.4-OMP/IS"}
+# all_test_dirs = {"cga": "NAS/NPB3.4-OMP/CG_CPP",
+#                  "cgb": "NAS/NPB3.4-OMP/CG_CPP",
+#                  "cgc": "NAS/NPB3.4-OMP/CG_CPP",
+#                  "isa": "NAS/NPB3.4-OMP/IS",
+#                  "isb": "NAS/NPB3.4-OMP/IS",
+#                  "isc": "NAS/NPB3.4-OMP/IS"}
 
-all_file_names = {"cga": "A.16384",
-                 "cgb": "B.16384",
-                 "cgc": "C.16384",
-                 "isa": "A.16384",
-                 "isb": "B.16384",
-                 "isc": "C.16384"}
+# all_file_names = {"cga": "A.16384",
+#                  "cgb": "B.16384",
+#                  "cgc": "C.16384",
+#                  "isa": "A.16384",
+#                  "isb": "B.16384",
+#                  "isc": "C.16384"}
 
-all_modes = ["MAA", "DMP", "BASE"] # ["BASE", "DMP"] # ["BASE", "MAA", "DMP"]
+# all_modes = ["BASE", "DMP"] # , "BASE"] #"MAA",  ["BASE", "DMP"] # ["BASE", "MAA", "DMP"]
 
-for kernel in all_kernels:
-    for mode in all_modes:
-        test_dir = all_test_dirs[kernel]
-        file_name = all_file_names[kernel]
-        checkpoint_id = None
-        new_mode = mode
-        if mode == "DMP":
-            new_mode = "BASE"
-        checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}",
-                                                command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
-                                                options=f"{new_mode}")
-        add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}",
-                            checkpoint=f"{CPT_DIR}/{kernel}/{mode}",
-                            checkpoint_id = checkpoint_id,
-                            command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
-                            options=f"{new_mode}",
-                            mode=mode)
+# for kernel in all_kernels:
+#     for mode in all_modes:
+#         test_dir = all_test_dirs[kernel]
+#         file_name = all_file_names[kernel]
+#         checkpoint_id = None
+#         new_mode = mode
+#         if mode == "DMP":
+#             new_mode = "BASE"
+#         checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}_new",
+#                                                 command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
+#                                                 options=f"{new_mode}")
+#         add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}_new",
+#                             checkpoint=f"{CPT_DIR}/{kernel}/{mode}_new",
+#                             checkpoint_id = checkpoint_id,
+#                             command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/{test_dir}/{file_name}",
+#                             options=f"{new_mode}",
+#                             mode=mode)
         
 # ########################################## GAPB ##########################################
 
@@ -348,30 +351,30 @@ for kernel in all_kernels:
 #                     options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_22.sg -l -n 1",
 #                     mode="MAA")
 
-all_modes = ["MAA", "BASE", "DMP"] # ["BASE", "MAA", "DMP"]
-all_kernels = ["sssp"] # ["pr", "bc", "bfs", "sssp"]
-for kernel in all_kernels:
-    for mode in all_modes:
-        for size in [23]: #[22, 24]:
-            file_name = f"{kernel}"
-            new_mode = mode
-            if mode == "DMP":
-                new_mode = "BASE"
-            if mode == "MAA":
-                file_name = f"{kernel}_maa"
+# all_modes = ["MAA"] #, "BASE", "DMP"] # ["BASE", "MAA", "DMP"]
+# all_kernels = ["bfs"] # ["pr", "bc", "bfs", "sssp"]
+# for kernel in all_kernels:
+#     for mode in all_modes:
+#         for size in [22]: #[22, 24]:
+#             file_name = f"{kernel}"
+#             new_mode = mode
+#             if mode == "DMP":
+#                 new_mode = "BASE"
+#             if mode == "MAA":
+#                 file_name = f"{kernel}_maa"
             
-            graph_ext = "wsg" if kernel == "sssp"  else "sg"
+#             graph_ext = "wsg" if kernel == "sssp"  else "sg"
 
-            checkpoint_id = None
-            checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size}",
-                                                    command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
-                                                    options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.{graph_ext} -l -n 1")
-            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size}",
-                                checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size}",
-                                checkpoint_id = checkpoint_id,
-                                command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
-                                options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.{graph_ext} -l -n 1",
-                                mode=mode)
+#             checkpoint_id = None
+#             checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size}_new",
+#                                                     command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
+#                                                     options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.{graph_ext} -l -n 1")
+#             add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size}_new",
+#                                 checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size}_new",
+#                                 checkpoint_id = checkpoint_id,
+#                                 command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/{file_name}",
+#                                 options=f"-f {GEM5_DIR}/tests/test-progs/MAABenchmarks/gapbs/serialized_graph_{size}.{graph_ext} -l -n 1",
+#                                 mode=mode)
 
 # ########################################## SPATTER ##########################################
 # add_command_run_MAA(directory=f"{RSLT_DIR}/spatter/flag/MAA",
@@ -457,10 +460,10 @@ for kernel in all_kernels:
 
 ########################################## UME ##########################################
 
-all_modes = ["MAA"]# , "BASE", "DMP"]
-all_kernels = ["gradzatz_invert"] #["gradzatp_invert", "gradzatz_invert"] #["gradzatp", "gradzatz"]#, 
-all_sizes = [8000000] #[2000000, 8000000]
-all_sizes_str = ["8M"] # ["2M", "8M"]
+all_modes = ["BASE", "DMP"] #["MAA"]# , 
+all_kernels = ["gradzatp", "gradzatz"] #, ["gradzatz_invert"] #["gradzatp_invert", "gradzatz_invert"] #
+all_sizes = [2000000, 8000000]
+all_sizes_str =  ["2M", "8M"]
 for kernel in all_kernels:
     for mode in all_modes:
         for size, size_str in zip(all_sizes, all_sizes_str):
@@ -474,11 +477,11 @@ for kernel in all_kernels:
                 file_name = f"{kernel}_base"
             
             checkpoint_id = None
-            checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size_str}",
+            checkpoint_id = add_command_checkpoint(directory=f"{CPT_DIR}/{kernel}/{mode}/{size_str}_atom",
                                                     command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/UME/{file_name}",
                                                     options=f"{size}")
-            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size_str}",
-                                checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size_str}",
+            add_command_run_MAA(directory=f"{RSLT_DIR}/{kernel}/{mode}/{size_str}_atom",
+                                checkpoint=f"{CPT_DIR}/{kernel}/{mode}/{size_str}_atom",
                                 checkpoint_id = checkpoint_id,
                                 command=f"{GEM5_DIR}/tests/test-progs/MAABenchmarks/UME/{file_name}",
                                 options=f"{size}",

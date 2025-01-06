@@ -12,40 +12,11 @@
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
 #include "mem/MAA/IF.hh"
+#include "mem/MAA/Tables.hh"
 
 namespace gem5 {
 
 class MAA;
-class StreamAccessUnit;
-
-struct RequestTableEntry {
-    RequestTableEntry() : itr(0), wid(0) {}
-    RequestTableEntry(int _itr, uint16_t _wid) : itr(_itr), wid(_wid) {}
-    uint32_t itr;
-    uint16_t wid;
-};
-
-class RequestTable {
-public:
-    RequestTable(StreamAccessUnit *_stream_access, unsigned int _num_addresses, unsigned int _num_entries_per_address, int _my_stream_id);
-    ~RequestTable();
-
-    bool add_entry(int itr, Addr base_addr, uint16_t wid);
-    bool is_full();
-    std::vector<RequestTableEntry> get_entries(Addr base_addr);
-    void check_reset();
-    void reset();
-
-protected:
-    unsigned int num_addresses;
-    unsigned int num_entries_per_address;
-    RequestTableEntry **entries;
-    bool **entries_valid;
-    Addr *addresses;
-    bool *addresses_valid;
-    StreamAccessUnit *stream_access;
-    int my_stream_id;
-};
 
 class StreamAccessUnit : public BaseMMU::Translation {
 public:

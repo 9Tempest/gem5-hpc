@@ -33,20 +33,23 @@ def _get_maa_opts(options):
     if hasattr(options, "maa_num_alu_units"):
         opts["num_alu_units"] = getattr(options, "maa_num_alu_units")
 
-    if hasattr(options, "maa_num_row_table_rows_per_bank"):
-        opts["num_row_table_rows_per_bank"] = getattr(options, "maa_num_row_table_rows_per_bank")
+    if hasattr(options, "maa_num_row_table_rows_per_slice"):
+        opts["num_row_table_rows_per_slice"] = getattr(options, "maa_num_row_table_rows_per_slice")
 
-    if hasattr(options, "maa_num_row_table_entries_per_subbank_row"):
-        opts["num_row_table_entries_per_subbank_row"] = getattr(options, "maa_num_row_table_entries_per_subbank_row")
+    if hasattr(options, "maa_num_row_table_entries_per_subslice_row"):
+        opts["num_row_table_entries_per_subslice_row"] = getattr(options, "maa_num_row_table_entries_per_subslice_row")
 
     if hasattr(options, "maa_num_row_table_config_cache_entries"):
         opts["num_row_table_config_cache_entries"] = getattr(options, "maa_num_row_table_config_cache_entries")
     
     if(hasattr(options, "maa_reconfigure_row_table")):
         opts["reconfigure_row_table"] = getattr(options, "maa_reconfigure_row_table")
+
+    if(hasattr(options, "maa_reorder_row_table")):
+        opts["reorder_row_table"] = getattr(options, "maa_reorder_row_table")
     
-    if(hasattr(options, "maa_num_initial_row_table_banks")):
-        opts["num_initial_row_table_banks"] = getattr(options, "maa_num_initial_row_table_banks")
+    if(hasattr(options, "maa_num_initial_row_table_slices")):
+        opts["num_initial_row_table_slices"] = getattr(options, "maa_num_initial_row_table_slices")
     
     if(hasattr(options, "maa_num_request_table_addresses")):
         opts["num_request_table_addresses"] = getattr(options, "maa_num_request_table_addresses")

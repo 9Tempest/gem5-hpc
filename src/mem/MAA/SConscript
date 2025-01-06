@@ -4,6 +4,7 @@ SimObject('MAA.py', sim_objects=['MAA'])
 
 Source('SPD.cc')
 Source('IF.cc')
+Source('Tables.cc')
 Source('IndirectAccess.cc')
 Source('StreamAccess.cc')
 Source('Invalidator.cc')
@@ -23,6 +24,9 @@ DebugFlag('MAACpuPort')
 DebugFlag('MAACachePort')
 DebugFlag('MAAMemPort')
 DebugFlag('MAAController')
+DebugFlag('MAARequestTable')
+DebugFlag('MAARowTable')
+DebugFlag('MAAOffsetTable')
 DebugFlag('MAAIndirect')
 DebugFlag('MAAStream')
 DebugFlag('MAAInvalidator')
@@ -39,6 +43,9 @@ CompoundFlag('MAAAll', ['MAA',
                         'MAACachePort',
                         'MAAMemPort',
                         'MAAController',
+                        'MAARequestTable',
+                        'MAARowTable',
+                        'MAAOffsetTable',
                         'MAAIndirect',
                         'MAAStream',
                         'MAAInvalidator',
