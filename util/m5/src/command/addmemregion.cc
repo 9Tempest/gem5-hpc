@@ -34,13 +34,13 @@
 namespace {
 
 bool do_add_mem_region(const DispatchTable &dt, Args &args) {
-    void *start;
-    void *end;
+    uint64_t start_addr;
+    uint64_t end_addr;
     uint64_t id;
-    if (!args.pop(start, 0) || !args.pop(end, 0) || !args.pop(id, 0))
+    if (!args.pop(start_addr, 0) || !args.pop(end_addr, 0) || !args.pop(id, 0))
         return false;
 
-    (*dt.m5_add_mem_region)(start, end, id);
+    (*dt.m5_add_mem_region)((void*)start_addr, (void*)end_addr, id);
 
     return true;
 }

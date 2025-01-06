@@ -835,6 +835,7 @@ void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool 
             num_spd_read_condidx_accesses++;
             Addr vaddr = my_base_addr + my_word_size * idx;
             Addr block_vaddr = addrBlockAlign(vaddr, block_size);
+            DPRINTF(MAAIndirect, "I[%d] %s: baseaddr = 0x%lx idx = %u wordsize = %d vaddr = 0x%lx!\n", my_indirect_id, __func__, my_base_addr, idx, my_word_size, vaddr);
             Addr paddr = translatePacket(block_vaddr);
             Addr block_paddr = addrBlockAlign(paddr, block_size);
             DPRINTF(MAAIndirect, "I[%d] %s: idx = %u, addr = 0x%lx!\n", my_indirect_id, __func__, idx, block_paddr);
@@ -1217,8 +1218,10 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
         if (my_dst_tile != -1) {
             if (my_word_size == 4) {
                 maa->spd->setData<uint32_t>(my_dst_tile, itr, dataptr_u32_typed[wid]);
+                DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u!\n", my_indirect_id, __func__, my_dst_tile, itr, dataptr_u32_typed[wid]);
             } else {
                 maa->spd->setData<uint64_t>(my_dst_tile, itr, dataptr_u64_typed[wid]);
+                DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %lu!\n", my_indirect_id, __func__, my_dst_tile, itr, dataptr_u64_typed[wid]);
             }
             num_recv_spd_write_accesses++;
         }
@@ -1477,7 +1480,7 @@ Addr IndirectAccessUnit::translatePacket(Addr vaddr) {
     return my_translated_addr;
 }
 void IndirectAccessUnit::finish(const Fault &fault, const RequestPtr &req, ThreadContext *tc, BaseMMU::Mode mode) {
-    assert(fault == NoFault);
+    panic_if(fault != NoFault, "I[%d] %s: fault for request 0x%lx!\n", my_indirect_id, __func__, req->getVaddr());
     assert(my_translation_done == false);
     my_translation_done = true;
     my_translated_addr = req->getPaddr();

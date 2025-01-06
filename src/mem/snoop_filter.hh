@@ -94,7 +94,7 @@ public:
 
     SnoopFilter(const SnoopFilterParams &p) : SimObject(p), reqLookupResult(cachedLocations.end()),
                                               linesize(p.system->cacheLineSize()), lookupLatency(p.lookup_latency),
-                                              maxEntryCount(p.max_capacity / p.system->cacheLineSize()),
+                                              maxEntryCount(p.max_capacity * 4 / p.system->cacheLineSize()),
                                               stats(this) {
     }
 
