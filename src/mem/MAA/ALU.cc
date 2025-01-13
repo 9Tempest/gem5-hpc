@@ -275,8 +275,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_u32;
                     }
-                    uint32_t result_u32_compare;
-                    uint32_t result_u32_compute;
+                    uint32_t result_u32_compare = 0;
+                    uint32_t result_u32_compute = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_u32_compute = src1 + src2;
@@ -366,8 +366,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_i32;
                     }
-                    int32_t result_i32;
-                    uint32_t result_u32;
+                    int32_t result_i32 = 0;
+                    uint32_t result_u32 = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_i32 = src1 + src2;
@@ -457,8 +457,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_f32;
                     }
-                    float result_f32;
-                    uint32_t result_u32;
+                    float result_f32 = 0;
+                    uint32_t result_u32 = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_f32 = src1 + src2;
@@ -533,8 +533,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_u64;
                     }
-                    uint64_t result_u64;
-                    uint32_t result_u32;
+                    uint64_t result_u64 = 0;
+                    uint32_t result_u32 = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_u64 = src1 + src2;
@@ -624,8 +624,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_i64;
                     }
-                    int64_t result_i64;
-                    uint32_t result_u32;
+                    int64_t result_i64 = 0;
+                    uint32_t result_u32 = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_i64 = src1 + src2;
@@ -715,8 +715,8 @@ void ALUUnit::executeInstruction() {
                     } else {
                         src2 = my_red_f64;
                     }
-                    double result_f64;
-                    uint32_t result_u32;
+                    double result_f64 = 0;
+                    uint32_t result_u32 = 0;
                     switch (my_instruction->optype) {
                     case Instruction::OPType::ADD_OP:
                         result_f64 = src1 + src2;

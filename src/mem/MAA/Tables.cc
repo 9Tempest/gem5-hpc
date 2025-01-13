@@ -350,7 +350,8 @@ void RowTableSlice::allocate(int _my_unit_id,
         entries_sent[i] = false;
     }
 }
-bool RowTableSlice::insert(Addr grow_addr, Addr addr, int itr, int wid) {
+bool RowTableSlice::insert(Addr grow_addr, Addr addr, int itr, int wid, bool &first_CL_access) {
+    first_CL_access = false;
     // 1. Check if the (Row, CL) pair exists
     for (int i = 0; i < num_RT_rows_per_slice; i++) {
         if (entries_valid[i] == true && entries_sent[i] == false && entries[i].grow_addr == grow_addr && entries[i].find_addr(addr)) {
@@ -359,6 +360,7 @@ bool RowTableSlice::insert(Addr grow_addr, Addr addr, int itr, int wid) {
             return true;
         }
     }
+    first_CL_access = true;
     // 2. Check if (Row) exists and can insert the new CL
     // 2.1 At the same time, look for a free row
     int free_row_id = -1;
@@ -463,10 +465,10 @@ bool RowTableSlice::get_entry_send(Addr &addr, bool drain) {
     }
     return false;
 }
-std::vector<OffsetTableEntry> RowTableSlice::get_entry_recv(Addr grow_addr, Addr addr) {
+std::vector<OffsetTableEntry> RowTableSlice::get_entry_recv(Addr grow_addr, Addr addr, bool check_sent) {
     std::vector<OffsetTableEntry> results;
     for (int i = 0; i < num_RT_rows_per_slice; i++) {
-        if (entries_valid[i] == true && entries_sent[i] == true && entries[i].grow_addr == grow_addr) {
+        if (entries_valid[i] == true && (check_sent == false || entries_sent[i] == true) && entries[i].grow_addr == grow_addr) {
             std::vector<OffsetTableEntry> result = entries[i].get_entry_recv(addr);
             if (result.size() == 0) {
                 DPRINTF(MAARowTable, "ROT[%d] %s: grow[0x%lx] addr[0x%lx] hit with ROW[%d] but no CLs returned!\n", my_table_id, __func__, grow_addr, addr, i);

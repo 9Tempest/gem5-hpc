@@ -45,8 +45,8 @@ def _get_maa_opts(options):
     if(hasattr(options, "maa_reconfigure_row_table")):
         opts["reconfigure_row_table"] = getattr(options, "maa_reconfigure_row_table")
 
-    if(hasattr(options, "maa_reorder_row_table")):
-        opts["reorder_row_table"] = getattr(options, "maa_reorder_row_table")
+    if(hasattr(options, "maa_no_reorder")):
+        opts["no_reorder"] = getattr(options, "maa_no_reorder")
     
     if(hasattr(options, "maa_num_initial_row_table_slices")):
         opts["num_initial_row_table_slices"] = getattr(options, "maa_num_initial_row_table_slices")

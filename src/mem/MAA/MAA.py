@@ -24,7 +24,7 @@ class MAA(ClockedObject):
     num_request_table_addresses = Param.Unsigned(128, "Number of addresses in the request table")
     num_request_table_entries_per_address = Param.Unsigned(16, "Number of entries in the request table per address")
     reconfigure_row_table = Param.Bool(False, "Reconfigure row table")
-    reorder_row_table = Param.Bool(True, "Reorder row table")
+    no_reorder = Param.Bool(False, "Do not reorder accesses using row table")
     num_initial_row_table_slices = Param.Unsigned(4, "Number of initial row table slices if row table is not reconfigurable")
     spd_read_latency = Param.Cycles(1, "SPD read latency")
     spd_write_latency = Param.Cycles(1, "SPD write latency")

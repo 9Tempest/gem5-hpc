@@ -502,7 +502,8 @@ void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool 
             my_RT_idx = getRowTableIdx(my_RT_config, addr_vec[ADDR_CHANNEL_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL]);
             Addr grow_addr = getGrowAddr(my_RT_config, addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_ROW_LEVEL]);
             DPRINTF(MAAIndirect, "I[%d] %s: inserting vaddr(0x%lx), paddr(0x%lx), MAP(RO: %d, BA: %d, BG: %d, RA: %d, CO: %d, CH: %d), grow(0x%lx), itr(%d), idx(%d), wid(%d) to T[%d]\n", my_indirect_id, __func__, block_vaddr, block_paddr, addr_vec[ADDR_ROW_LEVEL], addr_vec[ADDR_BANK_LEVEL], addr_vec[ADDR_BANKGROUP_LEVEL], addr_vec[ADDR_RANK_LEVEL], addr_vec[ADDR_COLUMN_LEVEL], addr_vec[ADDR_CHANNEL_LEVEL], grow_addr, my_i, idx, wid, my_RT_idx);
-            bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid);
+            bool first_CL_access;
+            bool inserted = RT[my_RT_config][my_RT_idx].insert(grow_addr, block_paddr, my_i, wid, first_CL_access);
             num_rowtable_accesses++;
             if (inserted == false) {
                 needDrain = true;
@@ -512,6 +513,11 @@ void IndirectAccessUnit::fillRowTable(bool &finished, bool &waitForFinish, bool 
                 my_unique_WORD_addrs.insert(vaddr);
                 my_unique_CL_addrs.insert(block_paddr);
                 my_unique_ROW_addrs.insert(grow_addr + my_RT_idx * num_RT_possible_grows[my_RT_config]);
+                if (reorder_RT == false && first_CL_access == true) {
+                    DPRINTF(MAAIndirect, "I[%d] %s: Creating packet for bank[%d], addr[0x%lx]!\n", my_indirect_id, __func__, my_RT_idx, block_paddr);
+                    my_expected_responses++;
+                    createReadPacket(block_paddr, getCeiling(num_rowtable_accesses, total_num_RT_subslices) * rowtable_latency);
+                }
             }
         } else if (my_dst_tile != -1) {
             DPRINTF(MAAIndirect, "I[%d] %s: SPD[%d][%d] = %u (cond not taken)\n", my_indirect_id, __func__, my_dst_tile, my_i, 0);
@@ -633,9 +639,15 @@ void IndirectAccessUnit::executeInstruction() {
         // Row table parallelism = total #sub-banks. Each bank can be inserted once at a cycle
         updateLatency(0, num_spd_read_condidx_accesses, 0, 0, num_rowtable_accesses, total_num_RT_subslices);
         if (buildReady) {
-            DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n", my_indirect_id, __func__, my_instruction->print());
-            state = Status::Build;
-            scheduleNextExecution(true);
+            if (reorder_RT) {
+                DPRINTF(MAAIndirect, "I[%d] %s: state set to Build for %s!\n", my_indirect_id, __func__, my_instruction->print());
+                state = Status::Build;
+                scheduleNextExecution(true);
+            } else {
+                DPRINTF(MAAIndirect, "I[%d] %s: state set to Request for %s!\n", my_indirect_id, __func__, my_instruction->print());
+                state = Status::Request;
+                scheduleNextExecution(true);
+            }
         }
         return;
     }
@@ -702,9 +714,16 @@ void IndirectAccessUnit::executeInstruction() {
         if (my_request_start_tick == 0) {
             my_request_start_tick = curTick();
         }
-        if (my_build_start_tick != 0) {
-            (*maa->stats.IND_CyclesBuild[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_build_start_tick);
-            my_build_start_tick = 0;
+        if (reorder_RT) {
+            if (my_build_start_tick != 0) {
+                (*maa->stats.IND_CyclesBuild[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_build_start_tick);
+                my_build_start_tick = 0;
+            }
+        } else {
+            if (my_fill_start_tick != 0) {
+                (*maa->stats.IND_CyclesFill[my_indirect_id]) += maa->getTicksToCycles(curTick() - my_fill_start_tick);
+                my_fill_start_tick = 0;
+            }
         }
         if (maa->allIndirectPacketsSent() && my_received_responses == my_expected_responses) {
             if (scheduleNextExecution()) {
@@ -839,7 +858,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
     bool was_full = false;
     if (RT_idx == my_RT_idx)
         was_full = RT[my_RT_config][RT_idx].is_full();
-    std::vector<OffsetTableEntry> entries = RT[my_RT_config][RT_idx].get_entry_recv(grow_addr, addr);
+    std::vector<OffsetTableEntry> entries = RT[my_RT_config][RT_idx].get_entry_recv(grow_addr, addr, reorder_RT);
     bool is_full = false;
     if (RT_idx == my_RT_idx)
         is_full = RT[my_RT_config][RT_idx].is_full();

@@ -144,13 +144,13 @@ public:
                   OffsetTable *_offset_table,
                   MAA *_maa,
                   bool _is_stream = false);
-    bool insert(Addr grow_addr, Addr addr, int itr, int wid);
+    bool insert(Addr grow_addr, Addr addr, int itr, int wid, bool &first_CL_access);
     bool get_entry_send(Addr &addr, bool drain);
     bool find_next_grow_addr();
     bool is_full();
     void get_send_grow_rowid();
     std::vector<OffsetTableEntry>
-    get_entry_recv(Addr grow_addr, Addr addr);
+    get_entry_recv(Addr grow_addr, Addr addr, bool check_sent);
 
     void reset();
     void check_reset();

@@ -123,6 +123,8 @@ int Instruction::getWordSize(int tile_id) {
     } else {
         assert(false);
     }
+    assert(false);
+    return -1;
 }
 int Instruction::WordSize() {
     switch (datatype) {
@@ -137,6 +139,8 @@ int Instruction::WordSize() {
     default:
         assert(false);
     }
+    assert(false);
+    return -1;
 }
 bool IF::pushInstruction(Instruction _instruction) {
     switch (_instruction.opcode) {
@@ -295,6 +299,8 @@ Instruction::TileStatus IF::getTileStatus(int tile_id, uint8_t tile_status) {
     } else {
         assert(false);
     }
+    assert(false);
+    return Instruction::TileStatus::WaitForService;
 }
 void IF::finishInstructionInvalidate(Instruction *instruction, int tile_id, uint8_t tile_status) {
     instruction->state = Instruction::Status::Idle;

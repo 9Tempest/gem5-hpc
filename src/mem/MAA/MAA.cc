@@ -60,7 +60,7 @@ MAA::MAA(const MAAParams &p)
       num_row_table_entries_per_subslice_row(p.num_row_table_entries_per_subslice_row),
       num_row_table_config_cache_entries(p.num_row_table_config_cache_entries),
       reconfigure_row_table(p.reconfigure_row_table),
-      reorder_row_table(p.reorder_row_table),
+      reorder_row_table(p.no_reorder == false ? true : false),
       num_initial_row_table_slices(p.num_initial_row_table_slices),
       num_request_table_addresses(p.num_request_table_addresses),
       num_request_table_entries_per_address(p.num_request_table_entries_per_address),
@@ -418,6 +418,8 @@ uint8_t MAA::getTileStatus(InstructionPtr instruction, int tile_id, bool is_dst)
             assert(false);
         }
     }
+    assert(false);
+    return (uint8_t)(Instruction::TileStatus::WaitForService);
 }
 void MAA::dispatchInstruction() {
     DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
