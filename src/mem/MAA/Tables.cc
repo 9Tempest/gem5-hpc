@@ -485,6 +485,9 @@ std::vector<OffsetTableEntry> RowTableSlice::get_entry_recv(Addr grow_addr, Addr
             }
         }
     }
+    std::sort(results.begin(), results.end(), [](const OffsetTableEntry& a, const OffsetTableEntry& b) {
+        return a.itr < b.itr;
+    });
     return results;
 }
 bool RowTableSlice::is_full() {

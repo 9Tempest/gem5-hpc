@@ -211,6 +211,23 @@ bool IF::pushInstruction(Instruction _instruction) {
     DPRINTF(MAAController, "%s: %s pushed to instruction[%d]!\n", __func__, _instruction.print(), free_instruction_slot);
     return true;
 }
+bool IF::canPushRegister(Register _reg) {
+    int register_id = _reg.register_id;
+    assert(register_id >= 0 && register_id < 32);
+    for (int i = 0; i < num_instructions; i++) {
+        if (valids[i] == true) {
+            if ((instructions[i].dst1RegID == register_id) ||
+                (instructions[i].dst2RegID == register_id) ||
+                (instructions[i].src1RegID == register_id) ||
+                (instructions[i].src2RegID == register_id) ||
+                (instructions[i].src3RegID == register_id)) {
+                DPRINTF(MAAController, "%s: register write %d cannot be pushed b/c of %s!\n", __func__, register_id, instructions[i].print());
+                return false;
+            }
+        }
+    }
+    return true;
+}
 Instruction *IF::getReady(FuncUnitType funcUniType) {
     int rand_base = rand() % num_instructions;
     if (funcUniType == FuncUnitType::INVALIDATOR) {

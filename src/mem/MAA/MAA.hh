@@ -42,6 +42,8 @@ class ALUUnit;
 class RangeFuserUnit;
 class Instruction;
 typedef Instruction *InstructionPtr;
+struct Register;
+typedef Register *RegisterPtr;
 
 /**
  * A basic cache interface. Implements some common functions for speed.
@@ -440,15 +442,19 @@ protected:
     std::vector<PacketPtr> my_instruction_pkts;
     std::vector<bool> my_instruction_recvs;
     std::vector<PacketPtr> my_ready_pkts;
+    std::vector<RegisterPtr> my_registers;
+    std::vector<PacketPtr> my_register_pkts;
     Tick my_last_idle_tick;
     std::vector<int> my_ready_tile_ids;
     std::vector<InstructionPtr> my_instructions;
     uint8_t getTileStatus(InstructionPtr instruction, int tile_id, bool is_dst);
     void issueInstruction();
     void dispatchInstruction();
-    EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent;
+    void dispatchRegister();
+    EventFunctionWrapper issueInstructionEvent, dispatchInstructionEvent, dispatchRegisterEvent;
     void scheduleIssueInstructionEvent(int latency = 0);
     void scheduleDispatchInstructionEvent(int latency = 0);
+    void scheduleDispatchRegisterEvent(int latency = 0);
     bool allFuncUnitsIdle();
     bool *streamAccessIdle;
     bool *indirectAccessIdle;

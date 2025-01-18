@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/types.hh"
+#include "mem/MAA/SPD.hh"
 #include "sim/system.hh"
 #include "arch/generic/mmu.hh"
 
@@ -182,6 +183,7 @@ public:
         delete[] valids;
     }
     bool pushInstruction(Instruction _instruction);
+    bool canPushRegister(Register _reg);
     Instruction *getReady(FuncUnitType funcUniType);
     void finishInstructionCompute(Instruction *instruction);
     void finishInstructionInvalidate(Instruction *instruction, int tile_id, uint8_t tile_status);

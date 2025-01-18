@@ -105,6 +105,7 @@ public:
 
 protected:
     Instruction *my_instruction;
+    bool my_is_load;
     Request::Flags flags = 0;
     const Addr block_size = 64;
     const Addr page_size = 4096;

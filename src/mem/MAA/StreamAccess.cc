@@ -156,8 +156,10 @@ void StreamAccessUnit::executeInstruction() {
         my_words_per_page = page_size / my_word_size;
         (*maa->stats.STR_NumInsts[my_stream_id])++;
         if (my_instruction->opcode == Instruction::OpcodeType::STREAM_LD) {
+            my_is_load = true;
             maa->stats.numInst_STRRD++;
         } else if (my_instruction->opcode == Instruction::OpcodeType::STREAM_ST) {
+            my_is_load = false;
             maa->stats.numInst_STRWR++;
         } else {
             assert(false);
@@ -438,7 +440,7 @@ Addr StreamAccessUnit::translatePacket(Addr vaddr) {
     /**** Address translation ****/
     RequestPtr translation_req = std::make_shared<Request>(vaddr, block_size, flags, maa->requestorId, my_instruction->PC, my_instruction->CID);
     ThreadContext *tc = maa->system->threads[my_instruction->CID];
-    maa->mmu->translateTiming(translation_req, tc, this, BaseMMU::Read);
+    maa->mmu->translateTiming(translation_req, tc, this, my_is_load ? BaseMMU::Read : BaseMMU::Write);
     // The above function immediately does the translation and calls the finish function
     assert(my_translation_done);
     my_translation_done = false;

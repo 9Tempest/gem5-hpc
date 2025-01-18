@@ -72,6 +72,7 @@ MAA::MAA(const MAAParams &p)
       mmu(p.mmu),
       issueInstructionEvent([this] { issueInstruction(); }, name()),
       dispatchInstructionEvent([this] { dispatchInstruction(); }, name()),
+      dispatchRegisterEvent([this] { dispatchRegister(); }, name()),
       stats(this, p.num_indirect_access_units, p.num_stream_access_units, p.num_range_units, p.num_alu_units),
       sendCacheEvent([this] { sendOutstandingCachePacket(); }, name()),
       sendMemEvent([this] { sendOutstandingMemPacket(); }, name()) {
@@ -421,8 +422,37 @@ uint8_t MAA::getTileStatus(InstructionPtr instruction, int tile_id, bool is_dst)
     assert(false);
     return (uint8_t)(Instruction::TileStatus::WaitForService);
 }
+void MAA::dispatchRegister() {
+    DPRINTF(MAAController, "%s: dispatching register...!\n", __func__);
+    assert(my_register_pkts.size() == my_registers.size());
+    auto pkt_it = my_register_pkts.begin();
+    auto register_it = my_registers.begin();
+    while (pkt_it != my_register_pkts.end() && register_it != my_registers.end()) {
+        RegisterPtr reg = *register_it;
+        PacketPtr pkt = *pkt_it;
+        if (ifile->canPushRegister(*reg)) {
+            DPRINTF(MAAController, "%s: register %d write dispatched!\n", __func__, reg->register_id);
+            if (reg->size == 4) {
+                rf->setData<uint32_t>(reg->register_id, reg->data_UINT32);
+            } else {
+                panic_if(reg->size != 8, "Invalid size for RF data: %d\n", reg->size);
+                rf->setData<uint64_t>(reg->register_id, reg->data_UINT64);
+            }
+            pkt->makeTimingResponse();
+            pkt->headerDelay = pkt->payloadDelay = 0;
+            cpuSidePorts[0]->schedTimingResp(pkt, getClockEdge(Cycles(1)));
+            pkt_it = my_register_pkts.erase(pkt_it);
+            register_it = my_registers.erase(register_it);
+            delete reg;
+        } else {
+            DPRINTF(MAAController, "%s: Reg write %d failed to dipatch!\n", __func__, reg->register_id);
+            pkt_it++;
+            register_it++;
+        }
+    }
+}
 void MAA::dispatchInstruction() {
-    DPRINTF(MAAController, "%s: dispatching...!\n", __func__);
+    DPRINTF(MAAController, "%s: dispatching instruction...!\n", __func__);
     assert(my_instruction_pkts.size() == my_instructions.size());
     assert(my_instruction_recvs.size() == my_instructions.size());
     assert(my_instruction_RIDs.size() == my_instructions.size());
@@ -471,6 +501,7 @@ void MAA::dispatchInstruction() {
                 recv_it = my_instruction_recvs.erase(recv_it);
                 rid_it = my_instruction_RIDs.erase(rid_it);
                 instruction_it = my_instructions.erase(instruction_it);
+                delete instruction;
             } else {
                 DPRINTF(MAAController, "%s: %s failed to dipatch!\n", __func__, instruction->print());
                 pkt_it++;
@@ -526,6 +557,7 @@ void MAA::finishInstructionCompute(Instruction *instruction) {
     }
     scheduleIssueInstructionEvent();
     scheduleDispatchInstructionEvent();
+    scheduleDispatchRegisterEvent();
     if (allFuncUnitsIdle()) {
         my_last_idle_tick = curTick();
     }
@@ -578,7 +610,7 @@ void MAA::scheduleIssueInstructionEvent(int latency) {
     }
 }
 void MAA::scheduleDispatchInstructionEvent(int latency) {
-    DPRINTF(MAAController, "%s: scheduling dispatch for the next %d cycles!\n", __func__, latency);
+    DPRINTF(MAAController, "%s: scheduling instruction dispatch for the next %d cycles!\n", __func__, latency);
     Tick new_when = curTick() + latency;
     if (!dispatchInstructionEvent.scheduled()) {
         schedule(dispatchInstructionEvent, new_when);
@@ -586,6 +618,17 @@ void MAA::scheduleDispatchInstructionEvent(int latency) {
         Tick old_when = dispatchInstructionEvent.when();
         if (new_when < old_when)
             reschedule(dispatchInstructionEvent, new_when);
+    }
+}
+void MAA::scheduleDispatchRegisterEvent(int latency) {
+    DPRINTF(MAAController, "%s: scheduling register dispatch for the next %d cycles!\n", __func__, latency);
+    Tick new_when = curTick() + latency;
+    if (!dispatchRegisterEvent.scheduled()) {
+        schedule(dispatchRegisterEvent, new_when);
+    } else {
+        Tick old_when = dispatchRegisterEvent.when();
+        if (new_when < old_when)
+            reschedule(dispatchRegisterEvent, new_when);
     }
 }
 Tick MAA::getClockEdge(Cycles cycles) const {

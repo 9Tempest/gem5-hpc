@@ -57,6 +57,7 @@ bool MAA::CpuSidePort::recvTimingSnoopResp(PacketPtr pkt) {
         is_blocked = false;
         maa.invalidator->scheduleExecuteInstructionEvent();
     }
+    pkt->deleteData();
     delete pkt;
     return true;
 }
@@ -114,26 +115,35 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
             int element_id = offset % (num_regs * sizeof(uint32_t));
             assert(element_id % sizeof(uint32_t) == 0);
             element_id /= sizeof(uint32_t);
-            panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for SPD data: %d\n", pkt->getSize());
+            panic_if(pkt->getSize() != 4 && pkt->getSize() != 8, "Invalid size for RF data: %d\n", pkt->getSize());
+            RegisterPtr current_register = new Register();
+            current_register->size = pkt->getSize();
+            current_register->register_id = element_id;
             if (pkt->getSize() == 4) {
                 uint32_t data_UINT32 = pkt->getPtr<uint32_t>()[0];
                 int32_t data_INT32 = pkt->getPtr<int32_t>()[0];
                 float data_FLOAT = pkt->getPtr<float>()[0];
                 DPRINTF(MAACpuPort, "%s: REG[%d] = %u/%d/%f\n", __func__, element_id, data_UINT32, data_INT32, data_FLOAT);
-                rf->setData<uint32_t>(element_id, data_UINT32);
+                current_register->data_UINT32 = data_UINT32;
+                // rf->setData<uint32_t>(element_id, data_UINT32);
             } else {
                 uint64_t data_UINT64 = pkt->getPtr<uint64_t>()[0];
                 int64_t data_INT64 = pkt->getPtr<int64_t>()[0];
                 double data_DOUBLE = pkt->getPtr<double>()[0];
                 DPRINTF(MAACpuPort, "%s: REG[%d] = %lu/%ld/%lf\n", __func__, element_id, data_UINT64, data_INT64, data_DOUBLE);
-                rf->setData<uint64_t>(element_id, data_UINT64);
+                current_register->data_UINT64 = data_UINT64;
+                // rf->setData<uint64_t>(element_id, data_UINT64);
             }
+            my_registers.push_back(current_register);
+            my_register_pkts.push_back(pkt);
             assert(pkt->needsResponse());
-            pkt->makeTimingResponse();
-            // Here we reset the timing of the packet.
-            Tick old_header_delay = pkt->headerDelay;
-            pkt->headerDelay = pkt->payloadDelay = 0;
-            cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            // pkt->makeTimingResponse();
+            // // Here we reset the timing of the packet.
+            // Tick old_header_delay = pkt->headerDelay;
+            // pkt->headerDelay = pkt->payloadDelay = 0;
+            // cpuSidePorts[core_id]->schedTimingResp(pkt, getClockEdge(Cycles(1)) + old_header_delay);
+            respond_immediately = false;
+            scheduleDispatchRegisterEvent();
             break;
         }
         case AddressRangeType::Type::INSTRUCTION_RANGE: {
@@ -239,7 +249,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
         switch (address_range.getType()) {
         case AddressRangeType::Type::SPD_SIZE_RANGE: {
             panic_if(core_id != 0, "Size range is only for the core 0\n");
-            assert(pkt->getSize() == sizeof(uint16_t));
+            panic_if(pkt->getSize() != sizeof(uint16_t), "%s: Error: Invalid size for SPD size: %d, packet: %s\n", __func__, pkt->getSize(), pkt->print());
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
             int element_id = offset / sizeof(uint16_t);
@@ -256,7 +266,7 @@ void MAA::recvTimingReq(PacketPtr pkt, int core_id) {
         }
         case AddressRangeType::Type::SPD_READY_RANGE: {
             panic_if(core_id != 0, "Ready range is only for the core 0\n");
-            assert(pkt->getSize() == sizeof(uint16_t));
+            panic_if(pkt->getSize() != sizeof(uint16_t), "%s: Error: Invalid size for SPD ready: %d, packet: %s\n", __func__, pkt->getSize(), pkt->print());
             Addr offset = address_range.getOffset();
             assert(offset % sizeof(uint16_t) == 0);
             int ready_tile_id = offset / sizeof(uint16_t);

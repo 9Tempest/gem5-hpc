@@ -546,6 +546,16 @@ void IndirectAccessUnit::executeInstruction() {
         my_src_reg = my_instruction->src1RegID;
         my_dst_tile = my_instruction->dst1SpdID;
         my_cond_tile = my_instruction->condSpdID;
+        if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD ||
+            my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_VECTOR ||
+            my_instruction->opcode == Instruction::OpcodeType::INDIR_RMW_SCALAR) {
+            my_is_load = true;
+        } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
+                   my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_SCALAR) {
+            my_is_load = false;
+        } else {
+            assert(false);
+        }
         if (my_instruction->opcode == Instruction::OpcodeType::INDIR_LD) {
             my_word_size = my_instruction->getWordSize(my_dst_tile);
         } else if (my_instruction->opcode == Instruction::OpcodeType::INDIR_ST_VECTOR ||
@@ -1141,7 +1151,7 @@ bool IndirectAccessUnit::recvData(const Addr addr, uint8_t *dataptr, bool is_blo
     }
     if (was_full && !is_full) {
         DPRINTF(MAAIndirect, "I[%d] %s: RT[%d] was full, now not full, calling execution again!\n", my_indirect_id, __func__, RT_idx);
-        panic_if(state != Status::Request, "I[%d] %s: state is %s!\n", my_indirect_id, __func__, status_names[(int)state]);
+        panic_if(state != Status::Request && state != Status::Fill, "I[%d] %s: state is %s!\n", my_indirect_id, __func__, status_names[(int)state]);
         scheduleNextExecution(true);
     }
     return true;
@@ -1150,7 +1160,7 @@ Addr IndirectAccessUnit::translatePacket(Addr vaddr) {
     /**** Address translation ****/
     RequestPtr translation_req = std::make_shared<Request>(vaddr, block_size, flags, maa->requestorId, my_instruction->PC, my_instruction->CID);
     ThreadContext *tc = maa->system->threads[my_instruction->CID];
-    maa->mmu->translateTiming(translation_req, tc, this, BaseMMU::Read);
+    maa->mmu->translateTiming(translation_req, tc, this, my_is_load ? BaseMMU::Read : BaseMMU::Write);
     // The above function immediately does the translation and calls the finish function
     assert(my_translation_done);
     my_translation_done = false;

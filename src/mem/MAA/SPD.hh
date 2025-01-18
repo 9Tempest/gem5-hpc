@@ -105,6 +105,14 @@ public:
     ~SPD();
 };
 
+struct Register {
+public:
+    int register_id;
+    int size;
+    uint32_t data_UINT32;
+    uint64_t data_UINT64;
+};
+
 class RF {
 protected:
     uint8_t *data;
